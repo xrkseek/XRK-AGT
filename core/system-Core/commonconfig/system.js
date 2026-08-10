@@ -1,5 +1,4 @@
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
-import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import runtimeConfig from '#infrastructure/config/config.js';
@@ -128,7 +127,7 @@ export default class SystemConfig extends ConfigBase {
    * @returns {Object}
    */
   getStructure() {
-    // 每次获取结构前动态刷新 schema，确保工作流/远程 MCP/Provider 列表是最新的
+    // 每次获取结构前动态刷新 schema（LLM Provider enum）
     this._refreshDynamicSchema();
 
     const structure = {
@@ -163,8 +162,8 @@ export default class SystemConfig extends ConfigBase {
   }
 
   /**
-   * 动态刷新 ai-workflow 相关 schema（工作流、远程 MCP、LLM Provider）
-   * @param {object} [validateSnapshot] - 待校验/写入的配置快照；用于把已持久化的值并入 enum，避免改 MCP 等无关字段时误伤校验
+   * 动态刷新 ai-workflow 相关 schema（LLM Provider）
+   * @param {object} [validateSnapshot] - 待校验/写入的配置快照；用于把已持久化的值并入 enum，避免改无关字段时误伤校验
    */
   _refreshDynamicSchema(validateSnapshot = null) {
     try {
@@ -172,39 +171,9 @@ export default class SystemConfig extends ConfigBase {
       if (!aiWorkflowSchema) return;
 
       const snap = validateSnapshot || runtimeConfig?.aiWorkflow || {};
-      this._refreshAiWorkflowMcpEnums(aiWorkflowSchema.mcp?.fields, snap);
       this._refreshAiWorkflowLlmProviderEnum(aiWorkflowSchema.llm?.fields, snap);
     } catch (e) {
       RuntimeUtil.makeLog('error', `[SystemConfig] 刷新动态 schema 失败: ${e.message}`, 'SystemConfig');
-    }
-  }
-
-  _refreshAiWorkflowMcpEnums(mcpFields, snap) {
-    if (!mcpFields) return;
-
-    let workflowKeys = [];
-    try {
-      const streams = AiWorkflowLoader.getWorkflowsByPriority?.() || [];
-      workflowKeys = streams
-        .filter((s) => !s.primaryStream && !s.secondaryStreams)
-        .map((s) => s.name)
-        .filter(Boolean);
-    } catch (e) {
-      RuntimeUtil.makeLog('warn', `[SystemConfig] 获取工作流列表失败: ${e.message}`, 'SystemConfig');
-    }
-
-    let remoteServers = [];
-    try {
-      remoteServers = AiWorkflowLoader.listRemoteMCPServers?.() || [];
-    } catch (e) {
-      RuntimeUtil.makeLog('warn', `[SystemConfig] 获取远程 MCP 列表失败: ${e.message}`, 'SystemConfig');
-    }
-
-    if (mcpFields.defaultWorkflows) {
-      mcpFields.defaultWorkflows.enum = mergeUniqueStrings(workflowKeys, snap?.mcp?.defaultWorkflows);
-    }
-    if (mcpFields.defaultRemoteMcp) {
-      mcpFields.defaultRemoteMcp.enum = mergeUniqueStrings(remoteServers, snap?.mcp?.defaultRemoteMcp);
     }
   }
 

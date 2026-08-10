@@ -1,7 +1,8 @@
 import PluginBase from './plugin-base.js'
+import { resolveTaskerId } from '#utils/event-keys.js'
 
 /**
- * tasker 短名 → 与 Listener.markAdapter / EventNormalizer 一致的旗标。
+ * tasker 短名 → 与 Listener.markTasker / EventNormalizer 一致的旗标。
  * 禁止再用 `is${Capitalize(tasker)}`（会把 onebot 写成 isOnebot，与 isOneBot 并存）。
  */
 const TASKER_FLAG = Object.freeze({
@@ -17,8 +18,7 @@ function flagForTasker(tasker) {
 }
 
 /**
- * Enhancer基类
- * 提供通用的增强逻辑，减少重复代码
+ * Enhancer 基类：只增强「本 tasker」事件，禁止串台。
  */
 export default class EnhancerBase extends PluginBase {
   constructor(config) {
@@ -31,134 +31,66 @@ export default class EnhancerBase extends PluginBase {
   }
 
   /**
-   * 检查是否是目标事件类型
-   * @param {Object} e - 事件对象
-   * @param {string} taskerName - 适配器名称
-   * @returns {boolean} 是否是目标事件
+   * @param {Object} e
+   * @param {string} taskerName - resolveTaskerId 结果
    */
-  isTargetEvent(e, taskerName) {
+  isTargetEvent(_e, taskerName) {
     if (!this.tasker) return false
-    const flag = flagForTasker(this.tasker)
-    return taskerName === this.tasker || e[flag] === true
+    // 仅按规范短名隔离；勿用旗标 OR，避免脏 flag 串台
+    return taskerName === this.tasker
   }
 
-  /**
-   * 增强事件属性
-   * @param {Object} e - 事件对象
-   */
   enhanceEvent(e) {
     if (!this.tasker) return
 
     const flag = flagForTasker(this.tasker)
     if (flag && !e[flag]) e[flag] = true
-    // 错写 isOnebot 等历史字段：有规范旗标时清掉
     if (flag === 'isOneBot' && e.isOnebot != null && e.isOneBot) delete e.isOnebot
     e.tasker = this.tasker
 
     this.ensureLogText(e, this.name || 'Enhancer', this.getEventScope(e), this.getEventType(e))
   }
 
-  /**
-   * 获取事件范围（如群ID、用户ID等）
-   * @param {Object} e - 事件对象
-   * @returns {string} 事件范围
-   */
   getEventScope(e) {
-    return e.group_id ? `group:${e.group_id}` : (e.user_id || 'unknown')
+    return e.group_id ? `group:${e.group_id}` : (e.user_id || e.device_id || 'unknown')
   }
 
-  /**
-   * 获取事件类型
-   * @param {Object} e - 事件对象
-   * @returns {string} 事件类型
-   */
   getEventType(e) {
-    return e.event_type || e.post_type || 'event'
+    return e.post_type || 'event'
   }
 
-  /**
-   * 设置回复方法
-   * @param {Object} e - 事件对象
-   */
-  setupReply(_e) {
-    // 子类实现
-  }
+  setupReply(_e) {}
 
-  /**
-   * 应用配置策略
-   * @param {Object} e - 事件对象
-   * @returns {string|boolean} 返回 'return' 表示跳过，false 表示拒绝，true 表示继续
-   */
   applyConfigPolicies(_e) {
-    // 子类实现
     return true
   }
 
-  /**
-   * 应用别名
-   * @param {Object} e - 事件对象
-   */
-  applyAlias(_e) {
-    // 子类实现
-  }
+  applyAlias(_e) {}
 
-  /**
-   * 强制执行回复策略
-   * @param {Object} e - 事件对象
-   * @returns {string|boolean} 返回 'return' 表示跳过
-   */
   enforceReplyPolicy(_e) {
-    // 子类实现
     return true
   }
 
-  /**
-   * 通用accept方法
-   * @param {Object} e - 事件对象
-   * @returns {string|boolean} 返回 'return' 表示跳过，false 表示拒绝，true 表示继续
-   */
   async accept(e) {
-    const taskerName = this.getAdapterName(e)
+    const taskerName = resolveTaskerId(e)
     if (!this.isTargetEvent(e, taskerName)) return true
 
     this.enhanceEvent(e)
-    
+
     const cfgResult = await this.applyConfigPolicies(e)
     if (cfgResult === 'return' || cfgResult === false) return cfgResult
 
     this.setupReply(e)
     this.applyAlias(e)
-    
+
     return this.enforceReplyPolicy(e) === 'return' ? 'return' : true
   }
 
-  /**
-   * 获取适配器名称
-   * @param {Object} e - 事件对象
-   * @returns {string} 适配器名称
-   */
-  getAdapterName(e) {
-    return String(e.tasker || e.tasker_name || '').toLowerCase()
-  }
-
-  /**
-   * 确保日志文本
-   * @param {Object} e - 事件对象
-   * @param {string} prefix - 前缀
-   * @param {string} scope - 事件范围
-   * @param {string} eventType - 事件类型
-   */
   ensureLogText(e, prefix, scope, eventType) {
     if (e.logText && !e.logText.includes('未知')) return
     e.logText = `[${prefix}][${scope}][${eventType}]`
   }
 
-  /**
-   * 安全定义属性
-   * @param {Object} obj - 目标对象
-   * @param {string} key - 属性名
-   * @param {Function} getter - 属性getter
-   */
   safeDefine(obj, key, getter) {
     if (obj[key] !== undefined) return
     try {
@@ -168,22 +100,12 @@ export default class EnhancerBase extends PluginBase {
         enumerable: false
       })
     } catch {
-      // 静默失败
+      /* ignore */
     }
   }
 
-  /**
-   * 处理@属性
-   * @param {Object} e - 事件对象
-   */
-  processAtProperties(_e) {
-    // 子类实现
-  }
+  processAtProperties(_e) {}
 
-  /**
-   * 绑定机器人实体（如friend、group等）
-   * @param {Object} e - 事件对象
-   */
   bindBotEntities(e) {
     if (!e.bot) return
 

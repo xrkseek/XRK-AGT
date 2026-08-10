@@ -84,16 +84,42 @@ export default {
 
         const event = stdinHandler.createEvent(content, {
           ...user_info,
-          post_type: event_type
+          post_type: event_type === 'message' || event_type === 'notice' || event_type === 'request'
+            ? event_type
+            : 'message'
         });
 
-        const output = wantJson
-          ? await AgentRuntime.em(event_type, event, true, { timeout })
-          : (AgentRuntime.em(event_type, event), null);
+        // 必须走 stdin.{post_type}，与 StdinEvent 订阅一致（勿再裸 em('message')）
+        const emitName = `stdin.${event.post_type || 'message'}`;
+
+        if (!wantJson) {
+          AgentRuntime.em(emitName, event);
+          return HttpResponse.success(res, {
+            event_id: event.message_id || event.event_id,
+            timestamp: Date.now()
+          }, 'Event triggered');
+        }
+
+        // 与 callStdin 一致：以 PluginLoader.deal finally 的 _onDone 为边界
+        const done = new Promise((resolve) => {
+          event._onDone = resolve;
+        });
+        AgentRuntime.em(emitName, event);
+        const finishedEvent = await Promise.race([
+          done,
+          new Promise((resolve) => setTimeout(() => resolve(event), timeout))
+        ]);
+
+        const results = Array.isArray(finishedEvent?._pluginResults) ? finishedEvent._pluginResults : [];
+        const outputs = Array.isArray(finishedEvent?._replyOutputs) ? finishedEvent._replyOutputs : [];
+        const contentOut = outputs.flat().filter(Boolean);
 
         return HttpResponse.success(res, {
-          event_id: event.message_id,
-          output: output || undefined,
+          event_id: finishedEvent?.message_id || finishedEvent?.event_id || event.message_id,
+          results: results.length ? results : undefined,
+          output: contentOut.length
+            ? { nickname: 'stdin', content: contentOut, user_info }
+            : undefined,
           timestamp: Date.now()
         }, 'Event triggered');
       }, 'stdin.event')

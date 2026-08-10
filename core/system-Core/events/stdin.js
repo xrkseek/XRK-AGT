@@ -14,7 +14,7 @@ export default class StdinEvent extends ListenerBase {
     if (!e) return
     this.ensureEventId(e)
     if (!this.markProcessed(e)) return
-    this.markAdapter(e, { isStdin: true })
+    this.markTasker(e, { isStdin: true })
     e.isMaster = true
     await this.plugins.deal(e)
   }

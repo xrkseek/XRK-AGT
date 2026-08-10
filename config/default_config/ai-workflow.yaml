@@ -67,9 +67,7 @@ mcp:
     enabled: false
     # 用户自增远程 MCP（数组模式）。开放域检索内置 web.web_search（parallel-free 零配置）
     mcpServers: []
-  # 留空=内置默认（tools + web）；显式填写则覆盖内置
-  defaultWorkflows: []
-  defaultRemoteMcp: []
+  # 控制台 / v3 工具面：仅请求体 workflow.workflows（含 remote-mcp.*），无服务端默认名单
   toolMergeStrategy: preferRequest  # 工具合并策略：preferRequest | preferStream | merge
 
 # Agent 文件工作区（tools / desktop MCP 的 cwd，以及控制台工作区预设）

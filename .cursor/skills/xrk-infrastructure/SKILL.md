@@ -32,6 +32,7 @@ description: 当需要理解或扩展基础设施层（加载器、基类、路�
 | Loader 共享约定 | `docs/infrastructure-shared.md` | 热重载、`FileLoader`、批加载 |
 | 基类契约 | `docs/base-classes.md` | plugin/HttpApi/AiWorkflow/ConfigBase/Event |
 | 配置种子 | `src/infrastructure/config/config-seed.js` | 端口配置模板复制 |
+| 事件键匹配 | `#utils/event-keys.js` | `matchPluginEvent` / `resolveTaskerId`；见 `docs/事件系统标准化文档.md` |
 | 运行时挂载 | `#utils/runtime-globals.js` | `setRuntimeGlobal` / `getRuntimeGlobal` |
 
 ## `#` 别名

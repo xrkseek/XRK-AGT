@@ -130,7 +130,7 @@ const cleanupBucket = (key) => {
 /**
  * 插件基类
  * 提供事件处理、工作流集成、上下文管理等功能。
- * 支持跨平台事件监听message/onebot.* device.* stdin.*
+ * 支持跨 Tasker 事件监听：message / onebot.* / device.* / stdin.*
  */
 
 export default class PluginBase {

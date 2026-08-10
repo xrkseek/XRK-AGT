@@ -418,7 +418,7 @@ flowchart LR
 
 - **OneBotEnhancer**  
   - OneBotv11 事件增强插件（位于 `core/system-Core/plugin/OneBotEnhancer.js`）  
-  - 负责为 OneBot 事件挂载 `isOneBot`（与 `markAdapter` 同名，勿再写 `isOnebot`）、`isPrivate/isGroup/friend/group/member` 等，并统一日志、别名与 onlyReplyAt。
+  - 负责为 OneBot 事件挂载 `isOneBot`（与 `markTasker` 同名，勿再写 `isOnebot`）、`isPrivate/isGroup/friend/group/member` 等，并统一日志、别名与 onlyReplyAt。
 - **OPQEnhancer**  
   - OPQ 协议增强插件，补齐 OPQ 事件的 Tasker 特定字段与日志文本。
 - **DeviceEnhancer**  
@@ -472,7 +472,7 @@ flowchart LR
   - `src/infrastructure/plugins/loader.js`：`PluginLoader`，作为插件业务层的调度核心
 - **分层关系（自下而上）**：
   1. **Tasker 层**（如 `core/system-Core/tasker/OneBotv11.js`）将平台消息转换为统一事件
-  2. **事件监听层**（`core/system-Core/events/*.js`）去重并分发到插件系统
+  2. **事件监听层**（`core/system-Core/events/*.js`：`onebot` / `device` / `stdin` / `opqbot` / `gsuidcore` 等）去重并 `PluginLoader.deal`；契约见 [事件系统标准化文档](事件系统标准化文档.md) · skill **`xrk-tasker`**
   3. **插件业务层**（`PluginLoader` + 各业务插件）完成规则匹配、权限控制、上下文与工作流调用
   4. **HTTP / Web 控制台** 只作为入口和管理界面，不直接承载业务
 

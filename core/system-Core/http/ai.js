@@ -21,10 +21,8 @@ import {
   applyRequestWorkspaceToStreams
 } from '../lib/ai-workspace-runtime.js';
 import { runWithAiConsoleContext, installMcpAuditHook } from '../lib/ai-workspace-context.js';
-import { resolveDefaultMcpWorkflow } from '#utils/ai-workflow-config.js';
 import { initOpenAIChatSSE, pipeOpenAIChatCompletionsStream, writeOpenAiWorkflowError } from '#utils/sse-openai.js';
 import { pickPromptCacheOverrides } from '#utils/llm/prompt-cache-policy.js';
-import { expandChatToolWorkflowWhitelist } from '#infrastructure/ai-workflow/chat-tool-streams.js';
 import { transformOpenAIStyleVisionMessages } from '#utils/llm/message-transform.js';
 import { mergeUploadedImagesIntoMessages } from '#utils/llm/vision-content.js';
 import { assembleChatLlmMessages } from '#infrastructure/ai-workflow/chat-pipeline.js';
@@ -128,11 +126,6 @@ function summarizeV3Request(req, body, { contentType, messages, uploadedImagesCo
       'content-length': req?.headers?.['content-length']
     })
   };
-}
-
-function resolveDefaultWorkflows() {
-  const mcpCfg = getAiWorkflowConfigOptional().mcp || {};
-  return resolveDefaultMcpWorkflow(mcpCfg);
 }
 
 /**
@@ -353,20 +346,19 @@ async function handleChatCompletionsV3(req, res) {
     );
   }
 
-  const workflowStreams = resolveWorkflowStreams(body);
-  const defaultWorkflows = resolveDefaultWorkflows();
-  const effectiveStreams = workflowStreams?.length ? workflowStreams : defaultWorkflows;
+  // 工具面仅认请求体 workflow.workflows（含 remote-mcp.*）；未传 = 无中游 MCP
+  const effectiveStreams = resolveWorkflowStreams(body);
 
   const client = LLMFactory.createClient(llmConfig);
   const overrides = buildOverridesFromBody(body);
   // hybrid：有 body.tools 时区分中游(MCP)/下游(请求)，中游 XRK 执行、下游透传客户端执行
-  // execute：无 body.tools 且有声明的 streams 时，仅中游由 XRK 执行
-  // passthrough：无 body.tools 且无 streams 时，tool_calls 透传
+  // execute：无 body.tools 且有声明的 workflows 时，仅中游由 XRK 执行
+  // passthrough：无 body.tools 且无 workflows 时，tool_calls 透传
   const hasRequestTools = Array.isArray(body.tools) && body.tools.length > 0;
   overrides.mcpToolMode = hasRequestTools ? 'hybrid' : (effectiveStreams?.length ? 'execute' : 'passthrough');
-  
+
   if (effectiveStreams?.length) {
-    overrides.workflows = expandChatToolWorkflowWhitelist(effectiveStreams);
+    overrides.workflows = effectiveStreams;
   }
 
   Object.assign(
@@ -487,7 +479,7 @@ async function handleModels(req, res) {
       uiHidden: false
     }));
 
-  // 远程 MCP 服务器也视为“工作流选项”，但默认不勾选，由用户显式选择。
+  // 远程 MCP 与普通 workflow 同等：仅勾选/请求体传入时生效
   const remoteServers = AiWorkflowLoader.listRemoteMCPServers?.() || [];
   const remoteWorkflows = remoteServers.map((name) => ({
     key: `remote-mcp.${name}`,

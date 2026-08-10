@@ -4,7 +4,7 @@
  * 优先级：
  * 1. 请求 ALS 的 toolStreamNames（process 写入，并发隔离）
  * 2. 合成流 _mergedStreams
- * 3. 裸 chat → 扩展 frameworkToolSurface + remote-mcp.*
+ * 3. 裸 chat 开放模式 → 仅扩展 frameworkToolSurface（remote-mcp.* 须显式列入名单）
  */
 import RuntimeUtil from '#utils/runtime-util.js';
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
@@ -52,25 +52,13 @@ export function getFrameworkToolWorkflowNames() {
   return fromMeta.length ? fromMeta : [...CHAT_FRAMEWORK_TOOL_WORKFLOWS];
 }
 
-export function appendRemoteMcpStreamNames(names) {
-  const out = Array.isArray(names) ? names : [];
-  try {
-    for (const k of AiWorkflowLoader.remoteMCPServers.keys()) {
-      const n = `remote-mcp.${k}`;
-      if (!out.includes(n)) out.push(n);
-    }
-  } catch (err) {
-    RuntimeUtil.makeLog('debug', `读取远程 MCP 流名失败: ${err?.message || err}`, 'ChatToolStreams');
-  }
-  return out;
-}
-
+/** 开放模式：补 frameworkToolSurface；remote-mcp.* 不自动并入（须与 workflow 一样显式传入） */
 export function expandChatToolWorkflowWhitelist(baseNames) {
   const names = normalizeStringArray(baseNames);
   for (const n of getFrameworkToolWorkflowNames()) {
     if (!names.includes(n)) names.push(n);
   }
-  return appendRemoteMcpStreamNames(names);
+  return names;
 }
 
 function streamOwnNames(stream) {

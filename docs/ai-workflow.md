@@ -146,8 +146,8 @@ sequenceDiagram
 
 **process 方法参数**：
 - `mergeWorkflows` - 副工作流 / 工具面名单（**唯一**组合入口）
-  - **未传**：开放模式 — 主流 + `frameworkToolSurface` + 已加载 `remote-mcp.*`
-  - **传了数组（可空）**：严格模式 — 名单即工具面；`remote-mcp.*` 只进白名单不参与 merge；未加载的副流名忽略并 warn
+  - **未传**：开放模式 — 主流 + `frameworkToolSurface`（`remote-mcp.*` 不自动并入）
+  - **传了数组（可空）**：严格模式 — 名单即工具面；`remote-mcp.*` 与普通 workflow 一样须显式列入，只进白名单不参与 merge；未加载的副流名忽略并 warn
 - 其余字段 - 作为 LLM `apiConfig` 覆盖（与 `this.config` 合并）
 
 **工作流分类**：
@@ -184,7 +184,7 @@ sequenceDiagram
 
 **示例**：
 ```javascript
-// 开放模式：chat + framework + remote-mcp
+// 开放模式：chat + frameworkToolSurface（remote-mcp 须写入 mergeWorkflows）
 await stream.process(e, e.msg);
 
 // 严格模式：名单即工具面

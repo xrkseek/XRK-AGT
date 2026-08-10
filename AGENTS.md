@@ -52,7 +52,7 @@
 | AI 工作流 / 出站 / 策略安全 / MCP | `xrk-ai-workflow` · `xrk-mcp` · [`docs/agent-context.md`](docs/agent-context.md) |
 | 办事助手种子 / 工作区注入 | [`docs/agents.md`](docs/agents.md) · [`docs/agent-context.md`](docs/agent-context.md) · `src/utils/agent-workspace.js` |
 | LLM 工厂 / 代理 fetch | `xrk-llm` · `xrk-v3-api` |
-| Tasker / OneBot | `xrk-tasker` |
+| Tasker / 事件入站 / OneBot | `xrk-tasker` · [`docs/事件系统标准化文档.md`](docs/事件系统标准化文档.md) |
 | 子服 / 第三方 `apis/` | `xrk-subserver` · `xrk-third-party-plugins` |
 | 爬虫 / Playwright | `xrk-crawl` |
 | 架构总览 / 放哪 | `xrk-project-overview` · `xrk-project.mdc` |

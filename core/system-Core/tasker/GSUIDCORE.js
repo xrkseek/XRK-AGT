@@ -320,7 +320,8 @@ AgentRuntime.tasker.push(
         )
       }
 
-      AgentRuntime.em(`${data.post_type}.${data.message_type}`, data)
+      data.tasker = 'gsuidcore'
+      AgentRuntime.em('gsuidcore.message', data)
     }
 
     load() {

@@ -1,7 +1,7 @@
 # OneBotv11 Tasker 文档
 
 > **文件位置**：`core/system-Core/tasker/OneBotv11.js`  
-> **可扩展性**：OneBotv11 Tasker 是协议适配层的实现。通过参考此实现，开发者可以快速创建新的 Tasker。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
+> **可扩展性**：OneBotv11 Tasker 是协议入站层的参考实现。新 Tasker 须 `em('短名.message', e)` + `core/*/events/` 监听。详见 **[框架可扩展性指南](框架可扩展性指南.md)** · **[事件系统标准化文档](事件系统标准化文档.md)** ⭐
 
 OneBotv11 Tasker（事件生成器）负责对接 QQ/OneBotv11 协议，实现：
 

@@ -39,7 +39,7 @@ description: MCP 全工具地图、参数要点、search_replace vs write、失�
 | `chat.*` | chat | 视配置 | QQ 群管（办公通常不用） |
 | `remote-mcp.*` | 远程 MCP | 视挂载 | 第三方工具；来源：`getMcpServers`（工作区 workflow）或 yaml `mcp.remote` |
 
-在 v3 请求 `workflow[]` 或控制台勾选追加；未列出时仅 **tools + web**。  
+在 v3 请求 `workflow.workflows` 或控制台勾选追加；未勾选 / 未传则无中游 MCP 工具面。  
 挂远程优先让办事助手写 **`getMcpServers`**（见 **agent-core-dev** §3.5），勿改系统 yaml。  
 群聊助手默认合并 `tools`（及 memory/database）时，下列 `tools.*` 可直接调用。
 

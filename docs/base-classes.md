@@ -132,19 +132,31 @@ export default class MyConfig extends ConfigBase {
 |----|------|
 | 放置 | `core/<名>/events/*.js` |
 | 生命周期 | Loader `new` 后调用 `async init()`；注入 `this.bot` |
+| 契约 | `super('短名')`；订阅读 `{短名}.message|notice|request`；`markTasker` → `plugins.deal` |
 
 ```javascript
 export default class MyEvent extends ListenerBase {
-  constructor() { super('MyAdapter'); }
-  async init() { /* bot.on(...); markProcessed(e) */ }
+  constructor() { super('mycore'); }
+  async init() {
+    const bot = this.bot || AgentRuntime
+    bot.on('mycore.message', (e) => this.handle(e))
+  }
+  async handle(e) {
+    if (!this.markProcessed(e)) return
+    this.markTasker(e)
+    await this.plugins.deal(e)
+  }
 }
 ```
+
+匹配与命名见 [事件系统标准化文档.md](事件系统标准化文档.md) · `#utils/event-keys.js`。
 
 ---
 
 ## Tasker
 
-无统一基类；模块内 `AgentRuntime.tasker.push(...)`、`AgentRuntime.wsf[path] = fn`。见 [tasker-base-spec.md](tasker-base-spec.md)。
+可选 `TaskerBase`（`tasker/tasker-base.js`）：`createEvent` / `emitEvent(短名, e, bot)`。  
+模块内 `AgentRuntime.tasker.push(...)`、`AgentRuntime.wsf[path]`。派发须 `em('{短名}.{post_type}', e)` 且 `e.tasker` 为字符串。见 [tasker-base-spec.md](tasker-base-spec.md) · skill **`xrk-tasker`**。
 
 ---
 

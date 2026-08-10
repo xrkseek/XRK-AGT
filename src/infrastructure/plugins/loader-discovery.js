@@ -11,6 +11,7 @@ import {
 } from '#utils/module-import-error.js'
 import { HotReloadBase } from '#utils/hot-reload-base.js'
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js'
+import { coerceTaskerId, resolveTaskerId } from '#utils/event-keys.js'
 
 export const discoveryMethods = {
   async load(isRefresh = false) {
@@ -222,10 +223,11 @@ export const discoveryMethods = {
       class: PluginClass,
       key: file.name,
       name: plugin.name,
+      event: plugin.event || 'message',
       priority: plugin.priority === 'extended' ? 0 : (plugin.priority ?? 50),
       plugin,
       bypassThrottle: plugin.bypassThrottle === true,
-      taskers: this.buildAdapterSet(plugin),
+      taskers: this.buildTaskerSet(plugin),
       ruleTemplates,
       bypassRules: this.collectBypassRules(ruleTemplates),
       isEnhancer: plugin.priority === 'extended'
@@ -372,20 +374,22 @@ export const discoveryMethods = {
     }
   },
 
-  normalizeAdapterList(taskers) {
+  normalizeTaskerList(taskers) {
     if (!taskers) return []
     return (Array.isArray(taskers) ? taskers : [taskers])
-      .map(item => String(item ?? '').toLowerCase())
+      .map(item => coerceTaskerId(item))
       .filter(Boolean)
   },
 
-  buildAdapterSet(plugin) {
-    const taskers = this.normalizeAdapterList(plugin.taskers || plugin.tasker)
+  buildTaskerSet(plugin) {
+    const taskers = this.normalizeTaskerList(plugin.taskers || plugin.tasker)
     return taskers.length ? new Set(taskers) : null
   },
 
-  isAdapterAllowed(taskerSet, event) {
-    return !taskerSet?.size || taskerSet.has(event.tasker)
+  isTaskerAllowed(taskerSet, event) {
+    if (!taskerSet?.size) return true
+    const id = resolveTaskerId(event) || String(event?.tasker || '').toLowerCase()
+    return taskerSet.has(id)
   },
 
   wrapPluginAccept(plugin, meta) {
@@ -395,7 +399,7 @@ export const discoveryMethods = {
         ? plugin.accept.bind(plugin)
         : async () => true
     return async (event) =>
-      this.isAdapterAllowed(meta?.taskers, event) ? await accept(event) : false
+      this.isTaskerAllowed(meta?.taskers, event) ? await accept(event) : false
   },
 
   /**

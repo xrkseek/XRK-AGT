@@ -217,7 +217,7 @@ AgentRuntime 生命周期、HTTP/WS、关闭流程：**[agent-runtime.md](agent-
 
 1. **架构层次**：理解基础设施层（辅助层）和业务层的区别，基础设施层提供通用能力，业务层实现具体功能
 2. **全局对象访问**：始终通过 `AgentRuntime[self_id]` 访问 AgentRuntime 实例，不要直接使用 `e.bot`（除非确保已初始化）
-3. **事件命名**：遵循 `tasker.类型.子类型` 格式，如 `onebot.message.group.normal`
+3. **事件命名**：`{tasker}.{post_type}.{detail?}.{sub_type?}`，如 `onebot.message` / `onebot.message.group`；插件可用跨 Tasker 的 `message`（见 [事件系统标准化文档](事件系统标准化文档.md)）
 4. **错误处理**：异步操作用 try/catch；基础设施层用 `Error.isError` / `normalizeError`
 5. **AgentRuntime 实例**：通过 `node app` 启动，勿手动 `new AgentRuntime()`
 6. **Ctrl+C**：服务端 1 次重启 / 3 次回菜单（见 [agent-runtime.md](agent-runtime.md)）；勿在业务代码自行 `process.on('SIGINT')`

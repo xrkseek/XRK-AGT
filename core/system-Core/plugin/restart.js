@@ -1,4 +1,5 @@
 import { EXIT_RESTART, EXIT_STOP } from '#utils/process-signals.js'
+import { resolveTaskerId } from '#utils/event-keys.js'
 
 const RESTART_KEY = 'AGT:restart'
 const SHUTDOWN_KEY = 'AGT:shutdown'
@@ -70,7 +71,7 @@ export class Restart extends PluginBase {
     await this.e.reply('开始执行重启，请稍等...')
     await redis.set(`${RESTART_KEY}:${uin}`, JSON.stringify({
       uin,
-      tasker: this.e.tasker || (this.e.device_id ? 'device' : 'onebot'),
+      tasker: resolveTaskerId(this.e) || (this.e.device_id ? 'device' : 'onebot'),
       isGroup: !!this.e.isGroup,
       id: this.e.isGroup ? this.e.group_id : this.e.user_id,
       time: Date.now(),

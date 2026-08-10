@@ -621,8 +621,8 @@ export default class AiWorkflow {
   /**
    * 处理请求。
    *
-   * - 未传 `mergeWorkflows`：开放模式 — 裸主流 + frameworkToolSurface + remote-mcp.*
-   * - 传了 `mergeWorkflows`（数组，可空）：严格模式 — 名单即工具面；`remote-mcp.*` 只进白名单不 merge；
+   * - 未传 `mergeWorkflows`：开放模式 — 裸主流 + frameworkToolSurface（remote-mcp.* 不自动并入）
+   * - 传了 `mergeWorkflows`（数组，可空）：严格模式 — 名单即工具面；`remote-mcp.*` 与普通 workflow 一样须显式列入，只进白名单不 merge；
    *   未加载的副流名忽略并打 warn，不拖垮整次调用
    */
   async process(e, question, options = {}) {

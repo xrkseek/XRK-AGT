@@ -56,7 +56,7 @@ runChatAgent
   → callAI（LLM + MCP 工具环）
 ```
 
-配置：`data/ai/config.yaml`（`ai_config`）的 `mergeWorkflows`（默认 `memory` / `database` / `tools`）；`web` / `browser` / `remote-mcp.*` 由框架自动并入工具白名单，不必写进 merge 列表。
+配置：`data/ai/config.yaml`（`ai_config`）的 `mergeWorkflows`（默认 `memory` / `database` / `tools`）；开放模式下 `web` / `browser`（`frameworkToolSurface`）可自动进白名单；`remote-mcp.*` 须像普通 workflow 一样显式列入（控制台勾选或请求体 `workflow.workflows`）。
 
 ---
 
@@ -67,9 +67,9 @@ runChatAgent
 | 来源 | 作用 |
 |------|------|
 | chat 自带 | reply / poke / 群管 / 发图文件等通道工具 |
-| `mergeWorkflows` | memory · database · tools · desktop… |
-| `frameworkToolSurface` | web · browser 等自动进白名单 |
-| `remote-mcp.*` | 远程 MCP 流自动并入 |
+| `mergeWorkflows` | memory · database · tools · desktop · `remote-mcp.*`… |
+| `frameworkToolSurface` | web · browser 等仅在开放模式自动进白名单 |
+| `remote-mcp.*` | 与 workflow 同等，须显式列入 |
 
 `mergeWorkflows` 决定**手上有什么工具**；下文 Workspace 决定**按什么规矩、先读哪本手册**。
 

@@ -451,7 +451,7 @@ flowchart TB
             I1[配置系统<br/>RuntimeConfig/ConfigBase]
             I2[渲染器<br/>Renderer]
             I3[事件系统<br/>AgentRuntime.em]
-            I4[Tasker<br/>协议适配器]
+            I4[Tasker<br/>协议入站]
         end
     end
     

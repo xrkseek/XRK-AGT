@@ -1698,8 +1698,6 @@ class DeviceManager {
                         event_id: `device_notice_${now}_${Math.random().toString(36).substr(2, 9)}`,
                         tasker: 'device',
                         isDevice: true,
-                        adapter_name: 'device',
-                        platform: 'device',
                         bot: runtimeBot[deviceId]
                     };
                     runtimeBot.em('device.notice', noticeEventData);
@@ -1749,8 +1747,8 @@ class DeviceManager {
                     });
 
                     const deviceEventData = {
-                        post_type: 'device',
-                        event_type: 'message',
+                        post_type: 'message',
+                        message_type: 'private',
                         device_id: deviceId,
                         device_type: device.device_type,
                         device_name: device.device_name,
@@ -1763,8 +1761,6 @@ class DeviceManager {
                         message_id: eventId,
                         tasker: 'device',
                         isDevice: true,
-                        adapter_name: 'device',
-                        platform: 'device',
                         bot: runtimeBot[deviceId],
                         message: messagePayload.message,
                         raw_message: text,
@@ -2046,8 +2042,6 @@ class DeviceManager {
                         event_id: eventId,
                         tasker: 'device',
                         isDevice: true,
-                        adapter_name: 'device',
-                        platform: 'device',
                         bot: runtimeBot[deviceId],
                         event_data: {
                             data_type: dataType,

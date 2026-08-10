@@ -16,7 +16,7 @@ export default class DeviceEvent extends ListenerBase {
     if (!e) return
     this.ensureEventId(e)
     if (!this.markProcessed(e)) return
-    this.markAdapter(e, { isDevice: true })
+    this.markTasker(e, { isDevice: true })
     if (e.device_type === 'web' || e.isMaster === true) e.isMaster = true
     await this.plugins.deal(e)
   }

@@ -26,7 +26,7 @@
 | AI 工作流 / 出站压缩 / 策略安全 | `xrk-ai-workflow` · [`docs/agent-context.md`](../../docs/agent-context.md) |
 | MCP 注册 / 远程 / 执行门禁 | `xrk-mcp` · [`docs/mcp-guide.md`](../../docs/mcp-guide.md) |
 | LLM 工厂 | `xrk-llm` · `xrk-v3-api` |
-| Tasker / OneBot | `xrk-tasker` |
+| Tasker / 事件入站 / OneBot | `xrk-tasker` · `docs/事件系统标准化文档.md` |
 | 子服 / 第三方 apis | `xrk-subserver` |
 | 爬虫 / Playwright | `xrk-crawl` |
 | 文档导航 | `xrk-docs` |

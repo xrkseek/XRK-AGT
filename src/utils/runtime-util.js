@@ -1488,7 +1488,6 @@ export default class RuntimeUtil {
     if (messages.length === 0) return false;
 
     try {
-      const adapterName = e.adapter_name?.toUpperCase() || e.platform?.toUpperCase() || '';
       const isDevice = e.isDevice || e.tasker === 'device' || e.post_type === 'device';
 
       if (isDevice && e.reply) {
@@ -1545,7 +1544,8 @@ export default class RuntimeUtil {
         return await e.reply(replyData);
       }
 
-      if (adapterName === "ICQQ") {
+      const botImpl = String(e.bot?.version?.id || e.tasker || '').toUpperCase();
+      if (botImpl === 'ICQQ') {
         const bot = e.bot || {};
         const nickname = bot.nickname || "AgentRuntime";
         const user_id = bot.uin || 0;

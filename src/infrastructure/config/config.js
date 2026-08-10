@@ -67,7 +67,7 @@ class RuntimeConfig {
     return path.join(this.PATHS.SERVER_BOTS, String(this._port));
   }
 
-  /** 一次性：旧键 streams / defaultStreams → workflows / defaultWorkflows */
+  /** 一次性：旧键清理；工具面默认名单已废止（仅请求体 workflow.workflows） */
   normalizeAiWorkflowConfigShape(config) {
     if (!config || typeof config !== 'object') return config;
     const aw = config.agentWorkspace;
@@ -76,9 +76,10 @@ class RuntimeConfig {
       delete aw.streams;
     }
     const mcp = config.mcp;
-    if (mcp && typeof mcp === 'object' && mcp.defaultWorkflows == null && Array.isArray(mcp.defaultStreams)) {
-      mcp.defaultWorkflows = mcp.defaultStreams;
+    if (mcp && typeof mcp === 'object') {
       delete mcp.defaultStreams;
+      delete mcp.defaultWorkflows;
+      delete mcp.defaultRemoteMcp;
     }
     return config;
   }

@@ -10,7 +10,7 @@ class TaskerLoader {
     setRuntimeGlobal('AgentRuntime', bot);
 
     const summary = { scanned: 0, loaded: 0, failed: 0, registered: 0, errors: [] };
-    const files = await this.getAdapterFiles();
+    const files = await this.getTaskerFiles();
     summary.scanned = files.length;
 
     if (files.length === 0) {
@@ -18,7 +18,7 @@ class TaskerLoader {
       return summary;
     }
 
-    const adapterCountBefore = bot.tasker.length;
+    const countBefore = bot.tasker.length;
 
     await Promise.allSettled(
       files.map(async ({ name, filePath }) => {
@@ -36,7 +36,7 @@ class TaskerLoader {
 
     this.dedupeTaskers(bot);
 
-    summary.registered = bot.tasker.length - adapterCountBefore;
+    summary.registered = bot.tasker.length - countBefore;
     RuntimeUtil.makeLog(
       summary.failed ? 'warn' : 'info',
       `Tasker 加载完成: 成功${summary.loaded}个, 注册${summary.registered}个${summary.failed ? `, 失败${summary.failed}个` : ''}`,
@@ -67,7 +67,7 @@ class TaskerLoader {
     bot.tasker.push(...next);
   }
 
-  async getAdapterFiles() {
+  async getTaskerFiles() {
     const filePaths = await FileLoader.getCoreSubDirFiles('tasker', {
       ext: '.js',
       recursive: false

@@ -28,7 +28,7 @@
 | SSRF / web_fetch / web_search / Playwright session | `#infrastructure/crawl` |
 | 带超时重试的外联 fetch | `#utils/fetch-with-retry.js` |
 | Disposables | `#utils/disposables.js` |
-| 默认 MCP workflow 列表 | `#utils/ai-workflow-config.js` → `resolveDefaultMcpWorkflow` |
+| v3 工具面名单 | 请求体 `workflow.workflows`（含 `remote-mcp.*`，无服务端默认） |
 | AiWorkflow 基类 / Loader / MemoryManager | `#infrastructure/ai-workflow/*` |
 
 示范接线：

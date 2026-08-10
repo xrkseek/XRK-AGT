@@ -132,27 +132,28 @@ sequenceDiagram
 
 #### `em(name, data, asJson, options)`
 
-触发事件，支持逐级派发。
+触发事件，支持**按点号逐级向上**派发（`_cascadeEmit`）。入站业务事件须带 **tasker 短名前缀**，并与 `core/*/events/` 订阅一致。
 
 ```javascript
-// 基本用法
-bot.em('message.group.normal', {
+// ✅ 基本用法：{tasker}.{post_type}
+bot.em('onebot.message', {
+  tasker: 'onebot',
+  post_type: 'message',
   self_id: '123456',
   user_id: '789012',
   group_id: '345678',
-  message: 'Hello'
+  message: [{ type: 'text', text: 'Hello' }]
 });
 
-// 等待stdin输出（asJson模式）
-const result = await bot.em('stdin.message', {
-  message: 'help'
-}, true, { timeout: 5000 });
+// stdin / HTTP 调试：走 stdin.message（与 StdinEvent、callStdin 一致）
+const result = await bot.callStdin('help', { user_info: { tasker: 'api' }, timeout: 5000 });
 ```
+
+> 插件侧匹配（`event: 'message'` / `onebot.message`）由 `#utils/event-keys.js` → `matchPluginEvent` 完成，**不是**靠 `em('message.group')` 这种无前缀名进 Listener。详见 [事件系统标准化文档](事件系统标准化文档.md)。
 
 #### `prepareEvent(data)`
 
-准备事件对象，自动添加通用属性：`bot`、`tasker_id`、`tasker_name`、`sender`、`reply()` 等。
-
+准备事件对象，自动添加通用属性：`bot`、`tasker_id`、`tasker_name`（来自 `bot.tasker` 元信息）、`sender`、`reply()` 等。事件身份短名用字符串字段 **`e.tasker`**（勿把 Tasker 实例挂到事件上）。
 ### 服务器管理
 
 #### `run(options)` / `closeServer()` / `getServerUrl()` / `getLocalIpAddress()`
@@ -195,98 +196,86 @@ const result = await bot.callRoute('/api/status', {
 
 ### 事件逐级派发机制
 
-AgentRuntime 支持**逐级事件派发**，事件名从具体到抽象依次触发：
+`em` 对**事件总线名**按点号从右剥离父级依次 `emit`（与插件 `event` 过滤是两套机制）：
 
 ```mermaid
 flowchart LR
-    Trigger(["📢 触发事件<br/>message.group.normal"]) --> Level1["1️⃣ message.group.normal<br/>✅ 精确匹配<br/>最高优先级"]
-    Level1 --> Level2["2️⃣ message.group<br/>✅ 父级匹配<br/>次优先级"]
-    Level2 --> Level3["3️⃣ message<br/>✅ 根级匹配<br/>最低优先级"]
+    Trigger(["📢 em<br/>onebot.message"]) --> Level1["1️⃣ onebot.message"]
+    Level1 --> Level2["2️⃣ onebot"]
     
-    Level1 --> Listener1["👂 监听器1<br/>处理群普通消息<br/>精确处理"]
-    Level2 --> Listener2["👂 监听器2<br/>处理所有群消息<br/>通用处理"]
-    Level3 --> Listener3["👂 监听器3<br/>处理所有消息<br/>全局处理"]
-    
-    Listener1 --> Response["✅ 响应"]
-    Listener2 --> Response
-    Listener3 --> Response
+    Level1 --> Listener1["👂 OneBotEvent<br/>plugins.deal"]
+    Level2 --> Listener2["👂 可选其它订阅"]
     
     style Trigger fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
     style Level1 fill:#FF6B6B,stroke:#CC5555,stroke-width:2px,color:#fff
     style Level2 fill:#FFA500,stroke:#CC8400,stroke-width:2px,color:#fff
-    style Level3 fill:#FFD700,stroke:#CCAA00,stroke-width:2px,color:#000
     style Listener1 fill:#2ECC71,stroke:#27AE60,stroke-width:2px,color:#fff
     style Listener2 fill:#50C878,stroke:#3FA060,stroke-width:2px,color:#fff
-    style Listener3 fill:#98FB98,stroke:#3CB371,stroke-width:2px
-    style Response fill:#2ECC71,stroke:#27AE60,stroke-width:3px,color:#fff
 ```
 
-**示例**：
+**示例**（Core `events/`）：
 
 ```javascript
-// 监听精确事件
-bot.on('message.group.normal', (e) => {
-  console.log('收到群消息');
+// system-Core/events/onebot.js：订阅读 onebot.message|notice|request
+bot.on('onebot.message', (e) => {
+  // markTasker → PluginLoader.deal(e)
 });
 
-// 监听所有群消息
-bot.on('message.group', (e) => {
-  console.log('群消息（包括所有子类型）');
-});
+bot.on('device.message', (e) => { /* 设备 Web / Event 模式 */ });
+bot.on('stdin.message', (e) => { /* 终端 /api/stdin */ });
+```
 
-// 监听所有消息
-bot.on('message', (e) => {
-  console.log('任何类型的消息');
-});
+插件订阅示例（跨 Tasker vs 定 Tasker）：
+
+```javascript
+// 跨通道：所有 tasker 的 message
+event: 'message'
+
+// 仅 OneBot（不会命中 device/stdin）
+event: 'onebot.message'
 ```
 
 ### 事件处理流程
 
 ```mermaid
 sequenceDiagram
-    participant Caller as 调用者
+    participant Caller as Tasker
     participant AgentRuntime as AgentRuntime.em
     participant Prepare as prepareEvent
-    participant Extend as _extendEventMethods
     participant Cascade as 逐级派发
-    participant Listener as 事件监听器
+    participant Listener as core/*/events
+    participant Loader as PluginLoader
     
-    Caller->>AgentRuntime: em('message.group.normal', data)
-    AgentRuntime->>Prepare: 准备事件对象
-    Prepare->>Prepare: 添加bot/tasker_id/sender
-    Prepare->>Extend: 扩展事件方法
-    Extend->>Extend: 添加reply()等方法
-    AgentRuntime->>Cascade: 逐级派发
-    Cascade->>Cascade: message.group.normal
-    Cascade->>Cascade: message.group
-    Cascade->>Cascade: message
-    Cascade->>Listener: 触发所有匹配的监听器
+    Caller->>AgentRuntime: em('onebot.message', data)
+    AgentRuntime->>Prepare: bot / tasker_id / reply 兜底
+    AgentRuntime->>Cascade: onebot.message → onebot
+    Cascade->>Listener: OneBotEvent.handleEvent
+    Listener->>Loader: deal(e)（normalize + matchPluginEvent）
 ```
 
 ### 事件对象结构
 
 ```javascript
 {
-  // 基础属性（prepareEvent添加）
-  bot: SubBot,              // 对应的子AgentRuntime实例
-  tasker_id: 'onebotv11',   // Tasker ID
-  tasker_name: 'OneBotv11', // Tasker 名称
-  sender: { user_id: '...' }, // 基础发送者信息
-  
-  // 事件数据
+  // 身份（触发方必填字符串短名）
+  tasker: 'onebot',         // ≠ bot.tasker 实例；≠ tasker_id
+  post_type: 'message',
+  message_type: 'group',
+
+  // prepareEvent 补充
+  bot: SubBot,
+  tasker_id: 'QQ',          // 来自 bot.tasker.id（元信息）
+  tasker_name: 'OneBotv11',
+  sender: { user_id: '...' },
+
   self_id: '123456',
   user_id: '789012',
   group_id: '345678',
-  message: 'Hello',
-  
-  // 扩展方法（_extendEventMethods添加）
+  message: [{ type: 'text', text: 'Hello' }],
+
   reply: async (msg, quote, extraData) => {...},
-  getRoutes: (options) => {...}
-  
-  // Tasker特定属性（由增强插件添加）
-  // friend: Friend对象（OneBotv11）
-  // group: Group对象（OneBotv11）
-  // member: Member对象（OneBotv11）
+
+  // Enhancer 挂载：isOneBot / friend / group / member 等
 }
 ```
 
@@ -702,15 +691,14 @@ const error = bot.makeError('操作失败', 'OperationError', {
 ### 1. 事件处理
 
 ```javascript
-// ✅ 推荐：使用精确事件名
-bot.on('message.group.normal', (e) => {
-  // 只处理普通群消息
-});
+// ✅ Tasker / events：带短名前缀
+bot.on('onebot.message', (e) => { /* ListenerBase → deal */ });
 
-// ❌ 不推荐：监听过于宽泛的事件
-bot.on('message', (e) => {
-  // 会收到所有类型的消息，性能较差
-});
+// ✅ 插件：跨 Tasker 用通用 post；定通道加前缀
+// event: 'message'           — 全通道
+// event: 'onebot.message'    — 仅 OneBot（不进 device Event 模式）
+
+// ❌ 勿对业务入站裸 em('message') / em('message.group')（无对应 events 监听则插件链不跑）
 ```
 
 ### 2. HTTP API 开发

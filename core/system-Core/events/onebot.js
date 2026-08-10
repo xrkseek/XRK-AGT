@@ -25,7 +25,7 @@ export default class OneBotEvent extends ListenerBase {
       AgentRuntime.makeLog('debug', `事件已处理，跳过：${e.event_id}`, e.self_id)
       return false
     }
-    this.markAdapter(e, { isOneBot: true })
+    this.markTasker(e, { isOneBot: true })
     return true
   }
 

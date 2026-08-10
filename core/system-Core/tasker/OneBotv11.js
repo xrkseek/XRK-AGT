@@ -1974,7 +1974,7 @@ AgentRuntime.tasker.push(
       this.attachReplyMethod(data)
       this.attachGetReply(data)
 
-      // 适配器标识
+      // tasker 短名（事件身份；bot.tasker 仍可为实例）
       data.tasker = 'onebot'
       data.isOneBot = true
       

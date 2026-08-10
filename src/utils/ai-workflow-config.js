@@ -3,7 +3,6 @@
  * 统一 LLM/ASR/TTS 配置读取，供 device、xiaozhi、workflow 等模块复用
  */
 import runtimeConfig from '#infrastructure/config/config.js';
-import { normalizeStringArray } from '#utils/string-array-utils.js';
 
 const ensureConfig = (value, configPath) => {
     if (value === undefined) {
@@ -106,24 +105,3 @@ export const getAsrConfig = () => {
 };
 
 export const getSystemConfig = () => ensureConfig(runtimeConfig.device, 'device');
-
-/** 内置默认 workflow（配置 defaultWorkflows 留空时生效） */
-export const BUILTIN_DEFAULT_WORKFLOWS = Object.freeze(['tools', 'web']);
-export const BUILTIN_DEFAULT_REMOTE_MCP = Object.freeze([]);
-
-/**
- * 解析 v3 默认 workflow：配置优先，留空则用内置默认。
- * @param {object} [mcpCfg]
- * @returns {string[]|null}
- */
-export function resolveDefaultMcpWorkflow(mcpCfg = {}) {
-  const streams = normalizeStringArray(mcpCfg.defaultWorkflows);
-  const remote = normalizeStringArray(mcpCfg.defaultRemoteMcp);
-  const effectiveStreams = streams.length ? streams : [...BUILTIN_DEFAULT_WORKFLOWS];
-  const effectiveRemote = remote.length ? remote : [...BUILTIN_DEFAULT_REMOTE_MCP];
-  const merged = normalizeStringArray([
-    ...effectiveStreams,
-    ...effectiveRemote.map((name) => `remote-mcp.${name}`)
-  ]);
-  return merged.length > 0 ? merged : null;
-}

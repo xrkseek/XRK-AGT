@@ -263,10 +263,10 @@ PluginLoader 与标准化事件系统紧密集成，但**不再在本篇重复�
 
 - **消费标准化事件对象**：
   - 依赖 Tasker / 事件监听器 提供的基础字段（`tasker/post_type/message_type/...`）
-  - 使用 `EventNormalizer` 做统一标准化（`normalizeEventPayload`）
+  - 使用 `EventNormalizer.normalize`（内含 `normalizeEventTaskerFields`）；匹配见 `event-keys.js`
   - 补全插件业务层需要的通用字段与工具方法（`bot/sender/reply/getSendableMedia/throttle/getEventHistory` 等）
 - **负责插件侧过滤与分发**：
-  - 通过 `filtEvent(e, v)` 根据插件 `event` 属性与事件名进行匹配（完全匹配 / 通用事件 / 前缀 / 通配）
+  - 通过 `filtEvent` → `#utils/event-keys.js` `matchPluginEvent`：定 Tasker 订阅互不串台；跨 Tasker 用 `message` / `notice.*`
   - 维护 `eventHistory`、节流与冷却 Map，并在 `initEventSystem()` 中定期清理
   - 在 `AgentRuntime` 上注册通用事件监听（`message/notice/request/device`），统一分发给订阅者和业务插件
 

@@ -6,6 +6,11 @@ import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
 import { normalizeError } from '#utils/normalize-error.js'
 import { matchEventPattern as matchEventPatternFn } from '#utils/core-fs.js'
 import { EventNormalizer } from '#utils/event-normalizer.js'
+import {
+  inferDefaultPostType,
+  matchPluginEvent,
+  resolveTaskerId,
+} from '#utils/event-keys.js'
 import RuntimeUtil from '#utils/runtime-util.js'
 import { msgSegment } from '#utils/msg-segment.js'
 import { scheduleMsgRecall, rememberSentMsgIds } from '#utils/msg-recall.js'
@@ -61,19 +66,23 @@ export const dealMethods = {
     }
   },
 
-  /** Tasker 事件链统一入口：基础 + 消息/群组 + 适配器扩展 */
+  /**
+   * Tasker 事件链统一入口：通用标准化。
+   * Tasker 特有字段由各 Enhancer 挂载（见 docs/事件系统标准化文档.md）。
+   * OneBot CQ → raw_message 须在 parseMessage 之前，故按 tasker 短名早做一次。
+   */
   normalizeEventPayload(e) {
     if (!e) return
-    const options = {
-      defaultPostType: e.post_type || e.notice_type || e.message_type || e.request_type || e.event_type || 'message',
+    // normalizeBase 内提升遗留 post_type/event_type，再补默认字段
+    EventNormalizer.normalize(e, {
+      defaultPostType: inferDefaultPostType(e),
       defaultMessageType: e.group_id ? 'group' : 'private',
       defaultUserId: e.user_id || e.device_id || e.sender?.user_id || 'unknown'
+    })
+    // OneBot CQ → raw_message 须赶在 parseMessage 前；其它 Tasker 由各自 Enhancer 处理
+    if (resolveTaskerId(e) === 'onebot' && e.post_type === 'message') {
+      EventNormalizer.normalizeOneBotMessage(e)
     }
-    EventNormalizer.normalize(e, options)
-    if (e.isDevice) EventNormalizer.normalizeDevice(e)
-    if (e.isOneBot) EventNormalizer.normalizeOneBot(e, `onebot.${e.post_type || 'message'}`)
-    if (e.isStdin) EventNormalizer.normalizeStdin(e)
-    if (e.isOneBot && e.post_type === 'message') EventNormalizer.normalizeOneBotMessage(e)
     e.msg = ''
     e.img = []
     e.video = []
@@ -286,11 +295,13 @@ export const dealMethods = {
         // 创建插件实例
         const plugin = new p.class(e)
         plugin.e = e
-        
+        // 元数据 event 为准，避免 constructor(e) 误把事件对象当 options 落到默认 message
+        if (p.event) plugin.event = p.event
+
         // 应用规则模板
         this.applyRuleTemplates(plugin, p.ruleTemplates)
         
-        // 包装 accept 方法（包含适配器检查）
+        // 包装 accept（含 tasker 白名单检查）
         plugin.accept = this.wrapPluginAccept(plugin, p)
         plugin.bypassThrottle = p.bypassThrottle
 
@@ -531,7 +542,7 @@ export const dealMethods = {
 
     for (const p of this.priority) {
       if (!p.bypassThrottle || !p.bypassRules?.length) continue
-      if (!this.isAdapterAllowed(p.taskers, e)) continue
+      if (!this.isTaskerAllowed(p.taskers, e)) continue
 
       try {
         if (p.bypassRules.some(rule => rule.reg?.test(text))) {
@@ -593,61 +604,8 @@ export const dealMethods = {
   },
 
   filtEvent(e, v) {
-    if (!v.event) return true
-
-    const pluginEvent = v.event
-    const possibleEvents = []
-    const genericEvents = []
-    const tasker = e.tasker || ''
-    const postType = e.post_type || ''
-    const subType = e.sub_type || ''
-
-    // 细分类型字段（兼容 message/notice/request/guild 等）
-    const detailType =
-      e.message_type ||
-      e.notice_type ||
-      e.request_type ||
-      e.detail_type ||
-      e.event_type ||
-      ''
-
-    // 构建可能的事件键（从具体到通用），适配任意新适配器
-    if (tasker && tasker !== 'unknown') {
-      if (postType && detailType && subType) possibleEvents.push(`${tasker}.${postType}.${detailType}.${subType}`)
-      if (postType && detailType) possibleEvents.push(`${tasker}.${postType}.${detailType}`)
-      if (postType) possibleEvents.push(`${tasker}.${postType}`)
-      if (detailType) possibleEvents.push(`${tasker}.${detailType}`)
-      possibleEvents.push(tasker)
-    }
-
-    // 通用事件（无适配器前缀）
-    if (postType && detailType && subType) possibleEvents.push(`${postType}.${detailType}.${subType}`)
-    if (postType && detailType) possibleEvents.push(`${postType}.${detailType}`)
-    if (detailType) possibleEvents.push(detailType)
-    if (postType) {
-      possibleEvents.push(postType)
-      genericEvents.push(postType)
-    }
-    
-    // 检查完全匹配
-    for (const actualEvent of possibleEvents) {
-      if (pluginEvent === actualEvent || this.matchEventPattern(pluginEvent, actualEvent)) {
-        return true
-      }
-    }
-    
-    // 检查通用事件匹配（如 'message' 匹配所有 message.* 事件）
-    if (!pluginEvent.includes('.')) {
-      return genericEvents.includes(pluginEvent)
-    }
-    
-    // 检查通配符匹配（如 'stdin.*' 或 'onebot.message.*'）
-    const adapterPrefix = pluginEvent.split('.')[0]
-    if (pluginEvent.endsWith('.*') || pluginEvent === adapterPrefix) {
-      return possibleEvents.some(ev => ev.startsWith(`${adapterPrefix}.`) || ev === adapterPrefix)
-    }
-    
-    return false
+    if (!v?.event) return true
+    return matchPluginEvent(v.event, e, (pattern, event) => this.matchEventPattern(pattern, event))
   },
 
   matchEventPattern(pattern, event) {
@@ -667,7 +625,7 @@ export const dealMethods = {
         return true
 
       case 'owner':
-        // 检查是否为群主（由适配器增强插件设置相关属性）
+        // 检查是否为群主（由 Tasker Enhancer 设置）
         if (!e.isGroup || !e.member?.is_owner) {
           e.reply('暂无权限，只有群主才能操作')
           return false
@@ -675,7 +633,7 @@ export const dealMethods = {
         return true
 
       case 'admin':
-        // 检查是否为管理员（由适配器增强插件设置相关属性）
+        // 检查是否为管理员（由 Tasker Enhancer 设置）
         if (!e.isGroup || (!e.member?.is_owner && !e.member?.is_admin)) {
           e.reply('暂无权限，只有管理员才能操作')
           return false

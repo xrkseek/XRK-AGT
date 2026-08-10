@@ -51,11 +51,11 @@ class ListenerLoader {
     );
 
     if (process.argv.includes('server')) {
-      await this.loadAdapters();
+      await this.loadTaskers();
     }
   }
 
-  async loadAdapters() {
+  async loadTaskers() {
     RuntimeUtil.makeLog('info', '加载 tasker 中...', 'ListenerLoader');
     await TaskerLoader.load(this.bot);
 

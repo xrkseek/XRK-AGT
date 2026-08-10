@@ -275,7 +275,8 @@ AgentRuntime.tasker.push(
         `${data.self_id} <= ${data.user_id}`,
         true,
       )
-      AgentRuntime.em(`${data.post_type}.${data.message_type}`, data)
+      data.tasker = 'opqbot'
+      AgentRuntime.em('opqbot.message', data)
     }
 
     makeGroupMessage(id, data) {
@@ -301,7 +302,8 @@ AgentRuntime.tasker.push(
         `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
         true,
       )
-      AgentRuntime.em(`${data.post_type}.${data.message_type}`, data)
+      data.tasker = 'opqbot'
+      AgentRuntime.em('opqbot.message', data)
     }
 
     makeEvent(id, data) {

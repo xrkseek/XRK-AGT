@@ -126,9 +126,8 @@ export class TaskerBase {
       // 设备相关
       device_id: data.device_id || null,
       device_name: data.device_name || null,
-      event_type: data.event_type || post_type,
-      
-      // 原始数据
+
+      // 原始数据（可含 event_type：仅非 message/notice/request 的设备态事件需要）
       ...data
     }
     
@@ -150,25 +149,15 @@ export class TaskerBase {
   }
   
   /**
-   * 触发标准化事件
-   * @param {string} adapter_type - 适配器类型
+   * 触发标准化事件：`{tasker}.{post_type}`（设备态 online/data 等仍由调用方直接 em）
+   * @param {string} taskerType - tasker 短名
    * @param {Object} event - 事件对象
-   * @param {Object} bot - AgentRuntime主实例
+   * @param {Object} bot - AgentRuntime 主实例
    */
-  static emitEvent(adapter_type, event, bot) {
-    if (!event || !bot) return
-    
-    const { post_type, event_type } = event
-    
-    // 构建事件名称
-    const eventName = `${adapter_type}.${post_type}${event_type && event_type !== post_type ? `.${event_type}` : ''}`
-    
-    // 触发事件（从具体到通用）
-    bot.em(eventName, event)
-    
-    // 如果event_type是message/notice/request，也触发通用事件
-    if (['message', 'notice', 'request'].includes(event_type) && event_type !== post_type) {
-      bot.em(`${adapter_type}.${event_type}`, event)
-    }
+  static emitEvent(taskerType, event, bot) {
+    if (!event || !bot || !taskerType) return
+    if (!event.tasker) event.tasker = taskerType
+    const post = event.post_type || 'message'
+    bot.em(`${taskerType}.${post}`, event)
   }
 }

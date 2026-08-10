@@ -33,7 +33,7 @@
 | 技能目录 | `agents/skills/standard/` + 工作区 `skills/` | 细则靠 `tools.read`；安装见 **agent-skillhub** |
 | 角色路由提示 | `subagents.yaml` | 不启隔离子会话 |
 
-工具并集：`ai_config.mergeWorkflows`（+ 框架自动并入的 web/browser/remote-mcp）。
+工具并集：`ai_config.mergeWorkflows`（开放模式可并入 web/browser；`remote-mcp.*` 须显式列入）。
 
 ---
 

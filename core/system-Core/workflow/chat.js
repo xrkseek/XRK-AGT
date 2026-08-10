@@ -38,6 +38,7 @@ import {
   segText,
 } from '#utils/onebot-message-seg.js';
 import { chatSessionHistory } from '#utils/chat-session-history.js';
+import { resolveTaskerId } from '#utils/event-keys.js';
 import { summarizeToolForHistory } from '#utils/mcp-tool-result-text.js';
 import { readMediaBuffer } from '#utils/entry-media.js';
 import {
@@ -47,6 +48,9 @@ import {
   visionRefToLocator
 } from '#utils/llm/vision-content.js';
 
+function historyPlatform(e) {
+  return resolveTaskerId(e) || (e?.isDevice ? 'device' : e?.isStdin ? 'stdin' : 'onebot');
+}
 const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
 const IMAGE_SEND_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
 
@@ -2466,7 +2470,7 @@ export default class ChatStream extends AiWorkflow {
         message,
         message_id: messageId,
         time: e.time || Date.now(),
-        platform: e.isDevice ? 'device' : 'onebot',
+        platform: historyPlatform(e),
         hasImage,
         hasFile,
         hasFace,
@@ -2513,7 +2517,7 @@ export default class ChatStream extends AiWorkflow {
       message: stripLegacyToolUsagePrefix(text),
       message_id: `local_${Date.now()}`,
       time: Date.now(),
-      platform: e.isDevice ? 'device' : 'onebot',
+      platform: historyPlatform(e),
       isBot: true
     };
 
@@ -2786,7 +2790,7 @@ export default class ChatStream extends AiWorkflow {
           message: stripLegacyToolUsagePrefix(text),
           message_id: idStr,
           time: msg.time || Date.now(),
-          platform: e.isDevice ? 'device' : 'onebot',
+          platform: historyPlatform(e),
           isBot: e.self_id != null && uid != null && String(uid) === String(e.self_id),
           hasImage: parts.hasImage,
           hasFile: parts.hasFile,
@@ -2878,7 +2882,7 @@ export default class ChatStream extends AiWorkflow {
         message: summary.trim(),
         message_id: `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         time: Date.now(),
-        platform: e.isDevice ? 'device' : 'onebot',
+        platform: historyPlatform(e),
         isBot: true,
         isTool: true,
         toolName: String(toolName || '')

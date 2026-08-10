@@ -58,8 +58,8 @@ Core www / WebView 见 skill **`xrk-www-compat`**、[app-dev.md](app-dev.md)「C
 ## 2. 全局与 import
 
 ```javascript
-// 插件 / Tasker / 事件
-AgentRuntime.em('message', data);
+// 插件 / Tasker / 事件（须带 tasker 短名前缀；裸 message 无 Listener 进插件链）
+AgentRuntime.em('onebot.message', { ...data, tasker: 'onebot' });
 msgSegment.image(url);
 
 // HTTP

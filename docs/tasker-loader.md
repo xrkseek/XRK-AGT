@@ -69,7 +69,7 @@ flowchart TB
 **步骤说明**：
 
 1. 初始化统计对象 `summary`（scanned/loaded/failed/registered/errors）
-2. 调用 `getAdapterFiles()` 扫描所有 `core/*/tasker` 目录，筛选 `.js` 文件
+2. 调用 `getTaskerFiles()` 扫描所有 `core/*/tasker` 目录，筛选 `.js` 文件
 3. 批量导入：对每个文件执行 `await import(href)`
 4. 统计注册数量：检查 `bot.tasker.length` 的增量
 5. 输出总结日志
@@ -77,11 +77,10 @@ flowchart TB
 
 ---
 
-## 扫描逻辑：`getAdapterFiles()`
+## 扫描逻辑：`getTaskerFiles()`
 
-- 调用 `paths.getCoreDirs()` 获取所有 core 目录，遍历每个 `core/*/tasker` 子目录。
-- 使用 `FileLoader.readFiles(taskerDir, { ext: '.js', recursive: false })` 读取 `.js` 文件。
-- 为每个文件构造 `{ name, href, core }`：`name` 为文件名（如 `OneBotv11.js`），`href` 为 `file://` URL 供 `import(href)` 使用。
+- 调用 `FileLoader.getCoreSubDirFiles('tasker')` 遍历每个 `core/*/tasker` 子目录。
+- 为每个文件构造 `{ name, filePath, core }`：`name` 为文件名（如 `OneBotv11.js`）。
 - 若某 tasker 目录不存在或读取失败，跳过并打日志，不中断整体加载。
 
 ---
@@ -138,7 +137,8 @@ flowchart TB
 1. 外部平台通过 WebSocket 与 XRK-AGT 建立连接
 2. `AgentRuntime.wsConnect` 根据路径选择对应的 Tasker 处理函数
 3. Tasker 解析 JSON 上报，转换为统一事件结构
-4. 调用 `AgentRuntime.em("message.group.normal", data)` 触发事件，交由 `PluginLoader` 处理
+4. 调用 `AgentRuntime.em("{短名}.message", data)`（或 `TaskerBase.emitEvent`）触发事件，由 `core/*/events/` 监听后交 `PluginLoader` 处理
+5. 事件对象须带字符串 `tasker` 短名（禁止挂 Tasker 实例）
 
 ---
 

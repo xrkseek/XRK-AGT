@@ -14,8 +14,9 @@ description: 工作区 Core 全场景写法（PluginBase/HTTP/AiWorkflow+MCP/eve
 
 | 用户意图（例） | 写哪里 | 关键模式 |
 |----------------|--------|----------|
-| `#命令` / 关键词回复 | `plugin/` | `event:'message'` + `rule` + `fnc` |
+| `#命令` / 关键词回复 | `plugin/` | `event:'message'`（跨 Tasker）+ `rule` + `fnc` |
 | 仅群 / 仅私聊 | `plugin/` | `event:'message.group'` 或 `message.private` |
+| 仅某一通道（如 QQ） | `plugin/` | `event:'onebot.message'`（定 Tasker，不进 device/stdin） |
 | 仅主人可调 | `plugin/` | `rule[].permission:'master'` |
 | 多轮问答（先问再收） | `plugin/` | `setContext` / `getContext` / `finish` |
 | 定时任务 | `plugin/` | `task:[{ cron, fnc }]` + `init` 可空 |
@@ -28,7 +29,7 @@ description: 工作区 Core 全场景写法（PluginBase/HTTP/AiWorkflow+MCP/eve
 | 控制台配置项 | `commonconfig/` | `ConfigBase` + schema |
 | 通道级监听 | `events/` | `ListenerBase`（少用） |
 | 静态页 | `www/<应用名>/` | 静态资源；勿用保留根名 |
-| 协议适配 | `tasker/` | **默认不写** |
+| 协议入站 | `tasker/` + `events/` | **默认不写**；须 `em('{短名}.message')` + `e.tasker` 字符串 |
 
 热加载：改已有 `plugin|http|workflow/…` 下 `.js` 通常即可；**新建** `workflow/` 目录或新建 Core 名 → 重启 / `#重启`。
 
@@ -82,16 +83,16 @@ description: 工作区 Core 全场景写法（PluginBase/HTTP/AiWorkflow+MCP/eve
 
 ### 1.3 `event` 键
 
-Loader 拼：`post` · `message_type|notice_type|request_type` · `sub_type`；`*` 按**段**匹配且段数一致。
+Loader 经 `#utils/event-keys.js` → `matchPluginEvent`：可匹配键含 `{tasker}.{post}.{detail?}.{sub?}` 与跨 Tasker 的 `post` / `post.detail`。定 Tasker 订阅（首段非 `message|notice|request|meta|command`）**必须**与当前 `e.tasker` 一致。
 
 | 场景 | 示例 |
 |------|------|
-| 任意消息 | `message` |
+| 任意消息（全通道） | `message` |
 | 仅群 / 仅私 | `message.group` / `message.private` |
 | 通知总类 | `notice`（再在 `accept` 里看 `sub_type`） |
 | 具体通知 | `notice.group.increase` · `notice.*.poke` · … |
 | 请求 | `request` · `request.friend` · `request.group` |
-| 带适配器前缀 | `onebot.message`（一般不必） |
+| 定 Tasker（防串台） | `onebot.message` / `device.*`（控制台 Event=device，勿用 onebot 前缀绑日志类命令除非只要 QQ） |
 
 ### 1.4 `this.e` / API（常用）
 
@@ -374,7 +375,7 @@ export default class MyStream extends AiWorkflow {
 ```js
 const stream = this.getWorkflow('chat');
 
-// 开放：主流 + frameworkToolSurface 流 + 已加载 remote-mcp.*
+// 开放：主流 + frameworkToolSurface（remote-mcp 须写入 mergeWorkflows）
 await stream.process(e, e.msg);
 
 // 严格：名单即工具面（空数组 = 几乎裸聊）
@@ -385,8 +386,8 @@ await stream.process(e, e.msg, {
 
 - **未传** `mergeWorkflows`：开放模式。  
 - **传了数组（可空）**：严格模式；未加载的名字忽略并 warn。  
-- `remote-mcp.<名>`：远程 MCP 的工具白名单名；**不能**当副流 merge 成子对话，只能进工具面。  
-- 控制台 / v3 的 `workflow[]` 勾选同理：未勾选时默认常见为 **tools + web**（见 agent-tools）。
+- `remote-mcp.<名>`：与普通 workflow 同等，须显式列入；**不能**当副流 merge 成子对话，只能进工具面。  
+- 控制台 / v3：仅请求体 / 勾选的 `workflow.workflows` 生效，无服务端默认名单。
 
 ### 3.5 挂载第三方 / 远程 MCP
 
@@ -444,7 +445,7 @@ export function getMcpServers() {
 
 1. 日志：`检测到 MCP 插件服务器: … (来自 workflow: …)`  
 2. 成功时还有 `远程 MCP 工具已注册: …`；失败会打 `获取远程MCP工具失败`（对端协议/网络），**挂载文件仍可算写对**  
-3. 控制台可选 `remote-mcp.<服务器名>`；开放 chat 会并入已加载的 remote-mcp  
+3. 控制台勾选 `remote-mcp.<服务器名>` 后才会进工具面（与普通 workflow 相同）
 
 注意：
 
@@ -495,15 +496,23 @@ export default class MyConfig extends ConfigBase {
 
 | | 路径 | 说明 |
 |--|------|------|
-| events | `events/*.js` | `extends ListenerBase`；`init` 里订阅读；优先用 Plugin `event` |
-| tasker | `tasker/*.js` | 默认不写 |
+| events | `events/*.js` | `extends ListenerBase`；订阅读 `{短名}.message|notice|request`；优先用 Plugin `event` |
+| tasker | `tasker/*.js` | 默认不写；若写须 `em('{短名}.message')` + `e.tasker` 字符串 |
 | www | `www/<应用名>/` | 保留名禁用；兼容见 `xrk-www-compat`（只读） |
 
 ```js
 import ListenerBase from '#infrastructure/listener/base.js';
 export default class MyEvent extends ListenerBase {
-  constructor() { super('Workspace'); }
-  async init() { /* this.bot.on(...); markProcessed(e) */ }
+  constructor() { super('mycore'); } // 短名与 em / e.tasker 一致
+  async init() {
+    const bot = this.bot || AgentRuntime;
+    bot.on('mycore.message', (e) => this.handle(e));
+  }
+  async handle(e) {
+    if (!this.markProcessed(e)) return;
+    this.markTasker(e);
+    await this.plugins.deal(e);
+  }
 }
 ```
 

@@ -235,23 +235,6 @@ export const aiWorkflowConfig = {
                 max: 65535,
                 component: 'InputNumber'
               },
-              defaultWorkflows: {
-                type: 'array',
-                label: '默认启用的工作流',
-                description: '留空=代码内置默认（tools、web）；填写则覆盖 ai-workflow-config 内置默认',
-                itemType: 'string',
-                default: [],
-                enum: ['tools', 'web', 'chat', 'desktop'],
-                component: 'MultiSelect'
-              },
-              defaultRemoteMcp: {
-                type: 'array',
-                label: '默认启用的远程 MCP',
-                description: '留空=代码内置默认（tools + web）；填写则覆盖。用户自增 MCP 在 remote.mcpServers',
-                itemType: 'string',
-                default: [],
-                component: 'Tags'
-              },
               toolMergeStrategy: {
                 type: 'string',
                 label: '工具合并策略',

@@ -1,6 +1,7 @@
 import runtimeConfig from '#infrastructure/config/config.js'
 import RuntimeUtil from '#utils/runtime-util.js'
 import EnhancerBase from '#infrastructure/plugins/enhancer-base.js'
+import { EventNormalizer } from '#utils/event-normalizer.js'
 
 export default class OneBotEnhancer extends EnhancerBase {
   constructor() {
@@ -9,22 +10,14 @@ export default class OneBotEnhancer extends EnhancerBase {
       dsc: '为OneBot事件挂载特定属性',
       event: 'onebot.*',
       tasker: 'onebot',
-      priority: 100 // 设置较高优先级，确保先执行
+      priority: 100
     })
   }
 
-  isTargetEvent(e, taskerName) {
-    return taskerName.includes('onebot') && !['stdin', 'api', 'device'].includes(taskerName)
-  }
-
   enhanceEvent(e) {
-    super.enhanceEvent(e) // 设置 isOneBot, tasker 和 logText
+    super.enhanceEvent(e)
+    EventNormalizer.normalizeOneBot(e)
 
-    // 设置消息类型标识（EventNormalizer已处理message_type，这里补充标识）
-    e.isPrivate = e.message_type === 'private' || (!e.group_id && e.user_id)
-    e.isGroup = e.message_type === 'group' || !!e.group_id
-
-    // 绑定机器人实体
     this.bindBotEntities(e)
 
     // 处理@消息
