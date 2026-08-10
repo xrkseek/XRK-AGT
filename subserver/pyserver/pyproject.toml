@@ -7,5 +7,5 @@ dependencies = [
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.30.0",
   "pyyaml>=6.0.1",
-  "xrk-readline>=0.2.4",
+  "xrk-readline>=0.2.7",
 ]
