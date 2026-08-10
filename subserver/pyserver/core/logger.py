@@ -1,4 +1,4 @@
-"""日志配置：控制台 + 轮转文件；级别/路径读自 config.yaml。"""
+"""日志：控制台 + 轮转文件。"""
 
 import logging
 import sys
@@ -12,17 +12,7 @@ config = Config()
 _root_configured = False
 
 
-def _ensure_stream_utf8(stream) -> None:
-    reconfigure = getattr(stream, "reconfigure", None)
-    if callable(reconfigure):
-        try:
-            reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
-
-
 def setup_logger(name: str = __name__, level: Optional[str] = None) -> logging.Logger:
-    """配置根 logger（仅首次），返回指定名称的 logger。"""
     global _root_configured
     root = logging.getLogger()
 
@@ -34,8 +24,6 @@ def setup_logger(name: str = __name__, level: Optional[str] = None) -> logging.L
             return logging.getLogger(name)
 
         _root_configured = True
-        _ensure_stream_utf8(sys.stdout)
-        _ensure_stream_utf8(sys.stderr)
 
         console_formatter = logging.Formatter(
             "%(asctime)s │ %(levelname)-7s │ %(message)s",

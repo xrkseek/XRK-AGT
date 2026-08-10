@@ -15,9 +15,9 @@ uv sync
 uv run python main.py
 ```
 
-（Windows 也可 `.\xrk.cmd`。）启动时会扫描并安装各 `apis/*/requirements.txt`。
+Windows 也可用 `.\xrk.cmd`。启动时安装各 `apis/*/requirements.txt`。
 
-可选可见窗口：
+可见窗口：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File subserver/pyserver/scripts/start-visible.ps1

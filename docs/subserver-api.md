@@ -128,9 +128,9 @@ default = {
 - 按业务分组目录：`apis/<group>/service.py`（或各语言等价文件）
 - 业务逻辑放在 `apis/<group>/`，**不改动** `core/` 与加载器
 - 接口前缀统一走 `/api/<group>/*`
-- 扩展可自带 `requirements.txt`；`uv sync` 不装它们，但 `uv run python main.py` 启动时会扫描安装
+- 扩展可自带 `requirements.txt`；启动时（`uv run python main.py`）扫描安装
 - 第三方 / 产品插件本地 clone 到 `apis/<group>/`，不进主仓（见根 `.gitignore` 白名单）
-- **业务扩展自带 README、默认配置与依赖**；不写入 AGT 本体 `config/default_config/`
+- 业务扩展自带 README、默认配置与依赖；不写入 AGT 本体 `config/default_config/`
 
 ## 配置
 
@@ -139,7 +139,7 @@ default = {
 - **默认配置**：`subserver/pyserver/config/default_config.yaml`（模板）
 - **用户配置**：`data/subserver/config.yaml`（运行时）
 
-### 当前配置结构（精简版）
+### 配置结构
 
 ```yaml
 server:
@@ -163,7 +163,7 @@ logging:
   backup_count: 5
 ```
 
-## 依赖安装与运行（推荐使用 uv）
+## 依赖安装与运行
 
 ```bash
 cd subserver/pyserver
@@ -171,7 +171,7 @@ uv sync
 uv run python main.py
 ```
 
-扩展插件的 `apis/<组名>/requirements.txt` 在启动时自动安装；也可在子服终端执行「更新」。
+`apis/<组名>/requirements.txt` 在启动时安装；也可在子服终端执行「更新」。
 
 环境变量示例：`HOST=0.0.0.0 PORT=8000 RELOAD=true uv run python main.py`
 
@@ -179,8 +179,8 @@ uv run python main.py
 
 | 现象 | 处理 |
 |------|------|
-| `xrk.exe` 被占用 / os error 32 | 先关掉旧子服窗口，再启动；推荐用 `uv run python main.py`（不再依赖 Scripts 里的 exe） |
 | 端口被占用 | `PORT=8001 uv run python main.py` 或改 `data/subserver/config.yaml` |
+
 ## 相关文档
 
 - **[AiWorkflow 文档](ai-workflow.md)** - Node 侧工作流与 LLM/MCP 调用说明
@@ -189,4 +189,4 @@ uv run python main.py
 
 ---
 
-*最后更新：2026-07-02*
+*最后更新：2026-08-10*

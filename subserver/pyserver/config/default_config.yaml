@@ -1,28 +1,20 @@
-# XRK-AGT Python 子服务端默认配置文件
-# 此文件为默认配置模板，首次启动时会自动复制到 data/subserver/config.yaml
+# 首次启动复制到 data/subserver/config.yaml
 
-# 服务器配置
 server:
-  host: "0.0.0.0"      # 监听地址
-  port: 8000           # 监听端口（默认 8000，避免与主服务端端口冲突）
-  reload: false        # 开发模式自动重载（生产环境设为 false）
-  log_level: "info"    # 日志级别: debug, info, warning, error
+  host: "0.0.0.0"
+  port: 8000
+  reload: false
+  log_level: "info"
   stdin:
-    enabled: true      # 交互终端（xrk-readline：历史/方向键/Tab；Ctrl+C 停服）
+    enabled: true
     prompt: "子服> "
 
-# CORS 配置
 cors:
   origins:
-    - "*"               # 允许的源（生产环境建议指定具体域名）
-    # - "http://localhost:8080"  # 主服务端地址（根据实际端口配置）
-    # - "https://yourdomain.com"
+    - "*"
 
-# API 装载：固定扫描 pyserver/apis/（无需在此配置）
-
-# 日志配置
 logging:
-  level: "info"       # 日志级别
-  file: "logs/app.log"  # 日志文件路径
-  max_bytes: 10485760  # 单个日志文件最大大小（10MB）
-  backup_count: 5     # 保留的日志文件数量
+  level: "info"
+  file: "logs/app.log"
+  max_bytes: 10485760
+  backup_count: 5

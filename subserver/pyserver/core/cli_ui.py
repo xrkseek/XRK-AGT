@@ -1,4 +1,4 @@
-"""子服终端输出与输入规范化（对齐主服 stdin 体验）。"""
+"""子服终端输出与输入规范化。"""
 
 from __future__ import annotations
 

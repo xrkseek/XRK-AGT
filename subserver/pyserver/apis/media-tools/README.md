@@ -4,18 +4,16 @@
 
 ## 依赖
 
-`uv run python main.py` 启动时自动安装本目录 `requirements.txt`；也可 `子服> media-tools 更新`。
+启动子服时安装本目录 `requirements.txt`；也可 `子服> media-tools 更新`。
 
-## 终端命令
-
-子服务启动后（交互终端）：
+## 终端
 
 ```text
 子服> media-tools 状态
 子服> media-tools 更新
 ```
 
-主服务代码调用：`AgentRuntime.callSubserver('/api/media-tools/...')`
+主服：`AgentRuntime.callSubserver('/api/media-tools/...')`
 
 ## API
 

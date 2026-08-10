@@ -1,4 +1,4 @@
-"""XRK-AGT Python 子服务端（底层精简版）"""
+"""XRK-AGT Python 子服务端。"""
 import logging
 import os
 import sys
@@ -17,7 +17,6 @@ from core.version import PACKAGE_VERSION
 
 
 def _ensure_stdio_utf8() -> None:
-    """Windows 控制台默认 GBK；统一 UTF-8，避免日志/stdin 乱码。"""
     os.environ.setdefault("PYTHONUTF8", "1")
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
     for stream in (sys.stdout, sys.stderr):
@@ -37,7 +36,6 @@ logger = setup_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理"""
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logger.info("启动 XRK-AGT Python 子服务端")
     try:
@@ -64,7 +62,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="XRK-AGT Python 子服务端",
-    description="提供子服务端底层能力（健康检查、扩展 API 装载）",
+    description="健康检查与扩展 API 装载",
     version=PACKAGE_VERSION,
     lifespan=lifespan,
     docs_url="/docs",
@@ -100,8 +98,8 @@ def main():
         logger.info("插件依赖就绪: %s", ", ".join(deps["installed"]))
 
     logger.info("──────────────────────────────────────")
-    logger.info("🌐 子服务端  http://%s:%s", host, port)
-    logger.info("📁 配置     %s", config.get_file_path())
+    logger.info("子服务端  http://%s:%s", host, port)
+    logger.info("配置     %s", config.get_file_path())
     logger.info("──────────────────────────────────────")
 
     uvicorn.run(

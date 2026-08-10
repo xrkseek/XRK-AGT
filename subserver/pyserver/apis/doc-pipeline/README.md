@@ -4,9 +4,9 @@ HTML 正文提取、简易 Markdown 转换。
 
 ## 依赖
 
-`uv run python main.py` 启动时自动安装本目录 `requirements.txt`；也可 `子服> doc-pipeline 更新`。
+启动子服时安装本目录 `requirements.txt`；也可 `子服> doc-pipeline 更新`。
 
-## 终端命令
+## 终端
 
 ```text
 子服> doc-pipeline 状态

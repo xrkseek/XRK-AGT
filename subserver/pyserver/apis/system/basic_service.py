@@ -1,4 +1,4 @@
-"""子服务端底层系统 API。"""
+"""系统 API。"""
 
 from fastapi import HTTPException, Request
 
@@ -73,7 +73,7 @@ async def command_handler(request: Request):
 
 default = {
     "name": "system-basic",
-    "description": "子服务端底层系统接口",
+    "description": "系统接口",
     "priority": 100,
     "routes": [
         {"method": "GET", "path": "/", "handler": root_handler},

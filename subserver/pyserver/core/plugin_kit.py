@@ -1,9 +1,8 @@
-"""子服务插件通用工具：配置、依赖更新、命令路由。"""
+"""子服务插件：配置、依赖、命令路由。"""
 
 from __future__ import annotations
 
 import asyncio
-import logging
 import shutil
 import subprocess
 import sys
@@ -11,8 +10,6 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import yaml
-
-logger = logging.getLogger(__name__)
 
 CommandHandler = Callable[..., Any]
 
@@ -40,12 +37,10 @@ def find_plugin_dir(name: str) -> Optional[Path]:
 
 
 def repo_root_from_plugin(plugin_dir: Path) -> Path:
-    """apis/<group>/ -> 项目根目录。"""
     return plugin_dir.resolve().parents[3]
 
 
 def plugin_core_dir(plugin_dir: Path, segment: str = "plugin") -> Path:
-    """apis/<group>/core/<segment>/ — 与主仓 core 同结构，主服 Loader 扫描。"""
     return plugin_dir / "core" / segment
 
 
@@ -60,11 +55,7 @@ def load_plugin_config(
 
 
 class PluginConfig:
-    """插件运行时配置（只读）。
-
-    主服 CommonConfig 写入 data/<name>/config.yaml；子服业务仅 load/reload/get。
-    首次缺文件时从 apis/<group>/default_config.yaml 复制。
-    """
+    """只读：data/<name>/config.yaml；缺文件时从插件 default_config.yaml 复制。"""
 
     def __init__(
         self,
@@ -172,16 +163,10 @@ def _run_subprocess(cmd: List[str], *, cwd: Optional[Path] = None) -> Dict[str, 
 
 
 def _pyserver_root() -> Path:
-    """subserver/pyserver（含 .venv / pyproject.toml）。"""
     return Path(__file__).resolve().parent.parent
 
 
 def _iter_requirement_files(plugin_dir: Path) -> List[Path]:
-    """收集插件依赖清单。
-
-    有插件根 ``requirements.txt`` 时只装该文件（避免与 vendor 双装、拉进无关音频包）。
-    根文件不存在时再扫 ``vendor/*/requirements.txt`` 与 ``vendor/*/src/requirements.txt``。
-    """
     main = plugin_dir / "requirements.txt"
     if main.is_file():
         return [main]
@@ -194,7 +179,6 @@ def _iter_requirement_files(plugin_dir: Path) -> List[Path]:
 
 
 def upgrade_plugin_deps(plugin_dir: Path, *, use_uv: bool = True) -> Dict[str, Any]:
-    """安装单个插件及其 vendor 的 requirements.txt 到 pyserver 项目 venv（优先 uv）。"""
     plugin_dir = plugin_dir.resolve()
     req_files = _iter_requirement_files(plugin_dir)
     if not req_files:
@@ -234,6 +218,7 @@ def upgrade_plugin_deps(plugin_dir: Path, *, use_uv: bool = True) -> Dict[str, A
         "requirements": [s.get("requirements") for s in steps],
     }
 
+
 def git_pull_plugin(plugin_dir: Path) -> Dict[str, Any]:
     git_dir = plugin_dir / ".git"
     if not git_dir.exists():
@@ -245,17 +230,13 @@ def git_pull_plugin(plugin_dir: Path) -> Dict[str, Any]:
 
 
 def install_all_plugin_deps(*, use_uv: bool = True) -> Dict[str, Any]:
-    """扫描 apis/*/requirements.txt，装入 pyserver venv。"""
-    dirs = iter_plugin_dirs()
-    results: Dict[str, Any] = {}
     installed: List[str] = []
     skipped: List[str] = []
     failed: List[str] = []
 
-    for plugin_dir in dirs:
+    for plugin_dir in iter_plugin_dirs():
         name = plugin_dir.name
         result = upgrade_plugin_deps(plugin_dir, use_uv=use_uv)
-        results[name] = result
         if result.get("skipped"):
             skipped.append(name)
         elif result.get("ok"):
@@ -265,13 +246,9 @@ def install_all_plugin_deps(*, use_uv: bool = True) -> Dict[str, Any]:
 
     return {
         "ok": len(failed) == 0,
-        "action": "install-all-plugin-deps",
-        "root": str(_pyserver_root()),
-        "groups": [d.name for d in dirs],
         "installed": installed,
         "skipped": skipped,
         "failed": failed,
-        "results": results,
     }
 
 
@@ -311,7 +288,7 @@ async def update_all_plugin_dirs() -> Dict[str, Any]:
         "action": "update-all",
         "groups": [d.name for d in dirs],
         "results": results,
-        "hint": "完成后重启子服以重新装载插件（含 git clone 的新目录）",
+        "hint": "重启子服以重新装载插件",
     }
 
 

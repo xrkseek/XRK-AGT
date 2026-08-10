@@ -9,6 +9,3 @@ dependencies = [
   "pyyaml>=6.0.1",
   "xrk-readline>=0.2.4",
 ]
-
-# 应用模式：不打 editable 包、不写 Scripts/xrk.exe，避免 Windows 上「旧进程占文件 → uv sync 失败」。
-# 启动：uv run python main.py

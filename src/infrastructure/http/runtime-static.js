@@ -360,7 +360,6 @@ export async function handleRobotsTxt(runtime, req, res) {
   }
 
   const contentOverride = typeof robotsCfg?.content === 'string' ? robotsCfg.content.trim() : '';
-  /** 控制台与 Core www 调试挂载：始终禁止收录（配置漏写也会并入） */
   const consoleDisallow = ['/xrk', '/xrk/', '/core/'];
   const configuredDisallow = Array.isArray(robotsCfg?.disallow) && robotsCfg.disallow.length
     ? robotsCfg.disallow
@@ -381,7 +380,7 @@ export async function handleRobotsTxt(runtime, req, res) {
     '',
   ].join('\n');
 
-  // 自定义 content 时仍确保控制台路径被 Disallow（已写则不重复）
+  // content 覆盖时补全 consoleDisallow
   if (contentOverride) {
     const declared = new Set(
       defaultRobots

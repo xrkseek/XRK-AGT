@@ -56,7 +56,7 @@ export async function initializeMiddlewareAndRoutes(runtime) {
     next();
   });
 
-  // 控制台 / Core www：响应头禁止收录（不依赖爬虫是否读 robots.txt）
+  // /xrk、/core：X-Robots-Tag
   runtime.express.use((req, res, next) => {
     const p = req.path || '';
     if (p === '/xrk' || p.startsWith('/xrk/') || p === '/core' || p.startsWith('/core/')) {

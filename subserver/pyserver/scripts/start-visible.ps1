@@ -1,6 +1,5 @@
-# Launch visible PowerShell for pyserver (vision 通道需要可见桌面窗口)
+# 弹出可见 PowerShell 窗口启动 pyserver
 #   powershell -ExecutionPolicy Bypass -File subserver/pyserver/scripts/start-visible.ps1
-#   或双击 start-visible.bat
 
 $ErrorActionPreference = "Stop"
 $pyserver = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
