@@ -359,13 +359,16 @@ export async function handleRobotsTxt(runtime, req, res) {
     // default
   }
 
-  const contentOverride = typeof robotsCfg?.content === 'string' ? robotsCfg.content : '';
-  const disallow = Array.isArray(robotsCfg?.disallow) && robotsCfg.disallow.length
+  const contentOverride = typeof robotsCfg?.content === 'string' ? robotsCfg.content.trim() : '';
+  /** 控制台与 Core www 调试挂载：始终禁止收录（配置漏写也会并入） */
+  const consoleDisallow = ['/xrk', '/xrk/', '/core/'];
+  const configuredDisallow = Array.isArray(robotsCfg?.disallow) && robotsCfg.disallow.length
     ? robotsCfg.disallow
     : ['/api/', '/config/', '/data/', '/lib/', '/plugins/', '/trash/'];
-  const allow = Array.isArray(robotsCfg?.allow) && robotsCfg.allow.length
-    ? robotsCfg.allow
-    : ['/'];
+  const disallow = [...new Set([...configuredDisallow.map(String), ...consoleDisallow])];
+  const allow = Array.isArray(robotsCfg?.allow)
+    ? robotsCfg.allow.map(String).filter((p) => p && p !== '/')
+    : [];
   const sitemapPath = (robotsCfg?.sitemapPath && String(robotsCfg.sitemapPath).trim()) || '/sitemap.xml';
   const autoSitemap = robotsCfg?.autoSitemap !== false;
 
@@ -377,6 +380,22 @@ export async function handleRobotsTxt(runtime, req, res) {
     ...allow.map((p) => `Allow: ${p}`),
     '',
   ].join('\n');
+
+  // 自定义 content 时仍确保控制台路径被 Disallow（已写则不重复）
+  if (contentOverride) {
+    const declared = new Set(
+      defaultRobots
+        .split(/\r?\n/)
+        .map((line) => line.trim().toLowerCase())
+        .filter(Boolean),
+    );
+    const missing = consoleDisallow.filter(
+      (p) => !declared.has(`disallow: ${String(p).toLowerCase()}`),
+    );
+    if (missing.length) {
+      defaultRobots = `${defaultRobots.replace(/\s*$/, '')}\n${missing.map((p) => `Disallow: ${p}`).join('\n')}\n`;
+    }
+  }
 
   if (autoSitemap && !/^\s*Sitemap:/mi.test(defaultRobots)) {
     defaultRobots = `${defaultRobots}\nSitemap: ${sitemapUrl}`;

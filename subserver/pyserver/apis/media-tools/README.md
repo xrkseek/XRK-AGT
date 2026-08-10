@@ -4,10 +4,7 @@
 
 ## 依赖
 
-```bash
-cd subserver/pyserver
-uv pip install -r apis/media-tools/requirements.txt
-```
+`uv run python main.py` 启动时自动安装本目录 `requirements.txt`；也可 `子服> media-tools 更新`。
 
 ## 终端命令
 

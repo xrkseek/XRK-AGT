@@ -156,6 +156,7 @@ def create_api_from_dict(data: Dict[str, Any]) -> BaseAPI:
                 "PUT": app.put,
                 "DELETE": app.delete,
                 "PATCH": app.patch,
+                "HEAD": app.head,
             }
             for route_config in self._data.get("routes", []):
                 method = route_config.get("method", "GET").upper()

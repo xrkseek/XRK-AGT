@@ -5,6 +5,7 @@ from fastapi import HTTPException, Request
 from core.command_registry import CommandRegistry
 from core.config import Config
 from core.loader import ApiLoader
+from core.version import PACKAGE_VERSION
 
 config = Config()
 
@@ -12,7 +13,7 @@ config = Config()
 async def root_handler(_request: Request):
     return {
         "name": "XRK-AGT Python 子服务端",
-        "version": "1.1.0",
+        "version": PACKAGE_VERSION,
         "status": "running",
     }
 
@@ -38,7 +39,10 @@ async def config_handler(_request: Request):
             "reload": config.get("server.reload", False),
             "stdin": config.get("server.stdin", {}),
         },
-        "api": config.get("api", {}),
+        "logging": {
+            "level": config.get("logging.level", "info"),
+            "file": config.get("logging.file", "logs/app.log"),
+        },
     }
 
 

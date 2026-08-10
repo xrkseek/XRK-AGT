@@ -1,74 +1,48 @@
 ---
-description: XRK-AGT 项目架构与开发约定（全局生效）
+description: XRK-AGT 架构、放码与配置归属（克隆本仓写 Core 必遵）
 alwaysApply: true
 ---
 
 # XRK-AGT 项目规则
 
-## 项目定位
+克隆本仓开发 Core / 扩展 Runtime 时遵守。开发入口：根 **`AGENTS.md`**；任务→Skill：`.cursor/skills/SKILL_INDEX.md`。
 
-- XRK-AGT 是面向多端（QQ/OneBot/Stdin/设备）的 AgentRuntime 运行时，提供插件、HTTP API、AI 工作流、Tasker、事件监听、CommonConfig 等扩展点；业务逻辑与具体能力由各 Core 实现。
+## 上游与提交
 
-## 架构与放码位置
+- 官方仓库与文档链接默认 owner：**`xrkseek`**（例：`github.com/xrkseek/XRK-AGT`）。
+- 提交信息不得含 `Co-authored-by: Cursor` / `cursoragent@cursor.com`；Author 用提交者本人的 git identity。
 
-- **业务逻辑**：一律放在 `core/<core名>/` 下，按类型分目录：
-  - `plugin/` 插件；`http/` HTTP API；`workflow/` AI 工作流；`tasker/` 协议适配；`events/` 事件监听；`commonconfig/` 配置 Schema；`www/<应用名>/` 静态前端（**必须**子目录；根名勿用 `api|core|media|uploads|File|shared`）。
-- **基础设施**：基类、加载器、工具在 `src/infrastructure/`、`src/utils/`、`src/factory/`；入口为 `src/agent-runtime.js`，应用启动为 `app.js` / `start.js`。
-- **禁止（Core 开发者）**：业务代码不得写在 `src/`；Core 内**不得修改** `src/infrastructure/`、`src/utils/`、`src/factory/` 等 Runtime 代码。
-- **框架开发者**：维护 Runtime、Loader、工厂与共享工具时**可以且应当**改 `src/`，并通过文档与 commonconfig 向 Core 暴露能力。
-- **充分利用底层**：Core 只继承基类、填 schema/实现接口；缺能力扩 `src/`；浏览器兼容先改 `web-compat.js` 再同步产品**内联**。
-- **导入路径**：**无** package.json 的 core 使用根包 `#` 别名（`#infrastructure/*`、`#utils/*`）；**有** package.json 的 core **不得**使用 `#`（子包无该别名），须用相对路径引用根目录下 `src/`（如 `../../../src/infrastructure/...`）。
+## 边界
 
-### system-Core 白名单 vs 娱乐插件
+- **业务**：`core/<core名>/` → `plugin` · `http` · `workflow` · `tasker` · `events` · `commonconfig` · `www/<应用名>/`（`www` 必须子目录；根名勿用 `api|core|media|uploads|File|shared`）。
+- **Runtime**：`src/infrastructure/` · `src/utils/` · `src/factory/`；启动 `app.js` / `start.js` → `src/agent-runtime.js`。
+- **Core 开发者不得改 `src/`**；缺能力提 issue，或由框架扩基类后经文档 / commonconfig 暴露。框架维护者改 `src/` 并文档化。
+- 加载：Loader 扫描 `core/*/` 对应子目录；`www/` 由 `mountCoreWwwStatic` 挂到 `/<应用名>`。
 
-- `system-Core` 白名单只收框架示例外设 / 通道 / 运维助手；入库靠 `.gitignore` 点名 `!`，**勿**为娱乐插件加 `!`。
-- 娱乐/玩梗/游戏工具：不进 `src/`、不进 `config/default_config/`、不加白名单；本地忽略即可跑；配置写插件顶部；**默认不提交**。
+## 配置归属
 
-## 技术栈与版本
+| 位置 | 用途 |
+|------|------|
+| `config/default_config/` | 仅 AGT 运行时 / LLM·ASR·TTS 工厂 / system-Core |
+| `core/<core>/default/` + `commonconfig/` | 独立产品模板与 schema；运行时数据在 `data/<产品>/` |
 
-- Node.js ≥ 26.0（Current，2026-10 转 LTS）；包管理仅支持 **pnpm**。
-- **服务端**可使用 Node 25/26 特性：`Error.isError()`、`Map.getOrInsert*`、`Uint8Array.fromBase64/toBase64/toHex`、`AbortSignal.timeout`、全局 `URLPattern`、原生 `fetch`（Undici 8 + `ProxyAgent`）、默认启用的 `Temporal` 与 Web Storage 等。
-- **Core www（浏览器兼容层）**：skill **`xrk-www-compat`**（`/xrk` 用 `./web-compat.js`；产品页**只内联**；根名 `shared` 为保留段，产品用自有目录名）。
-- 异步 `exec`：统一 `#utils/exec-async.js`（`util.promisify` 单点封装；至 26.7 仍无 `node:child_process/promises` 子模块，勿在各文件重复 promisify）。
-- 禁止旧写法（**服务端**）：`instanceof Error` 判错、`node-fetch`、分散的 `util.promisify(exec)`、`import ... child_process/promises`、`AbortController`+`setTimeout` 拼超时、URLPattern/Error 特性检测回退。
+产品业务配置 **禁止** 写入 `config/default_config/`。改字段须模板 + schema + 消费代码同步。
 
-## 文档与回答规范
+## 导入
 
-- **写法与挂载**：`docs/coding-style.md`（性能/全局/I/O/HTTP）、`docs/runtime-surface.md`（AgentRuntime/Loader）。
-- 涉及「在哪改/在哪配」必须给出**具体路径**（文件 + 函数/字段），不以「应该在某个地方」含糊带过。
-- 文档与代码冲突时以**代码为准**，并标注需修订的文档。
-- 新增配置需同时维护默认模板、commonconfig schema、以及实际消费该配置的代码（见下节「配置模板归属」）。
+- 无 `package.json`：`#infrastructure/*`、`#utils/*`
+- 有 `package.json`：相对路径引用根 `src/`（**禁止 `#`**）
 
-## 配置模板归属
+## 栈
 
-- **`config/default_config/`**：仅 **AGT 运行时 / LLM·ASR·TTS 工厂 / system-Core 体系** 的配置模板（如 `agt`、`server`、`ai-workflow`、`*_llm`）。**禁止**放入独立产品 Core 的业务配置。
-- **独立产品 Core**（如 `lsy-Core`）：模板在 **`core/<core名>/default/<name>.yaml`**，运行时数据在 **`data/<产品>/`**，schema 在 **`core/<core名>/commonconfig/`**；`read()` 须从 Core 内 `default/` 引导复制，**不得**在 `config/default_config/` 添加同名 yaml。
-- **system-Core** 改配置：`config/default_config/` + `core/system-Core/commonconfig/` + 消费代码。
-- **独立 Core** 改配置：`core/<core名>/default/` + `core/<core名>/commonconfig/` + 消费代码；**不**改 `config/default_config/`、`src/infrastructure/`。
+Node ≥ 26 · 仅 **pnpm**。服务端 API / 禁止旧写法：`xrk-dev-requirements.mdc` · skill `xrk-node-runtime`；Core www：skill `xrk-www-compat`。
 
-## Core 内文档分工（产品 vs 开发）
+## 主仓入库
 
-| 文档 | 读者 | 写什么 |
-|------|------|--------|
-| `core/<core>/AGENTS.md` | **产品 Agent** | 工作区、工具边界、用户规则说明；**不写** LLM 工厂、commonconfig、底层路径 |
-| `core/<core>/README.md` | **开发者** | 部署、API、架构、与 AGT 本体的集成方式 |
-| `core/<core>/skills/` | **产品 Agent**（注入 prompt） | 能力细则与操作规范 |
-| `.cursor/rules`、`skills/xrk-*` | **Cursor / 维护者** | 全局底层约定（配置归属、LLM 工厂、Node 26 等） |
+主仓通常只白名单 `system-Core`；业务 Core、娱乐插件默认本地运行，**勿**为产品名改根 `.gitignore` 加 `!`。细则：`xrk-third-party-plugins.mdc`。
 
-改 lsy-Core 底层接线看 **README + `xrk-config`**；改李诗雅「怎么干活」看 **AGENTS.md + skills/**。
+独立 git 产品 Core 的精工写在**该 Core 仓** `.cursor/rules/`；主仓可用 `globs: core/<名>/**` 薄路由，不 alwaysApply 产品细则。
 
-### 独立 git 产品 Core
+## 语言
 
-- 业务 Core（如 `vibe-learn`）常为**单独仓库**，本地 clone 到 `core/<名>/`；主仓只白名单 `system-Core`（见 `xrk-third-party-plugins`）。
-- **产品精工 / 内容约定**写在该 Core 仓的 `.cursor/rules/*.mdc`（随产品仓提交），**不要**塞进主仓 alwaysApply。
-- 主仓若需在 monorepo 工作区触发：用 `globs: core/<名>/**` 做薄路由，正文以 Core 仓规则为准。
-
-## 开发与扩展
-
-- **编码与全局对象**：见 `xrk-dev-requirements.mdc`、**`docs/coding-style.md`**、skill **`xrk-coding-style`** / **`xrk-node-runtime`**（Node 26 API，禁止旧写法）。**Core www**：skill **`xrk-www-compat`**。**扩展点与基类**：见 `docs/框架可扩展性指南.md` 与 skill `xrk-infrastructure`。
-- **加载流程**：`node app` → `start.js` → `src/agent-runtime.js`；各 Loader 扫描 `core/*/` 对应子目录自动加载（plugin/http/workflow/tasker/events/commonconfig）；`www/` 由 `mountCoreWwwStatic`（`src/infrastructure/http/mount-core-www.js`）挂载子目录为 `/<应用名>`。
-
-## 语言与风格
-
-- 项目内规则、Skills、开发说明统一使用**简体中文**。
-- 回复简洁、结论先行；贴代码时只给最小可运行片段。
+规则与 Skills 用**简体中文**；「在哪改」给到文件 + 函数/字段；与代码冲突以代码为准。

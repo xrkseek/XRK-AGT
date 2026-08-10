@@ -56,6 +56,17 @@ export async function initializeMiddlewareAndRoutes(runtime) {
     next();
   });
 
+  // 控制台 / Core www：响应头禁止收录（不依赖爬虫是否读 robots.txt）
+  runtime.express.use((req, res, next) => {
+    const p = req.path || '';
+    if (p === '/xrk' || p.startsWith('/xrk/') || p === '/core' || p.startsWith('/core/')) {
+      if (!res.headersSent) {
+        res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet');
+      }
+    }
+    next();
+  });
+
   // 入站 HTTP 延迟聚合（水库采样）→ /metrics.http；与请求日志开关无关
   runtime.express.use(createHttpRequestMetricsMiddleware());
 

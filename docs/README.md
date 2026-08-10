@@ -17,7 +17,7 @@
 | 写插件 / API / 工作流 | [框架可扩展性指南](框架可扩展性指南.md) |
 | 发布前检查 | [框架测试指南](框架测试指南.md) → [代码审查清单](代码审查清单.md) → [文档审查清单](文档审查清单.md) |
 
-> 配图约定：[DOCSTYLE.md](DOCSTYLE.md) · 仓库 [github.com/sunflowermm/XRK-AGT](https://github.com/sunflowermm/XRK-AGT)
+> 配图约定：[DOCSTYLE.md](DOCSTYLE.md) · 仓库 [github.com/xrkseek/XRK-AGT](https://github.com/xrkseek/XRK-AGT)
 
 ## 目录
 
@@ -230,8 +230,8 @@ AgentRuntime 生命周期、HTTP/WS、关闭流程：**[agent-runtime.md](agent-
 - **[README.md](../README.md)** - 仓库入口、目录导航、测试与质量摘要
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 项目整体架构说明
 - **[文档审查清单](文档审查清单.md)** - 文档层级图与发布前自检
-- **[XRK-AGT 生态索引（AGT-Cores-Tools-Index）](https://github.com/sunflowermm/AGT-Cores-Tools-Index)** - 官方导航仓库（含 [核心工具与通用组件索引](https://github.com/sunflowermm/AGT-Cores-Tools-Index/blob/main/Core-Tools.md) 等，以该仓库为准）
-- **[GitHub 仓库](https://github.com/sunflowermm/XRK-AGT)** - 源代码仓库
+- **[XRK-AGT 生态索引（AGT-Cores-Tools-Index）](https://github.com/xrkseek/AGT-Cores-Tools-Index)** - 官方导航仓库（含 [核心工具与通用组件索引](https://github.com/xrkseek/AGT-Cores-Tools-Index/blob/main/Core-Tools.md) 等，以该仓库为准）
+- **[GitHub 仓库](https://github.com/xrkseek/XRK-AGT)** - 源代码仓库
 - **[Gitee 仓库](https://gitee.com/xrkseek/XRK-AGT)** - 国内镜像仓库
 - **[GitCode 仓库](https://gitcode.com/Xrkseek/XRK-AGT)** - 国内镜像仓库
 

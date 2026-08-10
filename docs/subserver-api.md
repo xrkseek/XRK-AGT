@@ -128,7 +128,7 @@ default = {
 - 按业务分组目录：`apis/<group>/service.py`（或各语言等价文件）
 - 业务逻辑放在 `apis/<group>/`，**不改动** `core/` 与加载器
 - 接口前缀统一走 `/api/<group>/*`
-- 扩展可自带 `requirements.txt`；**不会**随 `uv sync` 安装，需单独 `uv pip install -r apis/<group>/requirements.txt`
+- 扩展可自带 `requirements.txt`；`uv sync` 不装它们，但 `uv run python main.py` 启动时会扫描安装
 - 第三方 / 产品插件本地 clone 到 `apis/<group>/`，不进主仓（见根 `.gitignore` 白名单）
 - **业务扩展自带 README、默认配置与依赖**；不写入 AGT 本体 `config/default_config/`
 
@@ -168,25 +168,19 @@ logging:
 ```bash
 cd subserver/pyserver
 uv sync
-uv run xrk
+uv run python main.py
 ```
 
-扩展插件（`apis/<组名>/requirements.txt`）：
+扩展插件的 `apis/<组名>/requirements.txt` 在启动时自动安装；也可在子服终端执行「更新」。
 
-```bash
-uv pip install -r apis/<组名>/requirements.txt   # 按实际插件目录
-```
-
-等价启动（Docker 子服务同款）：`uv run python main.py`
-
-环境变量示例：`HOST=0.0.0.0 PORT=8000 RELOAD=true uv run xrk`
+环境变量示例：`HOST=0.0.0.0 PORT=8000 RELOAD=true uv run python main.py`
 
 ### 常见问题
 
 | 现象 | 处理 |
 |------|------|
-| `Failed to spawn: xrk` | 在 `pyserver/` 下执行 `uv sync`，确认 `.venv/bin/xrk` 存在；否则用 `uv run python main.py` |
-| 端口被占用 | `PORT=8001 uv run xrk` 或改 `data/subserver/config.yaml` |
+| `xrk.exe` 被占用 / os error 32 | 先关掉旧子服窗口，再启动；推荐用 `uv run python main.py`（不再依赖 Scripts 里的 exe） |
+| 端口被占用 | `PORT=8001 uv run python main.py` 或改 `data/subserver/config.yaml` |
 ## 相关文档
 
 - **[AiWorkflow 文档](ai-workflow.md)** - Node 侧工作流与 LLM/MCP 调用说明

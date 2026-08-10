@@ -156,6 +156,8 @@ def _run_subprocess(cmd: List[str], *, cwd: Optional[Path] = None) -> Dict[str, 
             cwd=str(cwd) if cwd else None,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=False,
         )
         return {
@@ -169,21 +171,68 @@ def _run_subprocess(cmd: List[str], *, cwd: Optional[Path] = None) -> Dict[str, 
         return {"ok": False, "cmd": cmd, "error": str(exc)}
 
 
+def _pyserver_root() -> Path:
+    """subserver/pyserver（含 .venv / pyproject.toml）。"""
+    return Path(__file__).resolve().parent.parent
+
+
+def _iter_requirement_files(plugin_dir: Path) -> List[Path]:
+    """收集插件依赖清单。
+
+    有插件根 ``requirements.txt`` 时只装该文件（避免与 vendor 双装、拉进无关音频包）。
+    根文件不存在时再扫 ``vendor/*/requirements.txt`` 与 ``vendor/*/src/requirements.txt``。
+    """
+    main = plugin_dir / "requirements.txt"
+    if main.is_file():
+        return [main]
+    files: List[Path] = []
+    for pattern in ("vendor/*/requirements.txt", "vendor/*/src/requirements.txt"):
+        for path in sorted(plugin_dir.glob(pattern)):
+            if path.is_file() and path not in files:
+                files.append(path)
+    return files
+
+
 def upgrade_plugin_deps(plugin_dir: Path, *, use_uv: bool = True) -> Dict[str, Any]:
-    req = plugin_dir / "requirements.txt"
-    if not req.is_file():
-        return {"ok": True, "skipped": "no requirements.txt"}
+    """安装单个插件及其 vendor 的 requirements.txt 到 pyserver 项目 venv（优先 uv）。"""
+    plugin_dir = plugin_dir.resolve()
+    req_files = _iter_requirement_files(plugin_dir)
+    if not req_files:
+        return {"ok": True, "skipped": "no requirements.txt", "plugin": plugin_dir.name}
 
+    root = _pyserver_root()
     uv = shutil.which("uv")
-    if use_uv and uv:
-        cmd = [uv, "pip", "install", "-r", str(req), "--upgrade"]
-    else:
-        cmd = [sys.executable, "-m", "pip", "install", "-r", str(req), "--upgrade"]
+    steps: List[Dict[str, Any]] = []
 
-    result = _run_subprocess(cmd, cwd=plugin_dir)
-    result["action"] = "pip_upgrade"
-    return result
+    for req in req_files:
+        try:
+            req_arg = str(req.relative_to(root))
+        except ValueError:
+            req_arg = str(req)
+        if use_uv and uv:
+            cmd = [uv, "pip", "install", "-r", req_arg]
+        else:
+            cmd = [sys.executable, "-m", "pip", "install", "-r", req_arg]
+        step = _run_subprocess(cmd, cwd=root)
+        step["requirements"] = req_arg
+        steps.append(step)
+        if not step.get("ok"):
+            return {
+                "ok": False,
+                "action": "pip_install",
+                "plugin": plugin_dir.name,
+                "steps": steps,
+                "stderr": step.get("stderr"),
+                "error": step.get("error"),
+            }
 
+    return {
+        "ok": True,
+        "action": "pip_install",
+        "plugin": plugin_dir.name,
+        "steps": steps,
+        "requirements": [s.get("requirements") for s in steps],
+    }
 
 def git_pull_plugin(plugin_dir: Path) -> Dict[str, Any]:
     git_dir = plugin_dir / ".git"
@@ -193,6 +242,37 @@ def git_pull_plugin(plugin_dir: Path) -> Dict[str, Any]:
     result = _run_subprocess(["git", "pull", "--ff-only"], cwd=plugin_dir)
     result["action"] = "git_pull"
     return result
+
+
+def install_all_plugin_deps(*, use_uv: bool = True) -> Dict[str, Any]:
+    """扫描 apis/*/requirements.txt，装入 pyserver venv。"""
+    dirs = iter_plugin_dirs()
+    results: Dict[str, Any] = {}
+    installed: List[str] = []
+    skipped: List[str] = []
+    failed: List[str] = []
+
+    for plugin_dir in dirs:
+        name = plugin_dir.name
+        result = upgrade_plugin_deps(plugin_dir, use_uv=use_uv)
+        results[name] = result
+        if result.get("skipped"):
+            skipped.append(name)
+        elif result.get("ok"):
+            installed.append(name)
+        else:
+            failed.append(name)
+
+    return {
+        "ok": len(failed) == 0,
+        "action": "install-all-plugin-deps",
+        "root": str(_pyserver_root()),
+        "groups": [d.name for d in dirs],
+        "installed": installed,
+        "skipped": skipped,
+        "failed": failed,
+        "results": results,
+    }
 
 
 async def default_plugin_update(

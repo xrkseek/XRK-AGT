@@ -1,27 +1,14 @@
-[build-system]
-requires = ["setuptools>=61"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "xrk-agt-pyserver"
-version = "1.0.5"
+version = "1.1.0"
 description = "XRK-AGT Python 子服务端"
 requires-python = ">=3.10"
 dependencies = [
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.30.0",
   "pyyaml>=6.0.1",
+  "xrk-readline>=0.2.4",
 ]
 
-[project.scripts]
-xrk = "main:main"
-
-[tool.setuptools]
-py-modules = ["main"]
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["apis*", "core*"]
-
-[tool.uv]
-package = true
+# 应用模式：不打 editable 包、不写 Scripts/xrk.exe，避免 Windows 上「旧进程占文件 → uv sync 失败」。
+# 启动：uv run python main.py

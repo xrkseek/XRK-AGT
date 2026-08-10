@@ -58,14 +58,15 @@ temp/
 .DS_Store
 Thumbs.db
 
-# 模型文件
+# 模型 / 向量库
 models/
 *.bin
 *.pt
 *.pth
 *.onnx
-
-# 向量数据库
 vector_db/
 chroma_db/
 milvus_data/
+
+# 勿提交独立包工作树
+packages/

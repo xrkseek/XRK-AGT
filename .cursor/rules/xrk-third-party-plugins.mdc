@@ -5,7 +5,7 @@ alwaysApply: true
 
 # 主仓 gitignore 约定
 
-根 `.gitignore` 只表达**什么进主仓库**，按目录用 `*` 忽略 + **框架白名单**，勿为每个产品单独加一行。
+根 `.gitignore` 只表达**什么进主仓库**：按目录 `*` 忽略 + **框架白名单**，勿为每个产品单独加 `!`。
 
 ## core/
 
@@ -15,12 +15,12 @@ core/*
 !core/system-Core/**
 ```
 
-- 主仓仅 `system-Core`；其余业务 Core（jm-Core、lsy-Core、vibe-learn 等）本地存在即可，**勿**写 `!core/<产品>/` 或 `core/<产品>/`。
-- 独立 git 产品 Core：规则 / 精工 mdc 随**该 Core 仓**管理；主仓不为其加白名单、不 alwaysApply 产品细则。
+- 主仓仅 `system-Core`；其余业务 Core 本地即可，**勿**写 `!core/<产品>/`。
+- 独立 git 产品 Core：规则随该 Core 仓；主仓不 alwaysApply 产品细则。
 
 ## data/
 
-- 由 `data/.gitignore`（`*` + `!instruct.txt`）统一处理；根目录 **勿**重复列 `data/<产品>/` 或子路径。
+- 由 `data/.gitignore`（`*` + `!instruct.txt`）统一处理；根目录勿重复列 `data/<产品>/`。
 
 ## subserver/pyserver/apis/
 
@@ -32,14 +32,11 @@ subserver/pyserver/apis/*/
 !subserver/pyserver/apis/web-fetch/**
 ```
 
-- 框架示例外均为本地 clone（含 jmcomic 等第三方），**勿**写 `apis/jmcomic/` 等按名排除。
-- 第三方插件不属于 XRK 底层：勿写进框架帮助、示例、注释、`PyserverApi` 封装。
+- 框架示例外均为本地 clone；**勿**按插件名写排除行。
+- 第三方插件勿写进框架帮助、示例、`PyserverApi` 封装。
 
-## 子服插件 `apis/<group>/core/`
+## 子服
 
-- 主服扫描 `commonconfig/`、`plugin/`、`http/` 等（与主仓 Core 同结构）。
-- **配置仅主服编辑**；子服 `load_plugin_config` 只读 yaml。见 [docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md)
-
-## 子服运维
-
-- 子服命令在 **子服终端 `子服>`** 输入，不经主服 stdin 转发。
+- 插件 `apis/<group>/core/` 结构与主仓 Core 同（`commonconfig/`、`plugin/`、`http/` 等）。
+- 配置仅主服编辑；子服只读 yaml。见 [docs/subserver-commonconfig.md](../docs/subserver-commonconfig.md)。
+- 运维命令在 **子服终端 `子服>`**，不经主服 stdin 转发。

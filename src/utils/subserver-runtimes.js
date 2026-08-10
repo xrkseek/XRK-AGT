@@ -9,7 +9,7 @@ export const SUBSERVER_RUNTIME_CATALOG = {
     port: 8000,
     language: 'python',
     path: 'subserver/pyserver',
-    start: 'cd subserver/pyserver && uv run xrk',
+    start: 'cd subserver/pyserver && uv run python main.py',
     data: 'data/subserver',
     aliases: ['py', 'python']
   },

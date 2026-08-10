@@ -55,7 +55,7 @@
 详见 **[SETUP.md](SETUP.md)**。Docker：`pnpm docker:build` → `pnpm docker:up`（见 [docs/docker.md](../docs/docker.md)）。
 
 ```bash
-cd subserver/pyserver && uv run xrk          # 本机 Python 8000
+cd subserver/pyserver && uv run python main.py   # 本机 Python 8000
 ```
 
 ## 主服务衔接

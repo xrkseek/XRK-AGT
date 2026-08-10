@@ -164,15 +164,19 @@ robots:
   #   User-agent: *
   #   Disallow: /
   #   Sitemap: https://example.com/sitemap.xml
+  # 控制台 /xrk、/core 运行时会强制并入 Disallow（即使此处漏写）
   disallow:
+    - "/xrk"
+    - "/xrk/"
+    - "/core/"
     - "/api/"
     - "/config/"
     - "/data/"
     - "/lib/"
     - "/plugins/"
     - "/trash/"
-  allow:
-    - "/"
+  # 勿写 Allow: /：会削弱 Disallow 对部分爬虫的效力
+  allow: []
   # 是否自动追加 Sitemap 行（默认 true，会使用 server.url 或自动检测的访问 URL）
   autoSitemap: true
   # sitemapPath: "/sitemap.xml"

@@ -551,17 +551,28 @@ export const serverConfig = {
               disallow: {
                 type: 'array',
                 label: 'Disallow 路径',
-                description: '禁止爬虫访问的路径前缀，每行一个',
+                description:
+                  '禁止爬虫访问的路径前缀。/xrk、/core/ 会由运行时强制并入，勿依赖 Allow: /',
                 itemType: 'string',
-                default: ['/api/', '/config/', '/data/', '/lib/', '/plugins/', '/trash/'],
+                default: [
+                  '/xrk',
+                  '/xrk/',
+                  '/core/',
+                  '/api/',
+                  '/config/',
+                  '/data/',
+                  '/lib/',
+                  '/plugins/',
+                  '/trash/',
+                ],
                 component: 'Tags'
               },
               allow: {
                 type: 'array',
                 label: 'Allow 路径',
-                description: '允许爬虫访问的路径前缀，每行一个',
+                description: '允许爬虫访问的路径前缀；控制台场景建议留空，勿填 /',
                 itemType: 'string',
-                default: ['/'],
+                default: [],
                 component: 'Tags'
               },
               autoSitemap: {

@@ -110,7 +110,6 @@ class Config:
                 "stdin": {"enabled": True, "prompt": "子服> "},
             },
             "cors": {"origins": ["*"]},
-            "api": {"auto_load": True, "api_dir": "apis"},
             "logging": {
                 "level": "info",
                 "file": "logs/app.log",
