@@ -1721,10 +1721,10 @@ header {
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px;
+  gap: 14px;
+  padding: 12px 14px;
   border: 1.5px dashed color-mix(in srgb, var(--ink) 32%, transparent);
-  border-radius: 6px;
+  border-radius: 8px;
   min-height: 0;
   background: color-mix(in srgb, var(--paper) 40%, var(--card));
 }

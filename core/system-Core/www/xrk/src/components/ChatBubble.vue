@@ -245,7 +245,7 @@ function onImgError(e) {
 .msg {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
   animation: msgIn 0.28s ease-out;
 }
@@ -278,8 +278,8 @@ function onImgError(e) {
   }
 }
 .avatar {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border: 1.5px solid var(--ink);
   border-radius: 50%;
   display: inline-flex;
@@ -291,7 +291,7 @@ function onImgError(e) {
   background: var(--card);
   box-shadow: var(--shadow);
   line-height: 1;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 .msg[data-role='user'] .avatar {
   background: var(--cyan);
@@ -306,71 +306,80 @@ function onImgError(e) {
 }
 .bubble-wrap {
   min-width: 0;
-  max-width: min(100%, 72%);
+  max-width: min(100%, 78%);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
 }
 @media (max-width: 900px) {
   .bubble-wrap {
-    max-width: 92%;
+    max-width: 94%;
   }
 }
 .msg[data-role='user'] .bubble-wrap {
   align-items: flex-end;
 }
 .msg[data-role='system'] .bubble-wrap {
-  max-width: 88%;
+  max-width: 90%;
 }
 .bubble {
   border: 1.5px solid var(--ink);
-  border-radius: 8px;
-  padding: 6px 8px;
+  border-radius: 12px;
+  padding: 10px 14px;
   background: var(--card);
   box-shadow: var(--shadow);
-  font-size: 12.5px;
-  line-height: 1.4;
+  font-size: 13.5px;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
   overflow-wrap: anywhere;
   width: fit-content;
   max-width: 100%;
+  min-width: 0;
 }
 .msg[data-role='user'] .bubble {
-  background: color-mix(in srgb, var(--cyan) 28%, var(--card));
-  border-radius: 8px 2px 8px 8px;
+  background: color-mix(in srgb, var(--cyan) 22%, var(--card));
+  border-radius: 12px 4px 12px 12px;
 }
 .msg[data-role='assistant'] .bubble {
-  background: color-mix(in srgb, var(--yellow) 32%, var(--card));
-  border-radius: 2px 8px 8px 8px;
+  background: color-mix(in srgb, var(--yellow) 18%, var(--card));
+  border-radius: 4px 12px 12px 12px;
+  /* 长文 / 表格需要占满侧栏宽，避免挤成细条 */
+  width: 100%;
 }
 .msg[data-role='system'] .bubble {
-  background: color-mix(in srgb, var(--pink) 18%, var(--card));
+  background: color-mix(in srgb, var(--pink) 14%, var(--card));
   box-shadow: none;
-  font-size: 11.5px;
+  font-size: 12.5px;
+  line-height: 1.5;
   color: var(--muted);
+  padding: 8px 12px;
 }
 .record-card {
-  background: color-mix(in srgb, var(--yellow) 18%, var(--card));
+  background: color-mix(in srgb, var(--yellow) 14%, var(--card));
+  width: 100%;
 }
 .record-hdr {
-  margin-bottom: 6px;
-  padding-bottom: 4px;
-  border-bottom: 1px dashed color-mix(in srgb, var(--ink) 30%, transparent);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--ink) 28%, transparent);
 }
 .record-hdr p {
-  margin: 2px 0 0;
-  font-size: 11px;
-  opacity: 0.7;
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.72;
 }
 .record-line {
-  margin: 4px 0;
-  font-size: 12px;
+  margin: 6px 0;
+  font-size: 13px;
+  line-height: 1.5;
 }
 .msg-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
-  opacity: 0.85;
+  gap: 6px;
+  margin-top: 6px;
+  opacity: 0.72;
   justify-content: flex-start;
 }
 .msg[data-role='user'] .msg-actions {
@@ -395,20 +404,20 @@ function onImgError(e) {
   }
 }
 .act {
-  border: 1.5px solid color-mix(in srgb, var(--ink) 40%, transparent);
-  border-radius: 5px;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 36%, transparent);
+  border-radius: 6px;
   background: var(--card);
   font: inherit;
   font-size: var(--font-xs);
   font-weight: 700;
-  padding: 3px 8px;
+  padding: 4px 9px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   color: var(--ink);
   line-height: 1.2;
-  min-height: 26px;
+  min-height: 28px;
   touch-action: manipulation;
 }
 .act:hover {
@@ -425,17 +434,25 @@ function onImgError(e) {
 .act.danger {
   color: #b00020;
 }
+.seg-text {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .seg-text + .seg-text,
-.seg-text + .chat-image-container {
-  margin-top: 6px;
+.seg-text + .chat-image-container,
+.chat-image-container + .seg-text {
+  margin-top: 10px;
 }
 .seg-reply {
   border-left: 3px solid var(--pink);
-  padding: 4px 8px;
-  margin: 4px 0;
+  padding: 6px 10px;
+  margin: 6px 0;
   background: color-mix(in srgb, var(--pink) 12%, var(--card));
   font-size: var(--font-sm);
-  border-radius: 0 6px 6px 0;
+  line-height: 1.45;
+  border-radius: 0 8px 8px 0;
 }
 .reply-label {
   font-weight: 800;
@@ -448,7 +465,7 @@ function onImgError(e) {
   background: color-mix(in srgb, var(--cyan) 35%, var(--card));
   border: 1px solid var(--ink);
   border-radius: 999px;
-  padding: 1px 8px;
+  padding: 2px 9px;
   font-size: var(--font-xs);
   font-weight: 700;
 }
@@ -463,12 +480,12 @@ function onImgError(e) {
 }
 .seg-forward {
   border: 1.5px solid var(--ink);
-  border-radius: 8px;
-  padding: 8px;
-  background: color-mix(in srgb, var(--cyan) 12%, var(--card));
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--cyan) 10%, var(--card));
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   max-width: 100%;
 }
 .fwd-title {
@@ -478,6 +495,7 @@ function onImgError(e) {
 }
 .fwd-seg {
   font-size: var(--font-sm);
+  line-height: 1.5;
 }
 .fwd-fallback {
   opacity: 0.8;
@@ -489,7 +507,7 @@ function onImgError(e) {
   max-height: 120px;
 }
 .chat-image-container {
-  margin-top: 4px;
+  margin-top: 6px;
 }
 .chat-image {
   display: block;
@@ -498,7 +516,7 @@ function onImgError(e) {
   width: auto;
   height: auto;
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1.5px solid var(--ink);
   cursor: zoom-in;
   opacity: 0.35;
@@ -508,33 +526,162 @@ function onImgError(e) {
   opacity: 1;
 }
 .chat-media {
-  margin-top: 4px;
+  margin-top: 6px;
 }
 .chat-video,
 .chat-audio {
   max-width: 100%;
   display: block;
 }
+
+/* —— Markdown 正文 —— */
 .bubble :deep(p) {
-  margin: 0 0 0.3em;
+  margin: 0 0 0.65em;
 }
 .bubble :deep(p:last-child) {
   margin-bottom: 0;
 }
+.bubble :deep(h1),
+.bubble :deep(h2),
+.bubble :deep(h3),
+.bubble :deep(h4) {
+  margin: 0.9em 0 0.4em;
+  line-height: 1.35;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+.bubble :deep(h1:first-child),
+.bubble :deep(h2:first-child),
+.bubble :deep(h3:first-child),
+.bubble :deep(h4:first-child) {
+  margin-top: 0;
+}
+.bubble :deep(h1) {
+  font-size: 1.2em;
+}
+.bubble :deep(h2) {
+  font-size: 1.1em;
+}
+.bubble :deep(h3),
+.bubble :deep(h4) {
+  font-size: 1.02em;
+}
+.bubble :deep(ul),
+.bubble :deep(ol) {
+  margin: 0.45em 0 0.7em;
+  padding-left: 1.35em;
+}
+.bubble :deep(li) {
+  margin: 0.28em 0;
+  padding-left: 0.15em;
+}
+.bubble :deep(li > ul),
+.bubble :deep(li > ol) {
+  margin: 0.2em 0 0.35em;
+}
+.bubble :deep(blockquote) {
+  margin: 0.65em 0;
+  padding: 6px 12px;
+  border-left: 3px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  background: color-mix(in srgb, var(--paper) 55%, transparent);
+  border-radius: 0 8px 8px 0;
+  color: color-mix(in srgb, var(--ink) 82%, transparent);
+}
+.bubble :deep(blockquote p) {
+  margin: 0.25em 0;
+}
+.bubble :deep(hr) {
+  border: none;
+  border-top: 1.5px dashed color-mix(in srgb, var(--ink) 28%, transparent);
+  margin: 0.9em 0;
+}
+.bubble :deep(a) {
+  color: color-mix(in srgb, var(--ink) 70%, #0a6);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bubble :deep(strong) {
+  font-weight: 800;
+}
+.bubble :deep(em) {
+  font-style: italic;
+}
+
+/* —— 表格 —— */
+.bubble :deep(table) {
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0.75em 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  width: max-content;
+  min-width: 100%;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 32%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--card);
+}
+.bubble :deep(thead th) {
+  background: color-mix(in srgb, var(--ink) 9%, var(--card));
+  font-weight: 800;
+  white-space: nowrap;
+}
+.bubble :deep(th),
+.bubble :deep(td) {
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.bubble :deep(th:last-child),
+.bubble :deep(td:last-child) {
+  border-right: none;
+}
+.bubble :deep(tbody tr:last-child th),
+.bubble :deep(tbody tr:last-child td) {
+  border-bottom: none;
+}
+.bubble :deep(tbody tr:nth-child(even) td) {
+  background: color-mix(in srgb, var(--paper) 45%, transparent);
+}
+.bubble :deep(tbody tr:hover td) {
+  background: color-mix(in srgb, var(--yellow) 14%, var(--card));
+}
+
+/* —— 代码 —— */
 .bubble :deep(pre) {
   overflow: auto;
-  font-size: var(--font-xs);
-  margin: 4px 0;
-  padding: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0.65em 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, var(--paper));
+  max-width: 100%;
+}
+.bubble :deep(pre code) {
+  font-size: inherit;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+.bubble :deep(:not(pre) > code) {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  padding: 0.12em 0.4em;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
 }
 .bubble :deep(code) {
   font-family: var(--mono);
-  font-size: 0.92em;
 }
+
 .bubble :deep(.chat-mermaid) {
-  margin: 6px 0;
+  margin: 0.65em 0;
   overflow: auto;
   border: 1.5px solid color-mix(in srgb, var(--ink) 28%, transparent);
   border-radius: 8px;
@@ -544,7 +691,7 @@ function onImgError(e) {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  padding: 4px 6px;
+  padding: 6px 8px;
   border-bottom: 1.5px solid color-mix(in srgb, var(--ink) 18%, transparent);
   background: color-mix(in srgb, var(--paper) 55%, var(--card));
 }
@@ -575,7 +722,7 @@ function onImgError(e) {
   cursor: default;
 }
 .bubble :deep(.chat-mermaid-canvas) {
-  padding: 8px;
+  padding: 10px;
   overflow: auto;
   max-width: 100%;
 }
