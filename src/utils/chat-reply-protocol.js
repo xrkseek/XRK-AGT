@@ -3,14 +3,16 @@
  * 文字、[at:QQ]、[回复:ID]；表情包走 emotion 工具，不在此解析。
  */
 
-import { PARSEABLE_EMOTIONS } from '#utils/emotion-utils.js';
+import { EMOTION_TYPES } from '#utils/emotion-categories.js';
+
+export { EMOTION_TYPES } from '#utils/emotion-categories.js';
 
 const AT_MARKER = /\[at:(\d{5,10})\]/gi;
 /** 误写的 OneBot CQ at → 规范 [at:QQ] */
 const CQ_AT_RE = /\[CQ:at,[^\]]*qq=(\d{5,10})[^\]]*\]/gi;
 
 const EMOTION_TAG_RE = new RegExp(
-  `\\[(${PARSEABLE_EMOTIONS.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\]`
+  `\\[(${EMOTION_TYPES.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\]`
 );
 
 /** Markdown 剥离时需保护的协议片段 */

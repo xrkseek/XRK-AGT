@@ -4,7 +4,15 @@ import fsPromises from 'fs/promises';
 import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
-import { PARSEABLE_EMOTIONS, QQ_EMOJI_REACTION_IDS, EMOJI_REACTION_TYPES } from '#utils/emotion-utils.js';
+import {
+  EMOTION_TYPES,
+  EMOTION_IMAGE_EXTS,
+  EMOJI_REACTION_ALIASES,
+  EMOJI_REACTION_TYPES,
+  formatEmotionTypeList,
+  getEmojiReactionIds,
+  normalizeEmotionType
+} from '#utils/emotion-categories.js';
 import {
   actionAck,
   createUserVisibleTurnState,
@@ -136,15 +144,13 @@ export default class ChatStream extends AiWorkflow {
    * 加载表情包
    */
   async loadEmotionImages() {
-    for (const emotion of PARSEABLE_EMOTIONS) {
+    for (const emotion of EMOTION_TYPES) {
       const emotionDir = path.join(EMOTIONS_DIR, emotion);
       try {
         await RuntimeUtil.mkdir(emotionDir);
         const files = await fs.promises.readdir(emotionDir);
-        const imageFiles = files.filter(file => 
-          /\.(jpg|jpeg|png|gif)$/i.test(file)
-        );
-        ChatStream.emotionImages[emotion] = imageFiles.map(file => 
+        const imageFiles = files.filter((file) => EMOTION_IMAGE_EXTS.test(file));
+        ChatStream.emotionImages[emotion] = imageFiles.map((file) =>
           path.join(emotionDir, file)
         );
       } catch {
@@ -835,11 +841,11 @@ export default class ChatStream extends AiWorkflow {
     });
 
     this.registerMCPTool('emotion', {
-      description: `发表情包图片（resources/aiimages 随机一张）。emotionType：${PARSEABLE_EMOTIONS.join('、')}。用户只要表情时不要再用 reply 附文字模拟。`,
+      description: `发表情包图片（resources/aiimages/{分类}/ 随机一张）。emotionType：${formatEmotionTypeList()}。text 可选附言，支持 [回复:消息ID] 与 | 分句（图与回复仅随第一条）。用户只要表情时不要填 text。`,
       inputSchema: {
         type: 'object',
         properties: {
-          emotionType: { type: 'string', enum: PARSEABLE_EMOTIONS },
+          emotionType: { type: 'string', enum: EMOTION_TYPES },
           text: { type: 'string', description: '可选附言' },
         },
         required: ['emotionType'],
@@ -847,23 +853,39 @@ export default class ChatStream extends AiWorkflow {
       handler: async (args = {}, context = {}) => {
         const e = context.e;
         if (!e?.reply) return { success: false, error: '当前环境无法发送' };
-        const t = String(args.emotionType ?? '').trim();
-        if (!PARSEABLE_EMOTIONS.includes(t)) return { success: false, error: '无效表情类型' };
+        const t = normalizeEmotionType(args.emotionType);
+        if (!EMOTION_TYPES.includes(t)) return { success: false, error: '无效表情类型' };
         const image = this.getRandomEmotionImage(t);
-        if (!image) return { success: false, error: `暂无「${t}」表情包资源` };
+        if (!image) {
+          return { success: false, error: `暂无「${t}」表情包资源，请检查 resources/aiimages/${t}/` };
+        }
         return this._wrapHandler(async () => {
           const text = String(args.text ?? '').trim();
           if (text) {
             const forbidden = replyContentForbidden(text);
             if (forbidden) return { success: false, error: forbidden };
-            const { replyId, segments } = resolveOutgoingMessage(text, { fallbackReplyId: null });
-            const payload = buildOutboundSegments({ replyId, imagePaths: [image], segments });
-            await e.reply(payload);
-          } else {
-            await e.reply(msgSegment.image(image));
+            const parts = splitProtocolParts(text);
+            let displayJoined = '';
+            for (let i = 0; i < parts.length; i++) {
+              const { replyId, segments, displayText } = resolveOutgoingMessage(parts[i], {
+                fallbackReplyId: null
+              });
+              const payload = buildOutboundSegments({
+                replyId: i === 0 ? replyId : null,
+                imagePaths: i === 0 ? [image] : [],
+                segments
+              });
+              if (!payload.length) continue;
+              await e.reply(payload);
+              if (displayText) displayJoined = displayJoined ? `${displayJoined} | ${displayText}` : displayText;
+            }
+            const where = formatSessionWhere(e);
+            this.recordAIResponse(e, `[表情:${t}]${displayJoined ? ` ${displayJoined}` : ''}`);
+            return { success: true, raw: actionAck(`你已在${where}发送「${t}」表情包`) };
           }
+          await e.reply(msgSegment.image(image));
           const where = formatSessionWhere(e);
-          this.recordAIResponse(e, `[表情:${t}]${text ? ` ${text}` : ''}`);
+          this.recordAIResponse(e, `[表情:${t}]`);
           return { success: true, raw: actionAck(`你已在${where}发送「${t}」表情包`) };
         });
       },
@@ -1081,12 +1103,12 @@ export default class ChatStream extends AiWorkflow {
     });
 
     this.registerMCPTool('relayPrivateEmotion', {
-      description: '向好友私聊发表情包。qq、emotionType 必填。',
+      description: `向好友私聊发表情包（resources/aiimages）。qq 必填；emotionType：${formatEmotionTypeList()}；text 可选附言，支持 | 分句（图仅第一条）。`,
       inputSchema: {
         type: 'object',
         properties: {
           qq: { type: 'number' },
-          emotionType: { type: 'string', enum: [...PARSEABLE_EMOTIONS] },
+          emotionType: { type: 'string', enum: EMOTION_TYPES },
           text: { type: 'string' }
         },
         required: ['qq', 'emotionType']
@@ -1095,18 +1117,25 @@ export default class ChatStream extends AiWorkflow {
         const e = context.e;
         const picked = await this._pickFriendSender(e, args.qq);
         if (picked.error) return this._relayPrivateFail(String(args.qq ?? ''), picked.error);
-        const t = String(args.emotionType ?? '').trim();
-        if (!PARSEABLE_EMOTIONS.includes(t)) return { success: false, error: '无效表情类型' };
+        const t = normalizeEmotionType(args.emotionType);
+        if (!EMOTION_TYPES.includes(t)) return { success: false, error: '无效表情类型' };
         const image = this.getRandomEmotionImage(t);
         if (!image) {
-          return { success: false, error: `表情包(${t})暂无图片` };
+          return {
+            success: false,
+            error: `表情包(${t})暂无图片，请检查 resources/aiimages/${t}/`
+          };
         }
         return this._wrapRelayPrivateHandler(picked.targetQq, async () => {
           const sendResult = await this._relayPrivateImageSend(picked.friend, image, args.text);
           if (sendResult.error) return { success: false, error: sendResult.error };
+          const displayText = sendResult.allSentContent?.join(' | ') || '';
+          const summary = displayText
+            ? `表情包(${t}) 与附言「${displayText}」`
+            : `表情包(${t})`;
           return {
             success: true,
-            raw: this._relayPrivateAck(e, picked, `私聊发出表情包(${t})`)
+            raw: this._relayPrivateAck(e, picked, `私聊发出${summary}`)
           };
         });
       },
@@ -1192,7 +1221,7 @@ export default class ChatStream extends AiWorkflow {
     });
 
     this.registerMCPTool('emojiReaction', {
-      description: '对群消息进行表情回应。支持：开心、惊讶、伤心、大笑、害怕、喜欢、爱心、生气。不指定 msgId 时选最近一条他人消息。仅群聊。',
+      description: `对群消息表情回应。emojiType：${formatEmotionTypeList(EMOJI_REACTION_TYPES)}。msgId 不填则最近一条他人消息。仅群聊。`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -1209,10 +1238,8 @@ export default class ChatStream extends AiWorkflow {
         const e = context.e;
         if (!e?.isGroup) return { success: false, error: '非群聊环境' };
 
-        const typeMap = { like: '喜欢', love: '爱心', laugh: '大笑', wow: '惊讶', sad: '伤心', angry: '生气' };
-        let emojiType = typeMap[args.emojiType] ?? args.emojiType;
-
-        const emojiIds = QQ_EMOJI_REACTION_IDS[emojiType];
+        const emojiType = normalizeEmotionType(args.emojiType, EMOJI_REACTION_ALIASES);
+        const emojiIds = getEmojiReactionIds(emojiType);
         if (!emojiIds?.length) return { success: false, error: '无效表情类型' };
 
         let msgId = String(args.msgId ?? '').trim();
@@ -1229,13 +1256,23 @@ export default class ChatStream extends AiWorkflow {
         const emojiId = Number(emojiIds[Math.floor(Math.random() * emojiIds.length)]);
         try {
           if (e.group?.setEmojiLike) {
-            const result = await e.group.setEmojiLike(msgId, emojiId, true);
-            if (result !== undefined) {
-              await RuntimeUtil.sleep(200);
-              return { success: true, message: '表情回应成功', data: { msgId, emojiId, emojiType } };
-            }
+            await e.group.setEmojiLike(msgId, emojiId, true);
+          } else if (e.bot?.sendApi) {
+            await e.bot.sendApi('set_msg_emoji_like', {
+              message_id: String(msgId),
+              emoji_id: emojiId,
+              set: true
+            });
+          } else {
+            return { success: false, error: '表情回应功能不可用' };
           }
-          return { success: false, error: '表情回应功能不可用' };
+          await RuntimeUtil.sleep(200);
+          const gid = e.group_id;
+          return {
+            success: true,
+            raw: actionAck(`你已在群 ${gid} 对消息 ${msgId} 发送了 ${emojiType} 表情回应。`),
+            data: { msgId, emojiId, emojiType }
+          };
         } catch (error) {
           return { success: false, error: error.message };
         }
@@ -2545,7 +2582,7 @@ export default class ChatStream extends AiWorkflow {
       '',
       '## 对用户说话（须调 MCP，勿用文字假装）',
       '- **reply**：当前会话文字（调用后立即发到 QQ）。群聊@人：`atSender=true` 或 `at="QQ"`；也可 content 写 `[at:QQ]`。默认不引用；仅要挂引用气泡时才写 `[回复:那条的ID]` 或填 messageId。`|` 分句',
-      '- **poke** / **emotion** / **send_image** / **send_file** / **emojiReaction**：戳一戳、表情、图文件、表情回应',
+      '- **poke** / **emotion** / **send_image** / **send_file** / **emojiReaction**：戳一戳、表情包、图文件、表情回应',
       '- **saveMessageAsset**：按消息 ID 把图/文件/自定义表情落到工作区 `downloads/`；成功拿到 `workspacePath` 后再 `send_image`/`send_file`',
       '- **relayPrivate***：向好友私聊传话（正文不在群里露出）',
       '',

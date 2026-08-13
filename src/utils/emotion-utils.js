@@ -1,7 +1,20 @@
 /**
  * 表情解析与映射工具
- * 统一 stream/device/xiaozhi 的表情处理逻辑
+ * - 设备 / stream / xiaozhi：SUPPORTED_EMOTIONS · PARSEABLE_EMOTIONS · parseEmotion
+ * - QQ 聊天表情包 / 贴表情：见 emotion-categories.js（与 Yunzai resources/aiimages 分类对齐）
  */
+
+export {
+  EMOTION_CATEGORIES,
+  EMOTION_TYPES,
+  EMOJI_REACTION_TYPES,
+  EMOJI_REACTION_ALIASES,
+  EMOTION_IMAGE_EXTS,
+  QQ_EMOJI_REACTION_IDS,
+  normalizeEmotionType,
+  getEmojiReactionIds,
+  formatEmotionTypeList
+} from '#utils/emotion-categories.js';
 
 /**
  * 小智固件侧使用的表情 / 图标名称
@@ -33,7 +46,7 @@ export const SUPPORTED_EMOTIONS = [
     'download'
 ];
 
-/** 中文关键词 -> 表情代码 */
+/** 中文关键词 -> 设备表情代码（仅设备侧子集） */
 const EMOTION_KEYWORDS = {
     '开心': 'happy',
     '高兴': 'happy',
@@ -45,28 +58,19 @@ const EMOTION_KEYWORDS = {
     '吃惊': 'surprised',
     '大笑': 'laugh',
     '哈哈': 'laugh',
-    '害怕': 'sad'
+    '害怕': 'sad',
+    '晚安': 'sleepy',
+    '睡': 'sleepy'
 };
-
-/** 系统提示与 stream 解析支持的中文表情标记（子集） */
-export const PARSEABLE_EMOTIONS = ['开心', '惊讶', '伤心', '大笑', '害怕', '生气'];
-
-/** 群消息表情回应 ID（NapCat set_msg_emoji_like） */
-export const QQ_EMOJI_REACTION_IDS = {
-  开心: ['4', '14', '21', '28', '76', '79', '99', '182', '201', '290'],
-  惊讶: ['26', '32', '97', '180', '268', '289'],
-  伤心: ['5', '9', '106', '111', '173', '174'],
-  大笑: ['4', '12', '28', '101', '182', '281'],
-  害怕: ['26', '27', '41', '96'],
-  喜欢: ['42', '63', '85', '116', '122', '319'],
-  爱心: ['66', '122', '319'],
-  生气: ['8', '23', '39', '86', '179', '265'],
-};
-
-export const EMOJI_REACTION_TYPES = Object.keys(QQ_EMOJI_REACTION_IDS);
 
 /**
- * 从文本中解析 [开心]、[惊讶] 等情绪标记
+ * 系统提示与 stream/device 解析支持的中文表情标记（设备子集）。
+ * QQ 聊天发表情包请用 EMOTION_TYPES（emotion-categories）。
+ */
+export const PARSEABLE_EMOTIONS = ['开心', '惊讶', '伤心', '大笑', '害怕', '生气'];
+
+/**
+ * 从文本中解析 [开心]、[惊讶] 等情绪标记（设备 stream）
  * @param {string} text - 原始文本
  * @returns {{ emotion: string|null, cleanText: string }}
  */
@@ -103,5 +107,3 @@ export function normalizeEmotionToDevice(emotion) {
     const code = EMOTION_KEYWORDS[emotion] || emotion;
     return SUPPORTED_EMOTIONS.includes(code) ? code : null;
 }
-
-// 预留给其他前端（live2d 等）的表情映射，可按需在此扩展
