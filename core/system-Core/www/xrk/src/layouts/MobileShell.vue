@@ -155,6 +155,13 @@ function go(name) {
   min-height: 100%;
   box-sizing: border-box;
 }
+.m-content > :deep(.chat-page),
+.m-content > :deep(.config),
+.m-content > :deep(.api) {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+}
 
 .m-tabbar {
   flex-shrink: 0;

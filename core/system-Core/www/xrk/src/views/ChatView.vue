@@ -1680,7 +1680,8 @@ onDeactivated(() => {
   grid-template-columns: var(--list-pane-w, 260px) minmax(0, 1fr);
   gap: var(--gap);
   height: 100%;
-  min-height: 100%;
+  max-height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 .side-toggle,

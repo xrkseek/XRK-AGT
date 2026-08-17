@@ -288,4 +288,12 @@ function toggleCollapse() {
   min-height: 100%;
   box-sizing: border-box;
 }
+/* 分栏页（对话 / 配置 / API）锁在视口内，避免整页撑出后滚动条落在屏外 */
+.content > :deep(.chat-page),
+.content > :deep(.config),
+.content > :deep(.api) {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+}
 </style>

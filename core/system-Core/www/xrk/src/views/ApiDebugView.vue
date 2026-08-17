@@ -479,7 +479,7 @@ function paramControl(p) {
       />
     </aside>
 
-    <section class="brutal-card main ink-scroll">
+    <section class="brutal-card main">
       <template v-if="!active">
         <div class="welcome">
           <button type="button" class="list-toggle" @click="listOpen = !listOpen">
@@ -532,7 +532,7 @@ function paramControl(p) {
           </NSpace>
         </header>
 
-        <div class="form-grid">
+        <div class="form-grid ink-scroll">
           <div class="form-col">
             <template v-if="activeId === 'custom'">
               <section class="form-sec">
@@ -691,7 +691,7 @@ function paramControl(p) {
                 v-model:value="previewText"
                 type="textarea"
                 class="mono preview-ta"
-                :rows="isMobile ? 4 : 14"
+                :rows="isMobile ? 4 : 8"
                 size="small"
                 readonly
               />
@@ -722,7 +722,8 @@ function paramControl(p) {
   grid-template-columns: var(--list-pane-w, 260px) minmax(0, 1fr);
   gap: var(--gap);
   height: 100%;
-  min-height: 100%;
+  max-height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 .side,
@@ -796,7 +797,7 @@ function paramControl(p) {
   display: none;
 }
 .main {
-  overflow: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -804,6 +805,9 @@ function paramControl(p) {
 .welcome {
   padding: 24px 8px;
   text-align: center;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 .welcome h2 {
   margin: 0 0 6px;
@@ -861,11 +865,37 @@ function paramControl(p) {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
   gap: 8px;
-  align-items: start;
+  align-items: stretch;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 46%;
+  overflow: auto;
 }
 .form-col,
 .preview-col {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.preview-col {
+  position: sticky;
+  top: 0;
+  align-self: stretch;
+}
+.preview-pane {
+  flex: 1 1 auto;
+  min-height: 140px;
+}
+.preview-pane .preview-ta {
+  flex: 1 1 auto;
+  min-height: 120px;
+}
+.preview-pane :deep(.n-input),
+.preview-pane :deep(.n-input-wrapper),
+.preview-pane :deep(textarea) {
+  height: 100%;
+  min-height: 120px;
 }
 .form-sec {
   border: 2px solid var(--ink);
@@ -951,19 +981,30 @@ details.pane[open] > summary.pane-h::before {
   font-weight: 600;
 }
 .resp-pane {
-  min-height: 220px;
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.resp-pane > summary.pane-h {
+  flex-shrink: 0;
 }
 .resp {
-  flex: 1;
-  min-height: 180px;
-  max-height: 420px;
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
   overflow: auto;
+  overscroll-behavior: contain;
   font-size: var(--font-xs);
   border: 1.5px solid color-mix(in srgb, var(--ink) 25%, transparent);
   border-radius: 6px;
   padding: 6px;
   background: var(--card);
+}
+.resp :deep(.n-code),
+.resp :deep(pre) {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 @media (max-width: 980px) {
   .api {
@@ -1061,6 +1102,14 @@ details.pane[open] > summary.pane-h::before {
   .form-grid {
     grid-template-columns: 1fr;
     gap: 6px;
+    max-height: none;
+    flex: 0 1 auto;
+  }
+  .preview-col {
+    position: static;
+  }
+  .preview-pane {
+    min-height: 0;
   }
   .api-head {
     display: grid;
@@ -1098,12 +1147,12 @@ details.pane[open] > summary.pane-h::before {
     font-size: var(--font-xs);
   }
   .resp-pane {
-    min-height: 0;
-    flex: 0 0 auto;
+    flex: 1 1 0;
+    min-height: 120px;
   }
   .resp {
-    min-height: 96px;
-    max-height: min(36vh, 220px);
+    min-height: 0;
+    max-height: none;
   }
   .preview-pane:not([open]) {
     padding-bottom: 4px;
