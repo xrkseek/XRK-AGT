@@ -256,11 +256,21 @@ async function buildSystemSnapshot(AgentRuntime, { includeHistory = false } = {}
     },
     bots,
     processesTop5: Array.isArray(__procCache.top5) ? __procCache.top5 : [],
-    taskers: AgentRuntime.tasker,
+    taskers: summarizeTaskers(AgentRuntime.tasker),
     workflows: { stats: workflowStats, items: workflowList },
   };
   snapshot.panels = buildPanelPayload(snapshot);
   return snapshot;
+}
+
+/** Tasker 实例含 ws/readline/Timer，不可直接 JSON */
+function summarizeTaskers(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map((t) => ({
+    id: t?.id ?? null,
+    name: t?.name ?? null,
+    path: t?.path ?? t?.name ?? null,
+  }));
 }
 
 function buildPanelPayload(snapshot) {
@@ -354,19 +364,15 @@ export default {
     {
       method: 'GET',
       path: '/api/config',
-      handler: async (req, res) => {
-        const serialize = (obj, seen = new WeakSet()) => {
-          if (typeof obj === 'function') return obj.toString();
-          if (typeof obj !== 'object' || obj === null) return obj;
-          if (seen.has(obj)) return '[Circular]';
-          seen.add(obj);
-          if (Array.isArray(obj)) return obj.map((item) => serialize(item, seen));
-          const result = {};
-          for (const [key, value] of Object.entries(obj)) result[key] = serialize(value, seen);
-          return result;
-        };
-        HttpResponse.success(res, { config: serialize(runtimeConfig) });
-      },
+      handler: HttpResponse.asyncHandler(async (_req, res) => {
+        // 只导出 YAML 缓存；勿整实例（含 HotReload/Timeout）
+        return HttpResponse.success(res, {
+          config: {
+            port: runtimeConfig.port ?? null,
+            configs: runtimeConfig.config ?? {},
+          },
+        });
+      }, 'config.snapshot'),
     },
     {
       method: 'GET',

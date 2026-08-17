@@ -1679,9 +1679,8 @@ onDeactivated(() => {
   display: grid;
   grid-template-columns: var(--list-pane-w, 260px) minmax(0, 1fr);
   gap: var(--gap);
-  height: 100%;
-  max-height: 100%;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 .side-toggle,

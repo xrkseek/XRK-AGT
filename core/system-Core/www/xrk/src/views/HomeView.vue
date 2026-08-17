@@ -596,7 +596,9 @@ const hostFacts = computed(() => [
 </template>
 <style scoped>
 .home-page {
-  min-height: 100%;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
   box-sizing: border-box;
 }
 .dashboard {

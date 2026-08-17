@@ -277,23 +277,17 @@ function toggleCollapse() {
 .content {
   flex: 1 1 0;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
-  display: block;
+  display: flex;
+  flex-direction: column;
   position: relative;
 }
 .content > :deep(*) {
-  width: 100%;
-  min-height: 100%;
-  box-sizing: border-box;
-}
-/* 分栏页（对话 / 配置 / API）锁在视口内，避免整页撑出后滚动条落在屏外 */
-.content > :deep(.chat-page),
-.content > :deep(.config),
-.content > :deep(.api) {
-  height: 100%;
-  max-height: 100%;
+  flex: 1 1 0;
   min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 </style>

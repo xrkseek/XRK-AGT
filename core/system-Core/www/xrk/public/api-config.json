@@ -55,7 +55,7 @@
           "method": "GET",
           "path": "/api/config",
           "title": "系统配置",
-          "description": "获取系统配置信息"
+          "description": "运行时配置缓存快照（port + configs）"
         },
         {
           "id": "health-check",

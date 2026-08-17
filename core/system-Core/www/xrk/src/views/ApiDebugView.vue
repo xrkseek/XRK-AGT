@@ -6,7 +6,6 @@ export default { name: 'ApiDebugView' };
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   NButton,
-  NCode,
   NEmpty,
   NInput,
   NSelect,
@@ -699,18 +698,18 @@ function paramControl(p) {
           </div>
         </div>
 
-        <details class="pane resp-pane" open>
-          <summary class="pane-h">
+        <section class="pane resp-pane">
+          <header class="pane-h">
             <span>响应</span>
-            <NSpace size="small" align="center" @click.stop>
+            <NSpace size="small" align="center">
               <span class="mono status">{{ statusLine }}</span>
-              <NButton size="tiny" secondary @click.prevent="copyResponse">复制</NButton>
+              <NButton size="tiny" secondary @click="copyResponse">复制</NButton>
             </NSpace>
-          </summary>
+          </header>
           <div class="resp ink-scroll">
-            <NCode :code="responseText" language="json" word-wrap />
+            <pre class="resp-pre mono">{{ responseText }}</pre>
           </div>
-        </details>
+        </section>
       </template>
     </section>
   </div>
@@ -721,9 +720,8 @@ function paramControl(p) {
   display: grid;
   grid-template-columns: var(--list-pane-w, 260px) minmax(0, 1fr);
   gap: var(--gap);
-  height: 100%;
-  max-height: 100%;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 .side,
@@ -797,15 +795,17 @@ function paramControl(p) {
   display: none;
 }
 .main {
+  min-height: 0;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto minmax(0, max-content) minmax(0, 1fr);
   gap: 8px;
+  align-content: stretch;
 }
 .welcome {
+  grid-row: 1 / -1;
   padding: 24px 8px;
   text-align: center;
-  flex: 1;
   min-height: 0;
   overflow: auto;
 }
@@ -866,9 +866,8 @@ function paramControl(p) {
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
   gap: 8px;
   align-items: stretch;
-  flex: 0 1 auto;
   min-height: 0;
-  max-height: 46%;
+  max-height: min(38vh, 320px);
   overflow: auto;
 }
 .form-col,
@@ -960,8 +959,11 @@ function paramControl(p) {
   font-size: var(--font-xs);
   font-weight: 800;
   list-style: none;
-  cursor: pointer;
+  flex-shrink: 0;
   user-select: none;
+}
+details > summary.pane-h {
+  cursor: pointer;
 }
 .pane-h::-webkit-details-marker {
   display: none;
@@ -981,17 +983,13 @@ details.pane[open] > summary.pane-h::before {
   font-weight: 600;
 }
 .resp-pane {
-  flex: 1 1 0;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
-}
-.resp-pane > summary.pane-h {
-  flex-shrink: 0;
 }
 .resp {
   flex: 1 1 0;
   min-height: 0;
-  max-height: none;
   overflow: auto;
   overscroll-behavior: contain;
   font-size: var(--font-xs);
@@ -1000,11 +998,12 @@ details.pane[open] > summary.pane-h::before {
   padding: 6px;
   background: var(--card);
 }
-.resp :deep(.n-code),
-.resp :deep(pre) {
+.resp-pre {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
+  font-size: inherit;
+  line-height: 1.45;
 }
 @media (max-width: 980px) {
   .api {
@@ -1102,8 +1101,7 @@ details.pane[open] > summary.pane-h::before {
   .form-grid {
     grid-template-columns: 1fr;
     gap: 6px;
-    max-height: none;
-    flex: 0 1 auto;
+    max-height: min(32vh, 240px);
   }
   .preview-col {
     position: static;
@@ -1147,12 +1145,10 @@ details.pane[open] > summary.pane-h::before {
     font-size: var(--font-xs);
   }
   .resp-pane {
-    flex: 1 1 0;
-    min-height: 120px;
+    min-height: 0;
   }
   .resp {
     min-height: 0;
-    max-height: none;
   }
   .preview-pane:not([open]) {
     padding-bottom: 4px;

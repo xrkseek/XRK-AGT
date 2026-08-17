@@ -53,7 +53,7 @@ system-Core 提供了 **11 个** HTTP API 模块，覆盖系统管理的各个�
 | `/api/system/status` | GET | 获取系统状态详细信息 | `hist` / `withHistory` - 包含24小时历史数据 |
 | `/api/system/overview` | GET | 获取系统概览（仪表盘数据） | `hist` / `withHistory` - 包含历史网络数据 |
 | `/api/status` | GET | 获取系统运行状态（简化版） | - |
-| `/api/config` | GET | 获取系统配置信息 | - |
+| `/api/config` | GET | 运行时已加载的配置缓存快照（`port` + `configs`） | - |
 | `/api/health` | GET | 健康检查（检查各服务状态） | - |
 
 **特性**：

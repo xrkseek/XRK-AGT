@@ -144,23 +144,18 @@ function go(name) {
 .m-content {
   flex: 1 1 0;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
-  display: block;
+  display: flex;
+  flex-direction: column;
   position: relative;
 }
 .m-content > :deep(*) {
-  width: 100%;
-  min-height: 100%;
-  box-sizing: border-box;
-}
-.m-content > :deep(.chat-page),
-.m-content > :deep(.config),
-.m-content > :deep(.api) {
-  height: 100%;
-  max-height: 100%;
+  flex: 1 1 0;
   min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .m-tabbar {
