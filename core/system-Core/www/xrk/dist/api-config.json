@@ -325,74 +325,25 @@
       "title": "AI 功能",
       "apis": [
         {
-          "id": "ai-stream",
-          "method": "GET",
-          "path": "/api/ai/stream",
-          "title": "AI 流式对话",
-          "description": "通过 SSE 获取 AI 流式回复",
-          "queryParams": [
-            {
-              "name": "prompt",
-              "label": "提示词",
-              "type": "text",
-              "required": true,
-              "placeholder": "你好",
-              "defaultValue": "你好"
-            },
-            {
-              "name": "workflow",
-              "label": "工作流名称",
-              "type": "text",
-              "placeholder": "chat",
-              "defaultValue": "chat"
-            },
-            {
-              "name": "persona",
-              "label": "人设",
-              "type": "text",
-              "placeholder": "AI 人设设置",
-              "defaultValue": "你是一个友好的助手"
-            }
-          ]
-        },
-        {
           "id": "ai-models",
           "method": "GET",
           "path": "/api/ai/models",
           "title": "AI 模型列表",
-          "description": "获取可用的 AI 模型和工作流列表（支持 format=openai 参数返回 OpenAI 兼容格式）",
-          "queryParams": [
-            {
-              "name": "format",
-              "label": "返回格式",
-              "type": "select",
-              "options": [
-                {
-                  "value": "",
-                  "label": "详细格式（默认）"
-                },
-                {
-                  "value": "openai",
-                  "label": "OpenAI 兼容格式"
-                }
-              ],
-              "defaultValue": "openai"
-            }
-          ]
+          "description": "控制台 LLM 目录（vendors / workflows；需 API Key）"
         },
         {
-          "id": "v3-models",
+          "id": "v1-models",
           "method": "GET",
-          "path": "/api/v3/models",
+          "path": "/v1/models",
           "title": "OpenAI 模型列表",
-          "description": "OpenAI 兼容的模型列表接口（与 /v3/chat/completions 搭配使用）"
+          "description": "OpenAI 兼容模型列表（需 API Key；与 /v1/chat/completions 搭配）"
         },
         {
-          "id": "v3-chat-completions",
+          "id": "v1-chat-completions",
           "method": "POST",
-          "path": "/api/v3/chat/completions",
-          "title": "OpenAI 兼容接口",
-          "description": "OpenAI Chat Completions 兼容接口（用于子服务端调用）",
+          "path": "/v1/chat/completions",
+          "title": "OpenAI Chat Completions",
+          "description": "标准运营商 Chat Completions（需 API Key；stream 用 SSE）",
           "bodyParams": [
             {
               "name": "apiKey",
@@ -440,6 +391,20 @@
               "defaultValue": "false"
             }
           ]
+        },
+        {
+          "id": "v1-messages",
+          "method": "POST",
+          "path": "/v1/messages",
+          "title": "Anthropic Messages",
+          "description": "Anthropic Messages API（需 API Key）"
+        },
+        {
+          "id": "v1-responses",
+          "method": "POST",
+          "path": "/v1/responses",
+          "title": "OpenAI Responses",
+          "description": "OpenAI Responses API（需 API Key；store=false）"
         }
       ]
     },

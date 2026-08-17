@@ -13,6 +13,7 @@ description: 当你需要解释/排查 HTTP 或 WebSocket 的 401、127 回环�
 
 - `/api/` 由 `HttpApi` + `AgentRuntime.checkApiAuthorization`；公开路由 `systemAuth: false`。
 - 默认所有客户端须 API Key；`server.auth.loopbackExempt===true` 时才允许「本机 Host+127」免 Key（公网/反代勿开）。`runEnabled=true` 时即便 exempt 也强制 Key。
+- 控制台鉴权模式：公开 `GET /api/system/auth-mode` → `requiresKey`；**禁止**用无 Key 打受保护接口靠 401 探测。
 - WS：`wsConnect` → `runtime-ws`；`AgentRuntime.wsf[path]` 可为 `{ handler, skipAuth: true }` 跳过系统 Key。
 
 ## API Key 携带

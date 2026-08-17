@@ -378,9 +378,9 @@ GET /api/mcp/health
 
 ## 与 v3 接口 / LLM 工厂的集成
 
-在 AI 聊天链路中，MCP 不仅可以被外部（Cursor/Claude 等）直接调用，也会被 **LLM 工厂 + `/api/v3/chat/completions`** 间接调用，用于实现 OpenAI style tool calling：
+在 AI 聊天链路中，MCP 不仅可以被外部（Cursor/Claude 等）直接调用，也会被 **LLM 工厂 + `/v1/chat/completions`** 间接调用，用于实现 OpenAI style tool calling：
 
-- `/api/v3/chat/completions` 会将前端选择的「带 MCP 工具的工作流」打包进请求体的 `workflow` 字段；
+- `/v1/chat/completions` 会将前端选择的「带 MCP 工具的工作流」打包进请求体的 `workflow` 字段；
 - 后端将其解析为 `streams` 白名单，传给 LLM 工厂和 `MCPToolAdapter`；
 - LLM 客户端在收到 `tool_calls` 时，会通过 `MCPToolAdapter.handleToolCalls(tool_calls, options)` 执行工具；
 - `options` 可含 `streams`（白名单）、`parallel_tool_calls`（为 `false` 时**顺序**执行同轮 tool_calls，避免 reply 与其它 MCP 抢状态）；

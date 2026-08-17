@@ -5,7 +5,7 @@ description: 在 GitHub 搜索成熟开源实现、对比方案、读 issue/PR �
 
 ## 权威入口
 
-- GitHub MCP（`~/.cursor/mcp.json` 已配 PAT）
+- GitHub MCP（可选；在本机 Cursor MCP 配置中提供 PAT，见 `.cursor/mcp.json.example`）
 - CLI：`gh search repos|code|issues`
 - 兜底：`WebSearch` + README / 官方文档
 

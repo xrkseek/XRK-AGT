@@ -345,7 +345,7 @@ export const aiWorkflowConfig = {
                 type: 'array',
                 label: '仅对这些工作流/入口注入',
                 description:
-                  '留空=全部生效。常用：chat、web、desktop、tools、v3（POST /api/v3/chat/completions）',
+                  '留空=全部生效。常用：chat、web、desktop、tools、v3（POST /v1/chat/completions）',
                 itemType: 'string',
                 default: [],
                 enum: ['chat', 'web', 'desktop', 'tools', 'v3'],

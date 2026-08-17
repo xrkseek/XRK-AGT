@@ -14,7 +14,7 @@ description: 当你需要开发/调试 AiWorkflow 工作流、出站压缩、策
 
 - 路径：`core/*/workflow/*.js`（`AiWorkflowLoader` 扫描，**不用** `ai-workflow.streamDir`）
 - 配置：`data/server_bots/{port}/ai-workflow.yaml`；schema `commonconfig/system/system-ai-workflow.js`
-- 工具：LLM tool calling + MCP；`registerMCPTool` → `this.mcpTools`
+- 工具：LLM tool calling + MCP；`registerMCPTool` → `this.mcpTools`；远程挂载：`export function getMcpServers()`（同模块）或 yaml `mcp.remote`
 - **LLM**：`LLMFactory.createClient().chat/chatStream`（**不**经 Python 子服）
 - **出站**：`prepareOutboundMessages` = toolPair → compaction(+sidecar) → contextWindow trim
 - **策略/安全**：`policies[]` · `security.toolScan` · `security.approval`；执行门禁在 `MCPServer.handleToolCall`

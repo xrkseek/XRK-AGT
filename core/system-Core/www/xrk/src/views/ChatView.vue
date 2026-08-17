@@ -756,7 +756,7 @@ async function sendAi(text, { skipUserPush = false } = {}) {
       : abortCtrl.signal;
 
   try {
-    const res = await fetch(`${getServerUrl()}/api/v3/chat/completions`, {
+    const res = await fetch(`${getServerUrl()}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         ...authHeaders({ 'Content-Type': 'application/json' }),
@@ -935,7 +935,7 @@ async function sendVoice(text) {
 
   try {
     device.ensure();
-    const res = await fetch(`${getServerUrl()}/api/v3/chat/completions`, {
+    const res = await fetch(`${getServerUrl()}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         ...authHeaders({ 'Content-Type': 'application/json' }),

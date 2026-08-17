@@ -13,6 +13,7 @@ description: 当你需要快速理解 system-Core 提供哪些 HTTP API/工作�
 - Workflow：`core/system-Core/workflow/*.js`（`#infrastructure/crawl`→`web.js` / `browser.js`；详见 skill `xrk-crawl`）
 - Plugin：`core/system-Core/plugin/*.js`
 - Tasker：`core/system-Core/tasker/*.js`
+- Events：`core/system-Core/events/*.js`（`onebot` / `device` / `stdin` / `opqbot` / `gsuidcore`…）
 - CommonConfig（前端表单 Schema）：`core/system-Core/commonconfig/*.js`
 - Web 控制台：`core/system-Core/www/xrk/*` → `/xrk`
 - 浏览器兼容：`core/system-Core/www/xrk/modules/web-compat.js`（skill **`xrk-www-compat`**）

@@ -22,6 +22,7 @@ import {
 } from '../lib/ai-workspace-runtime.js';
 import { readAuditTail } from '../lib/ai-workspace-audit.js';
 import { installMcpAuditHook } from '../lib/ai-workspace-context.js';
+import { buildConsoleLlmCatalog } from '../lib/ai-gateway/models.js';
 
 function ensureAuditHook() {
   installMcpAuditHook();
@@ -54,6 +55,15 @@ export default {
   priority: 79,
 
   routes: [
+    {
+      method: 'GET',
+      path: '/api/ai/models',
+      systemAuth: 'ai.models.catalog',
+      handler: HttpResponse.asyncHandler(async (_req, res) => {
+        ensureAuditHook();
+        return HttpResponse.success(res, buildConsoleLlmCatalog());
+      }, 'ai.models.catalog')
+    },
     {
       method: 'GET',
       path: '/api/ai/workspaces',

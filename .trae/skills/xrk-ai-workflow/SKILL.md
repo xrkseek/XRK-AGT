@@ -1,20 +1,25 @@
 ---
 name: xrk-ai-workflow
-description: 当你需要开发/调试 AiWorkflow 工作流、RAG 上下文增强、MCP 工具注册与作用域控制时使用。
+description: 当你需要开发/调试 AiWorkflow 工作流、出站压缩、策略安全、RAG 上下文增强、MCP 工具作用域时使用。
 ---
+
+> **读者：Coding Agent**（改 `src` / `core`）。产品模型工具用法见 `agents/skills/.../agent-tools`。
 
 ## 文档与代码
 
-`docs/ai-workflow.md`、`src/infrastructure/ai-workflow/ai-workflow.js`、`loader.js`
+- 契约：[docs/agent-context.md](../../../docs/agent-context.md) · [docs/ai-workflow.md](../../../docs/ai-workflow.md)
+- 代码：`src/infrastructure/ai-workflow/ai-workflow.js` · `loader.js` · `chat-pipeline.js`
 
 ## 工作流
 
 - 路径：`core/*/workflow/*.js`（`AiWorkflowLoader` 扫描，**不用** `ai-workflow.streamDir`）
-- 配置：`data/server_bots/{port}/ai-workflow.yaml`；schema 见 `commonconfig/system.js`
-- 工具：LLM tool calling + MCP；`registerMCPTool` 注册到 `this.mcpTools`
-- **LLM 调用**：统一 `LLMFactory.createClient().chat/chatStream`（**不**经 Python 子服务端）
-- **上下文/RAG**：`MemoryManager` + 知识库工作流（如 `database` 关键词检索）
-- Shell/系统命令：`#utils/exec-async.js`；禁止 `promisify(exec)`（skill **`xrk-node-runtime`**）
+- 配置：`data/server_bots/{port}/ai-workflow.yaml`；schema `commonconfig/system/system-ai-workflow.js`
+- 工具：LLM tool calling + MCP；`registerMCPTool` → `this.mcpTools`；远程挂载：`export function getMcpServers()`（同模块）或 yaml `mcp.remote`
+- **LLM**：`LLMFactory.createClient().chat/chatStream`（**不**经 Python 子服）
+- **出站**：`prepareOutboundMessages` = toolPair → compaction(+sidecar) → contextWindow trim
+- **策略/安全**：`policies[]` · `security.toolScan` · `security.approval`；执行门禁在 `MCPServer.handleToolCall`
+- **斜杠**：`slash-commands.js`（`/recipe`）；microagents：`trigger-microagents.js`
+- Shell：`#utils/exec-async.js`；禁止 `promisify(exec)`（skill **`xrk-node-runtime`**）
 
 ## 与子服务端关系
 

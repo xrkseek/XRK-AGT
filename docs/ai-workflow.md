@@ -92,7 +92,7 @@ AiWorkflow **不再解析/执行任何“文本函数调用 / ReAct”**，所�
 
 - **tool calls 多轮交互**：由 `LLMFactory` 及各提供商客户端内部处理 `tool_calls` 循环，最终返回整理好的 `assistant.content` 文本给 AiWorkflow；流式场景下，客户端一边向前端推送 `delta.content`，一边在遇到 `finish_reason = "tool_calls"` 时收集并执行 MCP 工具。
 - **MCP 工具注册**：AiWorkflow 通过 `registerMCPTool(name, options)` 将工具注册到 `this.mcpTools`，供 MCP 服务器发现和调用。
-- **工作流工具作用域（streams）**：当通过 `/api/v3/chat/completions` 调用时，前端选择的工作流名称会被整理为 `streams` 白名单，传递给 LLM 客户端和 `MCPToolAdapter`，保证只有这些工作流下的工具可以被使用。
+- **工作流工具作用域（streams）**：当通过 `/v1/chat/completions` 调用时，前端选择的工作流名称会被整理为 `streams` 白名单，传递给 LLM 客户端和 `MCPToolAdapter`，保证只有这些工作流下的工具可以被使用。
 
 ### `registerMCPTool(name, options)`
 

@@ -65,10 +65,10 @@ await PlaywrightAgentSession.launch(toPlaywrightAgentLaunchOptions(rt))
 |------|------|
 | `using(..., { crashRetries: 1 })` | 整轮 Target/Page crashed → 换新浏览器再跑 |
 | `goto` / `gotoAndCapture` | 页崩溃 → `recreatePage` 后重试（后者含重新导航） |
-| `session.close()` | `softClosePlaywrightTree`，超时不卡死 |
-| `waitUntil` | `gotoWithNavigationGuard` 透传，`domcontentloaded` 真正生效 |
+| `session.close()` | `softClosePlaywrightTree`（`AbortSignal.timeout` 竞速），超时不卡死 |
+| `waitUntil` | 经 `normalizePlaywrightWaitUntil`：`load`（默认）/`domcontentloaded`/`networkidle`/`commit`；非法值回落 `load`。官方 **DISCOURAGED** `networkidle`，优先 `load` 或交互后断言就绪 |
 
-**反模式**：同一重型（高 DPR + 字体）会话连开多档位 `goto`；在插件里硬编码 Chrome 路径 / soft-close / 崩溃正则。
+**反模式**：同一重型（高 DPR + 字体）会话连开多档位 `goto`；在插件里硬编码 Chrome 路径 / soft-close / 崩溃正则；默认依赖 `networkidle`。
 
 ## SSRF
 

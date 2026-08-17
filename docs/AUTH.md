@@ -107,5 +107,8 @@ A：公开接口 `GET /api/system/auth-mode`（`systemAuth: false`）返回 `req
 **Q：新增 HTTP 路由时鉴权要注意什么？**  
 A：经 `HttpApi` 注册且路径以 `/api/` 开头时**默认**鉴权；公开接口写 `systemAuth: false`。实现见 `src/infrastructure/http/http.js` 与 `src/infrastructure/http/auth.js`。
 
+**Q：标准 LLM 网关 `/v1/*` 要不要 Key？**  
+A：**要。** `core/system-Core/http/ai.js` 对 `/v1/*`、`/openai/v1/*` 显式设置了 `systemAuth: 'ai.v1'`（路径不以 `/api/` 开头，不会走默认规则，必须手写）。携带方式与上表相同（`Authorization: Bearer` / `X-API-Key` 等）。控制台 `GET /api/ai/models` 亦需 Key（`systemAuth: 'ai.models.catalog'`）。
+
 **Q：能不能用 Strix 给 AGT 做渗透？**  
 A：可以，但只作**外部**本机/CI 工具，扫自有仓或自有环境；**不要**做成插件或聊天触发。见 [security-strix.md](security-strix.md)。

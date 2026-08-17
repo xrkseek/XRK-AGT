@@ -18,6 +18,7 @@ description: 编写或审查 core/src 代码时的写法与性能规范（全局
 4. 错误 **`normalizeError`**，Shell **`#utils/exec-async.js`**
 5. 有 `package.json` 的子 Core **不用 `#` 别名**
 6. 改 `core/*/www`：读 **`xrk-www-compat`**（`/xrk`→`./web-compat.js`；产品页只内联；勿用根名 `shared`）
+7. 入站事件：`em('{tasker}.{post_type}', e)` + `e.tasker` 字符串（skill **`xrk-tasker`**）
 
 ## 审查
 

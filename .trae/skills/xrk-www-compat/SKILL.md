@@ -41,8 +41,10 @@ description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、Http
 |--|------|------|
 | 零配置静态 | 无 sign | URL=`/${文件夹名}`，挂目录本体 |
 | 有 sign · 纯静态 | `staticRoot: "."` 等 | 挂目录本体；可改 URL / `static` / `rateLimit` |
-| 有 sign · 产物 | `enabled: false` | **只 build、不启进程**，挂 dist |
+| 有 sign · 产物 | `enabled: false` | **挂载不启进程**；挂 dist（启动过程仅 stale 时再编） |
 | 有 sign · 反代 | `enabled: true` | **启进程 + 反代** |
+
+**`/xrk` dist**：维护者改 `src` 后**建议** `pnpm build` 并把 `dist/` 提交入库；也**支持**用户自行 build / 启动 stale 编（失败仍挂仓内 dist）。见 [docs/www-mount.md](../../../docs/www-mount.md)「`/xrk` 控制台：`dist` 与自建」。
 
 与主服合并：**sign 已写优先，未写回落 `server.yaml`**（`www-sign-merge.js`）。详见 [docs/www-mount.md](../../../docs/www-mount.md)。Vite `base` = `proxy.mount`。
 

@@ -1,0 +1,15 @@
+---
+description: vibe-learn 内容精工（主仓路由；正文在独立 Core 仓）
+globs: core/vibe-learn/**
+alwaysApply: false
+---
+
+# vibe-learn · 主仓路由
+
+`vibe-learn` 是**独立 git 产品仓**（本地常 clone 到 `core/vibe-learn/`，主仓 gitignore 不入库）。
+
+**权威正文**：`core/vibe-learn/.cursor/rules/vibe-learn-craft.mdc`（Core 仓内 `alwaysApply`）。
+
+改课核 / 导图 / 题库前 **Read** 该文件并遵其硬约定（禁子代理、长 Todo、内容三柱、闸门扫描）。路径相对 Core 内 `www/vibe-learn/`。
+
+主仓只做路由，不把产品精工细则写成全局 alwaysApply。

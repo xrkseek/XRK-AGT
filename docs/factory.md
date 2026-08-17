@@ -72,9 +72,9 @@ LLMFactory 负责管理所有大语言模型服务提供商，支持多种 LLM A
 
 #### 支持的提供商（官方 + 兼容）
 
-> 下表只列出「**工厂级别**」的官方 provider；所有兼容厂商（第三方代理 / New API / CherryIN / Ollama / 自建网关等）均通过 `*_compat_llm.yaml` 里的 `providers[].key` 动态扩展，这些 key 本身也会出现在 `LLMFactory.listProviders()` 与 `/api/v3/models` 中，可直接作为 v3 接口里的 `model` 使用。
+> 下表只列出「**工厂级别**」的官方 provider；所有兼容厂商（第三方代理 / New API / CherryIN / Ollama / 自建网关等）均通过 `*_compat_llm.yaml` 里的 `providers[].key` 动态扩展，这些 key 本身也会出现在 `LLMFactory.listProviders()` 与 `GET /v1/models` 中，可直接作为网关请求里的 `model` 使用。
 
-| 类型 | 提供商 | v3 中 `model` 示例 | 说明 | 官方文档 / 协议 | 多模态 |
+| 类型 | 提供商 | 网关 `model` 示例 | 说明 | 官方文档 / 协议 | 多模态 |
 |------|--------|--------------------|------|------------------|--------|
 | 官方 | 火山引擎 | `volcengine` | 火山方舟 Responses（thinking / 工具多轮） | `POST …/api/v3/responses` | ✅ |
 | 官方 | 小米 MiMo | `xiaomimimo` | 兼容 OpenAI API 的 MiMo 大语言模型（仅文本） | OpenAI Chat Completions | ❌ |
@@ -155,7 +155,7 @@ class LLMClient {
 - **工具轮收尾（finalize）**：达到 `maxToolRounds` 后，Chat Completions / Responses 客户端可再请求一轮无工具终答（`tool-loop-finalize.js`），避免把最后一条 tool 结果当成助手回复。
 - **variants / reasoning**：Provider 可配 `variant`/`variants` 与 reasoning budget；解析见 `provider-variant.js` · `reasoning-budget.js`（schema 在 `llm-provider-fields.js`）。
 - **重试**：空回复 / rate_limit 等经 `llm-retry.js`（含 Retry-After）；HTTP 错误形状见 `llm-http-error.js`。
-- **工作流作用域控制（streams）**：当通过 `/api/v3/chat/completions` 调用时，请求体中的 `workflow` 字段会被整理为 `streams` 白名单，LLM 工厂据此只注入这些工作流下的 MCP 工具，其它未在 `streams` 中声明的工具不会被注入和调用。
+- **工作流作用域控制（streams）**：当通过 `POST /v1/chat/completions` 调用时，请求体中的 `workflow` 字段会被整理为 `streams` 白名单，LLM 工厂据此只注入这些工作流下的 MCP 工具，其它未在 `streams` 中声明的工具不会被注入和调用。
 - **多模态输入**：部分 LLM（如 Volcengine、OpenAI、Gemini、Azure OpenAI 等）直接支持图片输入，消息结构会通过 `transformMessagesWithVision` 统一转成各家兼容的 `text + image_url`（含 base64 data URL）格式。
 
 出站压缩与策略不在工厂内，而在 AiWorkflow `prepareOutboundMessages`（见 [agent-context.md](agent-context.md) §5 · [ai-workflow.md](ai-workflow.md)）。
@@ -587,44 +587,38 @@ const ttsClient = TTSFactory.createClient(deviceId, ttsConfig, AgentRuntime);
 
 ### 场景 3：在 HTTP API 中使用工厂
 
-XRK-AGT 提供了标准的 AI HTTP API，位于 `core/system-Core/http/ai.js`：
+XRK-AGT 提供了标准运营商 LLM 网关，位于 `core/system-Core/http/ai.js`（均需 API Key，`systemAuth: 'ai.v1'`）：
 
-**OpenAI 兼容接口**（推荐用于外部调用）：
+**OpenAI Chat Completions**（推荐）：
 ```javascript
-// POST /api/v3/chat/completions
-// 完全兼容 OpenAI Chat Completions API
-const response = await fetch('http://localhost:8080/api/v3/chat/completions', {
+// POST /v1/chat/completions
+const response = await fetch('http://localhost:8080/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
     'Authorization': 'Bearer YOUR_API_KEY'
   },
   body: JSON.stringify({
-    model: 'volcengine',  // 使用 provider 名称
+    model: 'volcengine',  // provider key
     messages: [
       { role: 'user', content: '你好' }
     ],
-    stream: false  // 或 true 启用流式输出
+    stream: false  // 或 true 启用 SSE
   })
 });
 ```
 
-**自定义工作流接口**：
+**Anthropic / Responses**：
 ```javascript
-// GET /api/ai/stream?prompt=你好&workflow=chat&profile=volcengine
-// SSE 流式输出，使用指定工作流
-const eventSource = new EventSource('http://localhost:8080/api/ai/stream?prompt=你好&workflow=chat');
-eventSource.onmessage = (e) => {
-  const data = JSON.parse(e.data);
-  console.log(data.delta);  // 流式输出片段
-};
+// POST /v1/messages · POST /v1/responses（及 /openai/v1/... 别名）
 ```
 
-**获取模型和工作流列表**：
+**控制台 LLM 目录**（`ai-workspace.js`，需 Key）：
 ```javascript
 // GET /api/ai/models
-// 返回所有可用的 LLM 提供商和工作流
-const response = await fetch('http://localhost:8080/api/ai/models');
+const response = await fetch('http://localhost:8080/api/ai/models', {
+  headers: { 'Authorization': 'Bearer YOUR_API_KEY' }
+});
 const data = await response.json();
 console.log(data.profiles);   // LLM 提供商列表
 console.log(data.workflows);  // 工作流列表
@@ -730,17 +724,17 @@ A: 每次 `createClient()` 返回新实例；需要复用时由调用方缓存�
 
 ## AI HTTP API 路由
 
-XRK-AGT 提供了标准的 AI HTTP API，位于 `core/system-Core/http/ai.js`，支持 OpenAI 兼容接口和工作流调用。
+XRK-AGT 标准 LLM 网关位于 `core/system-Core/http/ai.js`（`systemAuth: 'ai.v1'`）。控制台目录在 `ai-workspace.js`。
 
-### OpenAI 兼容接口
+### OpenAI Chat Completions
 
-**POST `/api/v3/chat/completions`**
+**POST `/v1/chat/completions`**（别名 `/openai/v1/chat/completions`）
 
 完全兼容 OpenAI Chat Completions API，支持流式和非流式输出。
 
 **请求示例**（非流式）：
 ```http
-POST /api/v3/chat/completions HTTP/1.1
+POST /v1/chat/completions HTTP/1.1
 Host: localhost:8080
 Content-Type: application/json
 Authorization: Bearer YOUR_API_KEY
@@ -781,7 +775,7 @@ Authorization: Bearer YOUR_API_KEY
 
 **流式输出**（`stream: true`）：
 ```http
-POST /api/v3/chat/completions HTTP/1.1
+POST /v1/chat/completions HTTP/1.1
 Content-Type: application/json
 Authorization: Bearer YOUR_API_KEY
 
@@ -792,7 +786,7 @@ Authorization: Bearer YOUR_API_KEY
 }
 ```
 
-**响应**（Server-Sent Events）：
+**响应**（Server-Sent Events，末尾 `data: [DONE]`）：
 ```
 data: {"id":"chatcmpl_...","object":"chat.completion.chunk","created":1703123456,"model":"volcengine","choices":[{"index":0,"delta":{"role":"assistant","content":"你"},"finish_reason":null}]}
 
@@ -805,10 +799,10 @@ data: [DONE]
 
 **重要说明**：
 
-- `model` 参数使用 **provider 名称**（如 `volcengine`、`openai`、`openai_compat`），不是真实模型名；真实模型由各 `*_llm` 配置文件中的 `model/chatModel` 决定。
-- 支持多种认证方式：`Authorization: Bearer TOKEN`、请求体 `apiKey` / `api_key`、以及 `X-API-Key` 头。
+- `model` 参数使用 **provider 名称**（如 `volcengine`、`openai`），不是真实模型名；真实模型由各 `*_llm` 配置文件中的 `model/chatModel` 决定。
+- 支持多种认证方式：`Authorization: Bearer TOKEN`、请求体 `apiKey` / `api_key`、以及 `X-API-Key` 头。详见 [AUTH.md](AUTH.md)。
 - 支持常见 OpenAI 兼容参数：`temperature`、`max_tokens`、`top_p`、`tools`、`tool_choice`、`parallel_tool_calls`、`response_format`、`stream_options` 等。
-- 流式输出需要提供商配置中 `enableStream: true`（默认启用）；所有 provider 的 `chatStream` 都统一输出“纯文本增量”，由 `core/system-Core/http/ai.js` 封装为 SSE 事件。
+- 另有：`POST /v1/messages`（Anthropic）、`POST /v1/responses`（Responses；`store=false`）。
 - **工具作用域控制（streams）**：
   - 前端/调用方可以在请求体中提供 `workflow` 字段，例如：
     ```json
@@ -820,103 +814,28 @@ data: [DONE]
     ```
   - 后端会将这些名称整理为 `streams` 白名单并透传给 LLM 工厂，再由 `MCPToolAdapter` 进行 MCP 工具过滤；未出现在 `streams` 中的工作流工具**不会被注入和调用**。
 
-### 工作流接口
-
-**GET `/api/ai/stream`**
-
-使用指定工作流进行 SSE 流式输出，支持上下文增强和记忆系统。
-
-**请求示例**：
-```http
-GET /api/ai/stream?prompt=你好&workflow=chat&profile=volcengine&persona=助手 HTTP/1.1
-Host: localhost:8080
-```
-
-**查询参数**：
-
-| 参数 | 类型 | 说明 | 默认值 |
-|------|------|------|--------|
-| `prompt` | string | 用户输入（必需） | - |
-| `workflow` | string | 工作流名称（chat/desktop/tools等） | `chat` |
-| `profile` / `llm` | string | LLM 提供商名称 | 配置默认值 |
-| `provider` / `model` | string | LLM 提供商名称（备用） | 配置默认值 |
-| `persona` | string | 角色设定 | - |
-| `context` | JSON | 上下文对象 | - |
-| `meta` | JSON | 元数据 | - |
-
-**响应**（Server-Sent Events）：
-```
-data: {"delta":"你","workflow":"chat"}
-
-data: {"delta":"好","workflow":"chat"}
-
-data: {"done":true,"workflow":"chat","text":"你好！有什么可以帮助你的吗？"}
-```
-
 ### 模型和工作流列表
 
-**GET `/api/ai/models`**
+**GET `/api/ai/models`**（`systemAuth: 'ai.models.catalog'`）
 
-获取所有可用的 LLM 提供商和工作流列表。
+获取控制台用 LLM 提供商与工作流列表。
 
 **请求示例**：
 ```http
 GET /api/ai/models HTTP/1.1
 Host: localhost:8080
+Authorization: Bearer YOUR_API_KEY
 ```
 
-**响应示例**：
-```json
-{
-  "success": true,
-  "data": {
-    "enabled": true,
-    "defaultProfile": "volcengine",
-    "defaultWorkflow": null,
-    "persona": "",
-    "profiles": [
-      {
-        "key": "volcengine",
-        "label": "volcengine",
-        "description": "LLM提供商: volcengine",
-        "model": "doubao-seed-2-0-lite-260428",
-        "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
-        "maxTokens": 2000,
-        "temperature": 0.7,
-        "hasApiKey": true,
-        "capabilities": ["stream", "tools"]
-      }
-    ],
-    "workflows": [
-      {
-        "key": "chat",
-        "label": "智能聊天互动工作流",
-        "description": "智能聊天互动工作流",
-        "profile": null,
-        "persona": null,
-        "uiHidden": false
-      },
-      {
-        "key": "desktop",
-        "label": "桌面与通用助手工作流",
-        "description": "桌面与通用助手工作流",
-        "profile": null,
-        "persona": null,
-        "uiHidden": false
-      }
-    ]
-  }
-}
-```
-
-**GET `/api/v3/models`**
+**GET `/v1/models`**
 
 OpenAI 格式的模型列表（用于兼容 OpenAI 客户端）。
 
 **请求示例**：
 ```http
-GET /api/v3/models HTTP/1.1
+GET /v1/models HTTP/1.1
 Host: localhost:8080
+Authorization: Bearer YOUR_API_KEY
 ```
 
 **响应示例**：
@@ -940,6 +859,8 @@ Host: localhost:8080
 }
 ```
 
+> **已移除**：`/api/v3/*`、`GET /api/ai/stream`。流式对话请用 `POST /v1/chat/completions` + `stream: true`。
+
 ---
 
 ## 相关文档
@@ -955,4 +876,4 @@ Host: localhost:8080
 
 ---
 
-*最后更新：2026-08-04（对齐工具轮 finalize / variants / 执行门禁与 agent-context）*
+*最后更新：2026-08-17（网关改为 `/v1/*`；移除 `/api/v3` 与 `/api/ai/stream`）*

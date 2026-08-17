@@ -23,5 +23,6 @@ description: 当你需要理解 XRK-AGT 的运行时核心（AgentRuntime 主类
 
 ## 其它
 
+- 事件总线：`em('{tasker}.{post_type}', data)`；级联只剥点号父级（`onebot.message`→`onebot`）。插件过滤见 `#utils/event-keys.js`，文档 `docs/事件系统标准化文档.md` · skill **`xrk-tasker`**。
 - `callRoute` / 公网探测：全局 `fetch` + `AbortSignal.timeout`（见 `src/agent-runtime.js`）。
 - Node 26 约定：skill **`xrk-node-runtime`**。

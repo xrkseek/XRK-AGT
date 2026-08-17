@@ -339,7 +339,7 @@ export default {
   routes: [
     {
       method: 'POST',
-      path: '/api/ai/chat', // 自定义 Core 示例路径；内置 AI 见 ai.js（/api/v3/chat/completions 等）
+      path: '/api/ai/chat', // 自定义 Core 示例路径；内置网关见 ai.js（/v1/chat/completions 等）
       handler: async (req, res, bot) => {
         const stream = AiWorkflowLoader.getWorkflow('chat');
         if (!stream) {

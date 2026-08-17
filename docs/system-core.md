@@ -154,12 +154,16 @@ system-Core 提供了 **11 个** HTTP API 模块，覆盖系统管理的各个�
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/api/v3/chat/completions` | POST | OpenAI 兼容的聊天接口（支持 JSON 与 multipart/form-data，多模态 + 工具调用） |
-| `/api/v3/models` | GET | 获取模型列表（OpenAI 格式） |
-| `/api/ai/models` | GET | 获取模型和工作流列表（仅暴露“带 MCP 工具”的基础工作流，供前端多选） |
-| `/api/ai/stream` | GET | SSE 流式输出（使用工作流系统） |
+| `/v1/chat/completions` | POST | OpenAI Chat Completions（JSON / multipart 多模态 + 工具；需 API Key） |
+| `/openai/v1/chat/completions` | POST | 同上别名 |
+| `/v1/models` · `/v1/models/:id` | GET | OpenAI 模型列表 / 详情（需 API Key） |
+| `/v1/messages` | POST | Anthropic Messages（需 API Key） |
+| `/v1/responses` | POST | OpenAI Responses（需 API Key；`store=false`） |
+| `/api/ai/models` | GET | 控制台 LLM 目录（vendors / workflows；`ai-workspace.js`；需 API Key） |
 
-> `/api/v3/chat/completions` 会把前端选择的「带 MCP 工具的工作流」整理为 `streams` 白名单，并透传给 LLM 工厂和 MCP 工具适配器，确保只有这些工作流下的 MCP 工具会被注入和调用，避免“未在接口中声明的工具”被意外使用。
+> 网关路径一律 `systemAuth`；`model` = provider key。前端勾选的「带 MCP 工具的工作流」经 `workflow.workflows` 整理为白名单注入工厂。
+>
+> **已移除**：`/api/v3/*`、`GET /api/ai/stream`。
 
 ### 7. MCP服务API (`mcp.js`)
 
@@ -647,7 +651,7 @@ flowchart LR
 
 2. **AI对话**  
    - 提供统一的聊天界面，支持文本输入、ASR 语音输入与图片上传识别。  
-   - 底层通过 `/api/v3/chat/completions` 与 `/api/ai/stream` 调用工作流（chat/desktop/tools/...），支持在前端切换不同工作流与人格预设。  
+   - 底层通过 `POST /v1/chat/completions` 调用工作流（chat/desktop/tools/...），支持在前端切换不同工作流与人格预设。  
    - 支持查看原始请求/响应与 token 消耗，便于调试工作流与 LLM 配置。
 
 3. **配置管理**  

@@ -86,7 +86,8 @@ commonconfig/**
 !lib/ai-workspace-context.js
 !lib/ai-workspace-audit.js
 !lib/ai-assistant-runtime.js
-!lib/ai-gateway-compat.js
+!lib/ai-gateway/
+!lib/ai-gateway/**
 
 !default/
 !default/ai_config.yaml

@@ -3,13 +3,11 @@ import runtimeConfig from '#infrastructure/config/config.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import RuntimeUtil from '#utils/runtime-util.js';
-import { errorHandler, ErrorCodes } from '#utils/error-handler.js';
 import path from 'path';
 import crypto from 'crypto';
 import multer from 'multer';
 import fs from 'fs/promises';
 import paths from '#utils/paths.js';
-import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
 import { resolveClientBaseUrl } from '#utils/client-base-url.js';
 import { decodeMulterFilename } from '#utils/multipart-filename.js';
@@ -25,15 +23,10 @@ import { initOpenAIChatSSE, pipeOpenAIChatCompletionsStream, writeOpenAiWorkflow
 import { pickPromptCacheOverrides } from '#utils/llm/prompt-cache-policy.js';
 import { transformOpenAIStyleVisionMessages } from '#utils/llm/message-transform.js';
 import { mergeUploadedImagesIntoMessages } from '#utils/llm/vision-content.js';
-import { assembleChatLlmMessages } from '#infrastructure/ai-workflow/chat-pipeline.js';
-import { runWithWorkflowRequestContext } from '#infrastructure/ai-workflow/workflow-request-context.js';
 import {
   pickFirst,
-  parseOptionalJson,
   toNum,
   toBool,
-  trimLower,
-  getDefaultProvider,
   resolveProviderFromRequest,
   extractMessageText,
   estimateTokens,
@@ -46,8 +39,12 @@ import {
   anthropicMessagesToOpenAIBody,
   openAIChatToAnthropicMessage,
   initAnthropicMessageSSE,
-  pipeAnthropicMessagesStream
-} from '../lib/ai-gateway-compat.js';
+  pipeAnthropicMessagesStream,
+  responsesRequestToOpenAIBody,
+  openAIChatToResponsesObject,
+  initResponsesSSE,
+  pipeResponsesStream
+} from '../lib/ai-gateway/index.js';
 
 function safePreview(value, { maxLen = 500 } = {}) {
   if (value == null) return value;
@@ -137,10 +134,10 @@ function summarizeV3Request(req, body, { contentType, messages, uploadedImagesCo
 }
 
 /**
- * OpenAI 兼容的 Chat Completions v3 接口
+ * OpenAI 兼容的 Chat Completions 接口（对外路径：POST /v1/chat/completions）
  *
  * 特性概览：
- * - 路径：POST /api/v3/chat/completions
+ * - 路径：POST /v1/chat/completions（及 /openai/v1/chat/completions）
  * - 支持 JSON 与 multipart/form-data（含图片上传，多模态对话）
  * - 图片约定（与 OpenAI Chat Completions 对齐）：
  *   - JSON：`content` 可为 string、OpenAI parts 数组、或 AGT `{ text, images[], replyImages[] }`
@@ -416,6 +413,20 @@ async function handleChatCompletionsV3(req, res) {
       if (req.xrkGatewayFormat === 'anthropic') {
         return HttpResponse.json(res, openAIChatToAnthropicMessage(openaiPayload, { model: responseModel }));
       }
+      if (req.xrkGatewayFormat === 'responses') {
+        const meta = req.xrkResponsesMeta || {};
+        const finish = openaiPayload.choices?.[0]?.finish_reason;
+        return HttpResponse.json(res, openAIChatToResponsesObject(openaiPayload, {
+          model: responseModel,
+          instructions: meta.instructions ?? null,
+          temperature: meta.temperature ?? null,
+          topP: meta.top_p ?? null,
+          maxOutputTokens: meta.max_output_tokens ?? null,
+          toolChoice: meta.tool_choice ?? 'auto',
+          tools: meta.tools || [],
+          status: finish === 'length' ? 'incomplete' : 'completed'
+        }));
+      }
       return HttpResponse.json(res, openaiPayload);
     } finally {
       restoreStreamWorkspace();
@@ -444,6 +455,33 @@ async function handleChatCompletionsV3(req, res) {
       try {
         res.write(`event: error\ndata: ${JSON.stringify({ type: 'error', error: { type: 'api_error', message: error.message } })}\n\n`);
       } catch { /* ignore */ }
+    } finally {
+      restoreStreamWorkspace();
+      res.end();
+    }
+    return;
+  }
+
+  if (req.xrkGatewayFormat === 'responses') {
+    const meta = req.xrkResponsesMeta || {};
+    initResponsesSSE(res);
+    RuntimeUtil.makeLog('info', `[v1/responses] 开始 Responses 流式: provider=${modelName}`, 'ai.v1.responses');
+    try {
+      await pipeResponsesStream(res, {
+        client,
+        messages: llmMessages,
+        overrides,
+        model: modelName,
+        instructions: meta.instructions ?? null,
+        temperature: meta.temperature ?? null,
+        topP: meta.top_p ?? null,
+        maxOutputTokens: meta.max_output_tokens ?? null,
+        toolChoice: meta.tool_choice ?? 'auto',
+        tools: meta.tools || [],
+        runWrapped: (run) => runWithAiConsoleContext({ workspaceId: auditWorkspaceId }, run)
+      });
+    } catch (error) {
+      RuntimeUtil.makeLog('error', `[v1/responses] 流式错误: ${error.message}`, 'ai.v1.responses');
     } finally {
       restoreStreamWorkspace();
       res.end();
@@ -496,55 +534,53 @@ async function handleAnthropicMessages(req, res) {
   return handleChatCompletionsV3(req, res);
 }
 
-async function handleModels(req, res) {
-  const llm = getAiWorkflowConfigOptional().llm || {};
-  const defaultProvider = getDefaultProvider();
-  const format = (req.query.format || '').toLowerCase();
-  const profiles = LLMFactory.listModelProfiles();
-  const pathName = String(req.path || '');
-
-  if (
-    format === 'openai'
-    || pathName === '/api/v3/models'
-    || pathName === '/v1/models'
-    || pathName === '/openai/v1/models'
-  ) {
-    return HttpResponse.json(res, buildOpenAIModelsPayload());
+async function handleResponses(req, res) {
+  const raw = req.body || {};
+  if (raw.model == null || String(raw.model).trim() === '') {
+    return HttpResponse.validationError(res, 'model 参数无效');
+  }
+  if (raw.input == null && raw.instructions == null) {
+    return HttpResponse.validationError(res, 'input 参数无效（可与 instructions 同用）');
+  }
+  if (raw.previous_response_id) {
+    RuntimeUtil.makeLog(
+      'warn',
+      `[v1/responses] 忽略 previous_response_id=${raw.previous_response_id}（网关 store=false，请把历史放进 input）`,
+      'ai.v1.responses'
+    );
   }
 
-  const vendors = LLMFactory.listVendors(profiles);
+  req.xrkGatewayFormat = 'responses';
+  req.xrkResponsesMeta = {
+    instructions: raw.instructions ?? null,
+    temperature: raw.temperature ?? null,
+    top_p: raw.top_p ?? raw.topP ?? null,
+    max_output_tokens: raw.max_output_tokens ?? raw.max_tokens ?? null,
+    tool_choice: raw.tool_choice ?? 'auto',
+    tools: Array.isArray(raw.tools) ? raw.tools : []
+  };
+  req.body = responsesRequestToOpenAIBody(raw);
+  if (!Array.isArray(req.body.messages) || req.body.messages.length === 0) {
+    return HttpResponse.validationError(res, 'input 未能解析出有效 messages');
+  }
+  return handleChatCompletionsV3(req, res);
+}
 
-  const workflows = AiWorkflowLoader.getWorkflowsByPriority()
-    .filter(s => !s.primaryStream && !s.secondaryStreams && (s.mcpTools?.size || 0) > 0)
-    .map(s => ({
-      key: s.name,
-      label: s.description || s.name,
-      description: s.description || '',
-      profile: null,
-      persona: null,
-      uiHidden: false
-    }));
+/** 无 store：不支持按 id 取回 */
+async function handleGetResponseById(req, res) {
+  const id = decodeURIComponent(String(req.params?.responseId || req.params?.id || '').trim());
+  return HttpResponse.json(res, {
+    error: {
+      message: `Response store is disabled on this gateway; cannot retrieve ${id || '(empty)'}. Pass conversation history via input.`,
+      type: 'invalid_request_error',
+      param: 'response_id',
+      code: 'response_not_found'
+    }
+  }, 404);
+}
 
-  // 远程 MCP 与普通 workflow 同等：仅勾选/请求体传入时生效
-  const remoteServers = AiWorkflowLoader.listRemoteMCPServers?.() || [];
-  const remoteWorkflows = remoteServers.map((name) => ({
-    key: `remote-mcp.${name}`,
-    label: `远程 MCP：${name}`,
-    description: `远程 MCP 服务器 ${name}`,
-    profile: null,
-    persona: null,
-    uiHidden: false
-  }));
-
-  return HttpResponse.success(res, {
-    enabled: llm.enabled !== false,
-    defaultProfile: defaultProvider,
-    defaultWorkflow: null,
-    persona: llm.persona || '',
-    profiles,
-    vendors,
-    workflows: [...workflows, ...remoteWorkflows]
-  });
+async function handleModels(_req, res) {
+  return HttpResponse.json(res, buildOpenAIModelsPayload());
 }
 
 async function handleModelById(req, res) {
@@ -572,181 +608,30 @@ const anthropicMessagesHandler = HttpResponse.asyncHandler(
   async (req, res) => handleAnthropicMessages(req, res),
   'ai.v1.messages'
 );
+const responsesHandler = HttpResponse.asyncHandler(
+  async (req, res) => handleResponses(req, res),
+  'ai.v1.responses'
+);
+const getResponseByIdHandler = HttpResponse.asyncHandler(
+  async (req, res) => handleGetResponseById(req, res),
+  'ai.v1.responses.get'
+);
 
 export default {
   name: 'ai-workflow',
-  dsc: 'AI 工作流（含 SSE 流式输出）',
+  dsc: '标准 LLM 网关（OpenAI Chat / Responses / Anthropic Messages）',
   priority: 80,
   routes: [
-    {
-      method: 'POST',
-      path: '/api/v3/chat/completions',
-      handler: chatCompletionsHandler
-    },
-    {
-      method: 'POST',
-      path: '/v1/chat/completions',
-      systemAuth: 'ai.v1',
-      handler: chatCompletionsHandler
-    },
-    {
-      method: 'POST',
-      path: '/openai/v1/chat/completions',
-      systemAuth: 'ai.v1',
-      handler: chatCompletionsHandler
-    },
-    {
-      method: 'POST',
-      path: '/api/v3/v1/chat/completions',
-      handler: chatCompletionsHandler
-    },
-    {
-      method: 'GET',
-      path: '/api/v3/models',
-      handler: modelsListHandler
-    },
-    {
-      method: 'GET',
-      path: '/api/v3/models/:modelId',
-      handler: modelByIdHandler
-    },
-    {
-      method: 'GET',
-      path: '/v1/models',
-      systemAuth: 'ai.v1',
-      handler: modelsListHandler
-    },
-    {
-      method: 'GET',
-      path: '/v1/models/:modelId',
-      systemAuth: 'ai.v1',
-      handler: modelByIdHandler
-    },
-    {
-      method: 'GET',
-      path: '/openai/v1/models',
-      systemAuth: 'ai.v1',
-      handler: modelsListHandler
-    },
-    {
-      method: 'GET',
-      path: '/openai/v1/models/:modelId',
-      systemAuth: 'ai.v1',
-      handler: modelByIdHandler
-    },
-    {
-      method: 'GET',
-      path: '/api/ai/models',
-      handler: modelsListHandler
-    },
-    {
-      method: 'POST',
-      path: '/v1/messages',
-      systemAuth: 'ai.v1',
-      handler: anthropicMessagesHandler
-    },
-    {
-      method: 'POST',
-      path: '/api/v3/messages',
-      handler: anthropicMessagesHandler
-    },
-    {
-      method: 'POST',
-      path: '/api/v3/v1/messages',
-      handler: anthropicMessagesHandler
-    },
-    {
-      method: 'GET',
-      path: '/api/ai/stream',
-      handler: async (req, res) => {
-        try {
-          const prompt = InputValidator.sanitizeText((req.query.prompt || '').toString(), 10000);
-          if (!prompt.trim()) {
-            return HttpResponse.validationError(res, '缺少 prompt 参数');
-          }
-
-          const persona = (req.query.persona || '').toString();
-          const workflowName = trimLower(req.query.workflow) || 'chat';
-          const profileKey = trimLower(req.query.profile || req.query.llm) || undefined;
-          const queryProvider = trimLower(req.query.provider) || undefined;
-          const queryModel = trimLower(req.query.model) || undefined;
-          const contextObj = parseOptionalJson(req.query.context);
-          const metadata = parseOptionalJson(req.query.meta);
-
-          const stream = AiWorkflowLoader.getWorkflow(workflowName) || AiWorkflowLoader.getWorkflow('chat');
-          if (!stream) {
-            return HttpResponse.error(res, new Error('工作流未加载'), 500, 'ai.stream');
-          }
-
-          res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-          res.setHeader('Cache-Control', 'no-cache');
-          res.setHeader('Connection', 'keep-alive');
-          res.flushHeaders?.();
-
-          const messages = await assembleChatLlmMessages(stream, null, {
-            text: prompt,
-            persona,
-            context: contextObj,
-            metadata
-          });
-
-          const llmOverrides = {
-            ...stream.config,
-            workflow: workflowName,
-            persona,
-            profile: profileKey
-          };
-
-          // 对外接口约定：query.model 通常填 provider；query.provider 仅作为可选字段
-          if (queryModel && LLMFactory.hasProvider(queryModel)) {
-            llmOverrides.provider = queryModel;
-          } else if (queryProvider && LLMFactory.hasProvider(queryProvider)) {
-            llmOverrides.provider = queryProvider;
-          } else if (profileKey && LLMFactory.hasProvider(profileKey)) {
-            llmOverrides.provider = profileKey;
-          }
-
-          const executionContext = {
-            e: null,
-            question: {
-              text: prompt,
-              persona,
-              context: contextObj,
-              metadata
-            },
-            config: llmOverrides
-          };
-
-          let acc = '';
-          const finalText = await runWithWorkflowRequestContext(
-            { e: null, turnState: null },
-            () => stream.callAiWorkflow(
-              messages,
-              llmOverrides,
-              (delta) => {
-                acc += delta;
-                res.write(`data: ${JSON.stringify({ delta, workflow: stream.name })}\n\n`);
-              },
-              { context: executionContext }
-            )
-          );
-
-          res.write(
-            `data: ${JSON.stringify({
-              done: true,
-              workflow: stream.name,
-              text: finalText || acc
-            })}\n\n`
-          );
-          res.end();
-        } catch (e) {
-          errorHandler.handle(e, { context: 'ai.stream', code: ErrorCodes.SYSTEM_ERROR });
-          try {
-            res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
-          } catch {}
-          res.end();
-        }
-      }
-    }
+    { method: 'POST', path: '/v1/chat/completions', systemAuth: 'ai.v1', handler: chatCompletionsHandler },
+    { method: 'POST', path: '/openai/v1/chat/completions', systemAuth: 'ai.v1', handler: chatCompletionsHandler },
+    { method: 'GET', path: '/v1/models', systemAuth: 'ai.v1', handler: modelsListHandler },
+    { method: 'GET', path: '/v1/models/:modelId', systemAuth: 'ai.v1', handler: modelByIdHandler },
+    { method: 'GET', path: '/openai/v1/models', systemAuth: 'ai.v1', handler: modelsListHandler },
+    { method: 'GET', path: '/openai/v1/models/:modelId', systemAuth: 'ai.v1', handler: modelByIdHandler },
+    { method: 'POST', path: '/v1/messages', systemAuth: 'ai.v1', handler: anthropicMessagesHandler },
+    { method: 'POST', path: '/v1/responses', systemAuth: 'ai.v1', handler: responsesHandler },
+    { method: 'POST', path: '/openai/v1/responses', systemAuth: 'ai.v1', handler: responsesHandler },
+    { method: 'GET', path: '/v1/responses/:responseId', systemAuth: 'ai.v1', handler: getResponseByIdHandler },
+    { method: 'GET', path: '/openai/v1/responses/:responseId', systemAuth: 'ai.v1', handler: getResponseByIdHandler }
   ]
 };
