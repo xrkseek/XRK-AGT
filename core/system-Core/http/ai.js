@@ -40,6 +40,14 @@ import {
   resolveWorkflowStreams,
   buildOverridesFromBody
 } from '#utils/http/ai-v3-utils.js';
+import {
+  buildOpenAIModelsPayload,
+  buildOpenAIModelPayload,
+  anthropicMessagesToOpenAIBody,
+  openAIChatToAnthropicMessage,
+  initAnthropicMessageSSE,
+  pipeAnthropicMessagesStream
+} from '../lib/ai-gateway-compat.js';
 
 function safePreview(value, { maxLen = 500 } = {}) {
   if (value == null) return value;
@@ -387,7 +395,7 @@ async function handleChatCompletionsV3(req, res) {
 
       // 对外返回 model=provider
       const responseModel = llmConfig.provider || 'unknown';
-      return HttpResponse.json(res, {
+      const openaiPayload = {
         id: `chatcmpl_${Date.now()}`,
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
@@ -404,17 +412,46 @@ async function handleChatCompletionsV3(req, res) {
           completion_tokens: completionTokens,
           total_tokens: promptTokens + completionTokens
         }
-      });
+      };
+      if (req.xrkGatewayFormat === 'anthropic') {
+        return HttpResponse.json(res, openAIChatToAnthropicMessage(openaiPayload, { model: responseModel }));
+      }
+      return HttpResponse.json(res, openaiPayload);
     } finally {
       restoreStreamWorkspace();
     }
   }
 
-  initOpenAIChatSSE(res);
-
   const now = Math.floor(Date.now() / 1000);
   const id = `chatcmpl_${Date.now()}`;
   const modelName = llmConfig.provider || 'unknown';
+
+  if (req.xrkGatewayFormat === 'anthropic') {
+    initAnthropicMessageSSE(res);
+    const msgId = `msg_${Date.now()}`;
+    RuntimeUtil.makeLog('info', `[v1/messages] 开始 Anthropic 流式: provider=${modelName}, id=${msgId}`, 'ai.v1.messages');
+    try {
+      await pipeAnthropicMessagesStream(res, {
+        client,
+        messages: llmMessages,
+        overrides,
+        id: msgId,
+        model: modelName,
+        runWrapped: (run) => runWithAiConsoleContext({ workspaceId: auditWorkspaceId }, run)
+      });
+    } catch (error) {
+      RuntimeUtil.makeLog('error', `[v1/messages] 流式错误: ${error.message}`, 'ai.v1.messages');
+      try {
+        res.write(`event: error\ndata: ${JSON.stringify({ type: 'error', error: { type: 'api_error', message: error.message } })}\n\n`);
+      } catch { /* ignore */ }
+    } finally {
+      restoreStreamWorkspace();
+      res.end();
+    }
+    return;
+  }
+
+  initOpenAIChatSSE(res);
 
   RuntimeUtil.makeLog('info', `[v3/chat/completions] 开始流式输出: provider=${modelName}, id=${id}`, 'ai.v3.stream');
 
@@ -446,24 +483,33 @@ async function handleChatCompletionsV3(req, res) {
   }
 }
 
+async function handleAnthropicMessages(req, res) {
+  const raw = req.body || {};
+  if (!Array.isArray(raw.messages)) {
+    return HttpResponse.validationError(res, 'messages 参数无效');
+  }
+  if (raw.model == null || String(raw.model).trim() === '') {
+    return HttpResponse.validationError(res, 'model 参数无效');
+  }
+  req.xrkGatewayFormat = 'anthropic';
+  req.body = anthropicMessagesToOpenAIBody(raw);
+  return handleChatCompletionsV3(req, res);
+}
+
 async function handleModels(req, res) {
   const llm = getAiWorkflowConfigOptional().llm || {};
   const defaultProvider = getDefaultProvider();
   const format = (req.query.format || '').toLowerCase();
   const profiles = LLMFactory.listModelProfiles();
+  const pathName = String(req.path || '');
 
-  if (format === 'openai' || req.path === '/api/v3/models') {
-    const list = profiles.map((p) => p.key);
-    const now = Math.floor(Date.now() / 1000);
-    return HttpResponse.json(res, {
-      object: 'list',
-      data: (list.length ? list : (defaultProvider ? [defaultProvider] : [])).map((p) => ({
-        id: p,
-        object: 'model',
-        created: now,
-        owned_by: 'xrk-agt'
-      }))
-    });
+  if (
+    format === 'openai'
+    || pathName === '/api/v3/models'
+    || pathName === '/v1/models'
+    || pathName === '/openai/v1/models'
+  ) {
+    return HttpResponse.json(res, buildOpenAIModelsPayload());
   }
 
   const vendors = LLMFactory.listVendors(profiles);
@@ -501,6 +547,32 @@ async function handleModels(req, res) {
   });
 }
 
+async function handleModelById(req, res) {
+  const modelId = decodeURIComponent(String(req.params?.modelId || req.params?.id || '').trim());
+  const payload = buildOpenAIModelPayload(modelId);
+  if (!payload) {
+    return HttpResponse.notFound(res, `Model not found: ${modelId || '(empty)'}`);
+  }
+  return HttpResponse.json(res, payload);
+}
+
+const chatCompletionsHandler = HttpResponse.asyncHandler(
+  async (req, res) => handleChatCompletionsV3(req, res),
+  'ai.chat.completions'
+);
+const modelsListHandler = HttpResponse.asyncHandler(
+  async (req, res) => handleModels(req, res),
+  'ai.models'
+);
+const modelByIdHandler = HttpResponse.asyncHandler(
+  async (req, res) => handleModelById(req, res),
+  'ai.models.id'
+);
+const anthropicMessagesHandler = HttpResponse.asyncHandler(
+  async (req, res) => handleAnthropicMessages(req, res),
+  'ai.v1.messages'
+);
+
 export default {
   name: 'ai-workflow',
   dsc: 'AI 工作流（含 SSE 流式输出）',
@@ -509,23 +581,79 @@ export default {
     {
       method: 'POST',
       path: '/api/v3/chat/completions',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
-        return handleChatCompletionsV3(req, res);
-      }, 'ai.v3.chat.completions')
+      handler: chatCompletionsHandler
+    },
+    {
+      method: 'POST',
+      path: '/v1/chat/completions',
+      systemAuth: 'ai.v1',
+      handler: chatCompletionsHandler
+    },
+    {
+      method: 'POST',
+      path: '/openai/v1/chat/completions',
+      systemAuth: 'ai.v1',
+      handler: chatCompletionsHandler
+    },
+    {
+      method: 'POST',
+      path: '/api/v3/v1/chat/completions',
+      handler: chatCompletionsHandler
     },
     {
       method: 'GET',
       path: '/api/v3/models',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
-        return handleModels(req, res);
-      }, 'ai.v3.models')
+      handler: modelsListHandler
+    },
+    {
+      method: 'GET',
+      path: '/api/v3/models/:modelId',
+      handler: modelByIdHandler
+    },
+    {
+      method: 'GET',
+      path: '/v1/models',
+      systemAuth: 'ai.v1',
+      handler: modelsListHandler
+    },
+    {
+      method: 'GET',
+      path: '/v1/models/:modelId',
+      systemAuth: 'ai.v1',
+      handler: modelByIdHandler
+    },
+    {
+      method: 'GET',
+      path: '/openai/v1/models',
+      systemAuth: 'ai.v1',
+      handler: modelsListHandler
+    },
+    {
+      method: 'GET',
+      path: '/openai/v1/models/:modelId',
+      systemAuth: 'ai.v1',
+      handler: modelByIdHandler
     },
     {
       method: 'GET',
       path: '/api/ai/models',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
-        return handleModels(req, res);
-      }, 'ai.models')
+      handler: modelsListHandler
+    },
+    {
+      method: 'POST',
+      path: '/v1/messages',
+      systemAuth: 'ai.v1',
+      handler: anthropicMessagesHandler
+    },
+    {
+      method: 'POST',
+      path: '/api/v3/messages',
+      handler: anthropicMessagesHandler
+    },
+    {
+      method: 'POST',
+      path: '/api/v3/v1/messages',
+      handler: anthropicMessagesHandler
     },
     {
       method: 'GET',
