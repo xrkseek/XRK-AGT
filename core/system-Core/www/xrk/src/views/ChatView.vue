@@ -3,7 +3,15 @@ export default { name: 'ChatView' };
 </script>
 
 <script setup>
-import { computed, nextTick, onActivated, onDeactivated, onMounted, ref, watch } from 'vue';
+import {
+  computed,
+  nextTick,
+  onActivated,
+  onDeactivated,
+  onMounted,
+  ref,
+  watch,
+} from 'vue';
 import {
   NButton,
   NCheckbox,
@@ -183,7 +191,9 @@ function replaceLastAssistant(patch) {
   if (patch.content != null && patch.segments == null) {
     next.text = patch.content;
     next.content = patch.content;
-    next.segments = patch.content ? [{ type: 'text', text: patch.content }] : [];
+    next.segments = patch.content
+      ? [{ type: 'text', text: patch.content }]
+      : [];
   }
   if (Array.isArray(patch.segments)) {
     next.segments = patch.segments;
@@ -201,7 +211,10 @@ function clearEventQuote() {
 function quoteMsg(m) {
   eventQuote.value = {
     id: m.id,
-    text: (m.text || m.content || segmentsToPlainText(m.segments) || '').slice(0, 500),
+    text: (m.text || m.content || segmentsToPlainText(m.segments) || '').slice(
+      0,
+      500
+    ),
   };
 }
 
@@ -220,7 +233,12 @@ function handleDevicePayload(data) {
   if (rememberMsgId(data)) return;
   const t = data.type;
 
-  if (t === 'register_ack' || t === 'heartbeat' || t === 'pong' || t === 'heartbeat_request') {
+  if (
+    t === 'register_ack' ||
+    t === 'heartbeat' ||
+    t === 'pong' ||
+    t === 'heartbeat_request'
+  ) {
     if (t === 'heartbeat_request') {
       device.sendJson({ type: 'heartbeat_response', timestamp: Date.now() });
     }
@@ -254,7 +272,8 @@ function handleDevicePayload(data) {
   if (t === 'tts') return;
 
   if (t === 'status' || t === 'typing') {
-    if (chat.mode === 'voice') voiceStatus.value = data.text || data.message || '输入中…';
+    if (chat.mode === 'voice')
+      voiceStatus.value = data.text || data.message || '输入中…';
     return;
   }
   if (t === 'error') {
@@ -278,7 +297,9 @@ function handleDevicePayload(data) {
       if (chat.mode === 'voice') setVoiceEmotion(data.params.emotion);
     }
     if (data.text || data.message) {
-      pushSegments('assistant', [{ type: 'text', text: data.text || data.message }]);
+      pushSegments('assistant', [
+        { type: 'text', text: data.text || data.message },
+      ]);
     }
     if (Array.isArray(data.mcp_tools) && data.mcp_tools.length) {
       pushSegments('assistant', [{ type: 'tools', tools: data.mcp_tools }]);
@@ -316,7 +337,7 @@ function handleDevicePayload(data) {
           .filter((s) => s.type === 'text')
           .map((s) => s.text);
       const media = extractSegments(data).filter((s) =>
-        ['image', 'video', 'record', 'file'].includes(s.type),
+        ['image', 'video', 'record', 'file'].includes(s.type)
       );
       if (textLines.length || data.title) {
         const msg = makeHistoryMessage('assistant', {
@@ -340,7 +361,8 @@ function handleDevicePayload(data) {
       return;
     }
     let segments = extractSegments(data);
-    if (!segments.length && data.text) segments = [{ type: 'text', text: data.text }];
+    if (!segments.length && data.text)
+      segments = [{ type: 'text', text: data.text }];
     if (Array.isArray(data.mcp_tools) && data.mcp_tools.length) {
       segments = [...segments, { type: 'tools', tools: data.mcp_tools }];
     }
@@ -400,7 +422,9 @@ voiceTts = createVoiceTts({
     voiceStatus.value = s;
   },
 });
-const needsDevice = computed(() => chat.mode === 'event' || chat.mode === 'voice');
+const needsDevice = computed(
+  () => chat.mode === 'event' || chat.mode === 'voice'
+);
 const deviceStatusLabel = computed(() => {
   const s = device.status.value;
   if (s === 'open') return '设备已连接';
@@ -433,27 +457,38 @@ const factoryOptions = computed(() =>
   vendors.value.map((v) => ({
     label: `${v.label || v.id}${v.endpoints?.length ? '' : '（未配置端点）'}`,
     value: v.id,
-  })),
+  }))
 );
 const endpointOptions = computed(() => {
   const eps = getVendorEndpoints(vendors.value, chat.settings.llmFactory);
   const opts = [{ label: '继承 ai-workflow 默认', value: '' }];
   for (const ep of eps) {
     opts.push({
-      label: ep.model ? `${ep.label || ep.key} · ${ep.model}` : ep.label || ep.key,
+      label: ep.model
+        ? `${ep.label || ep.key} · ${ep.model}`
+        : ep.label || ep.key,
       value: ep.key,
     });
   }
   return opts;
 });
 const endpointDisabled = computed(
-  () => !chat.settings.llmFactory || !getVendorEndpoints(vendors.value, chat.settings.llmFactory).length,
+  () =>
+    !chat.settings.llmFactory ||
+    !getVendorEndpoints(vendors.value, chat.settings.llmFactory).length
 );
 const endpointHint = computed(() =>
-  endpointMetaText(chat.llmOptions || {}, chat.settings.llmFactory, chat.settings.provider),
+  endpointMetaText(
+    chat.llmOptions || {},
+    chat.settings.llmFactory,
+    chat.settings.provider
+  )
 );
 const workspaceOptions = computed(() =>
-  (chat.workspacePresets || []).map((w) => ({ label: w.label || w.id, value: w.id })),
+  (chat.workspacePresets || []).map((w) => ({
+    label: w.label || w.id,
+    value: w.id,
+  }))
 );
 const workflowOptions = computed(() =>
   (chat.llmOptions?.workflows || [])
@@ -461,7 +496,7 @@ const workflowOptions = computed(() =>
       value: w.key || w.name || '',
       label: w.label || w.description || w.key || w.name || '',
     }))
-    .filter((w) => w.value),
+    .filter((w) => w.value)
 );
 
 async function scrollBottom(force = false) {
@@ -493,7 +528,8 @@ function enterChatBottom() {
 }
 
 function msgPlainText(m) {
-  if (Array.isArray(m.segments) && m.segments.length) return segmentsToPlainText(m.segments);
+  if (Array.isArray(m.segments) && m.segments.length)
+    return segmentsToPlainText(m.segments);
   return m.text || m.content || '';
 }
 
@@ -637,7 +673,10 @@ async function loadLlmOptions(force = false) {
       vendors: data?.vendors || [],
       workflows: data?.workflows || [],
     };
-    const sel = resolveAiLlmSelection(getLlmVendors(chat.llmOptions), chat.settings);
+    const sel = resolveAiLlmSelection(
+      getLlmVendors(chat.llmOptions),
+      chat.settings
+    );
     if (sel.changed) persistAiLlmSelection(chat.settings, sel);
     else {
       chat.settings.llmFactory = sel.factoryId;
@@ -665,7 +704,9 @@ async function loadWorkspaces() {
           { id: 'project', label: '项目根目录' },
         ];
     if (!chat.settings.workspace) {
-      chat.settings.workspace = normalizeWorkspaceId(data?.defaultId || 'default');
+      chat.settings.workspace = normalizeWorkspaceId(
+        data?.defaultId || 'default'
+      );
       chat.persistWorkspace();
     }
   } catch {
@@ -713,7 +754,10 @@ async function sendAi(text, { skipUserPush = false } = {}) {
   const assistant = makeHistoryMessage('assistant', { text: '' });
   messages.value = [...messages.value, assistant];
 
-  const provider = validateChatProviderForFactory(chat.llmOptions, chat.settings);
+  const provider = validateChatProviderForFactory(
+    chat.llmOptions,
+    chat.settings
+  );
   if (provider !== (chat.settings.provider || '')) {
     chat.settings.provider = provider;
     try {
@@ -783,14 +827,17 @@ async function sendAi(text, { skipUserPush = false } = {}) {
         }
       },
       onError: (err) => {
-        if (err?.name !== 'AbortError') message.error(err.message || String(err));
+        if (err?.name !== 'AbortError')
+          message.error(err.message || String(err));
       },
     });
 
     if (state.error && state.error.name !== 'AbortError' && !state.fullText) {
       replaceLastAssistant({ content: `错误：${state.error.message}` });
     } else {
-      const segs = state.segments?.length ? state.segments : liveSegments(state);
+      const segs = state.segments?.length
+        ? state.segments
+        : liveSegments(state);
       replaceLastAssistant({
         text: state.fullText,
         content: state.fullText,
@@ -873,9 +920,16 @@ async function sendEvent(text) {
         clearEventPending();
       } else {
         const reply =
-          json.message || json.reply || json.content || json.data?.message || '';
+          json.message ||
+          json.reply ||
+          json.content ||
+          json.data?.message ||
+          '';
         if (reply && !isAckOnlyText(reply)) {
-          push('assistant', typeof reply === 'string' ? reply : JSON.stringify(reply, null, 2));
+          push(
+            'assistant',
+            typeof reply === 'string' ? reply : JSON.stringify(reply, null, 2)
+          );
           clearEventPending();
         } else if (!res.ok) {
           push('assistant', `(HTTP ${res.status})`);
@@ -905,7 +959,10 @@ async function sendVoice(text) {
   const assistant = makeHistoryMessage('assistant', { text: '' });
   messages.value = [...messages.value, assistant];
 
-  const provider = validateChatProviderForFactory(chat.llmOptions, chat.settings);
+  const provider = validateChatProviderForFactory(
+    chat.llmOptions,
+    chat.settings
+  );
   if (provider !== (chat.settings.provider || '')) {
     chat.settings.provider = provider;
   }
@@ -1007,7 +1064,11 @@ function floatTo16BitPCM(float32Array) {
 }
 
 function pcmToHex(int16) {
-  const bytes = new Uint8Array(int16.buffer, int16.byteOffset, int16.byteLength);
+  const bytes = new Uint8Array(
+    int16.buffer,
+    int16.byteOffset,
+    int16.byteLength
+  );
   let hex = '';
   for (let i = 0; i < bytes.length; i++) {
     hex += bytes[i].toString(16).padStart(2, '0');
@@ -1224,7 +1285,7 @@ watch(
       setVoiceEmotion('happy');
       voiceStatus.value = '点麦克风开始';
     }
-  },
+  }
 );
 
 onMounted(async () => {
@@ -1250,7 +1311,11 @@ onDeactivated(() => {
 <template>
   <div
     class="chat-page"
-    :class="{ 'is-dragover': dragOver, 'side-open': sideOpen, 'is-mobile-page': isMobile }"
+    :class="{
+      'is-dragover': dragOver,
+      'side-open': sideOpen,
+      'is-mobile-page': isMobile,
+    }"
     :style="{ '--list-pane-w': `${listPaneW}px` }"
     @dragover.prevent="dragOver = chat.mode !== 'voice'"
     @dragleave.prevent="dragOver = false"
@@ -1274,7 +1339,11 @@ onDeactivated(() => {
         </div>
 
         <template v-if="chat.mode === 'ai'">
-          <button type="button" class="settings-toggle" @click="settingsOpen = !settingsOpen">
+          <button
+            type="button"
+            class="settings-toggle"
+            @click="settingsOpen = !settingsOpen"
+          >
             AI 设置 {{ settingsOpen ? '▾' : '▸' }}
           </button>
           <div v-show="settingsOpen" class="ai-settings">
@@ -1337,18 +1406,28 @@ onDeactivated(() => {
                   :label="w.label"
                   size="small"
                 />
-                <p v-if="!workflowOptions.length" class="hint">暂无带 MCP 的工作流</p>
+                <p v-if="!workflowOptions.length" class="hint">
+                  暂无带 MCP 的工作流
+                </p>
               </div>
             </NCheckboxGroup>
 
-            <NButton size="tiny" secondary @click="openRemoteMcpConfig">远程 MCP 配置</NButton>
-            <NButton size="tiny" quaternary @click="loadLlmOptions(true)">刷新模型列表</NButton>
+            <NButton size="tiny" secondary @click="openRemoteMcpConfig"
+              >远程 MCP 配置</NButton
+            >
+            <NButton size="tiny" quaternary @click="loadLlmOptions(true)"
+              >刷新模型列表</NButton
+            >
           </div>
         </template>
         <template v-else-if="chat.mode === 'voice'">
           <div class="device-box">
-            <NTag size="small" :bordered="true" :type="deviceStatusType">{{ deviceStatusLabel }}</NTag>
-            <NButton size="tiny" secondary @click="device.ensure()">重连设备</NButton>
+            <NTag size="small" :bordered="true" :type="deviceStatusType">{{
+              deviceStatusLabel
+            }}</NTag>
+            <NButton size="tiny" secondary @click="device.ensure()"
+              >重连设备</NButton
+            >
             <label class="lbl">LLM 工厂</label>
             <NSelect
               size="small"
@@ -1371,8 +1450,12 @@ onDeactivated(() => {
         </template>
         <template v-else>
           <div class="device-box">
-            <NTag size="small" :bordered="true" :type="deviceStatusType">{{ deviceStatusLabel }}</NTag>
-            <NButton size="tiny" secondary @click="device.ensure()">重连设备</NButton>
+            <NTag size="small" :bordered="true" :type="deviceStatusType">{{
+              deviceStatusLabel
+            }}</NTag>
+            <NButton size="tiny" secondary @click="device.ensure()"
+              >重连设备</NButton
+            >
             <p class="hint side-tip">设备通道 · 图文 · 引用</p>
           </div>
         </template>
@@ -1386,7 +1469,10 @@ onDeactivated(() => {
       />
     </aside>
 
-    <section class="chat-main brutal-card" :class="{ 'voice-main': chat.mode === 'voice' }">
+    <section
+      class="chat-main brutal-card"
+      :class="{ 'voice-main': chat.mode === 'voice' }"
+    >
       <header>
         <div class="title">
           <button
@@ -1403,9 +1489,14 @@ onDeactivated(() => {
             class="emo-dot"
             :data-emo="chat.mode === 'voice' ? voiceEmotion : headerEmotion"
             aria-hidden="true"
-          >{{ emotionGlyph[chat.mode === 'voice' ? voiceEmotion : headerEmotion] }}</span>
+            >{{
+              emotionGlyph[chat.mode === 'voice' ? voiceEmotion : headerEmotion]
+            }}</span
+          >
           <strong>{{ headerTitle }}</strong>
-          <NTag size="small" :bordered="true" :type="statusType">{{ statusLabel }}</NTag>
+          <NTag size="small" :bordered="true" :type="statusType">{{
+            statusLabel
+          }}</NTag>
         </div>
         <NButton size="small" secondary @click="clearChat">清空</NButton>
       </header>
@@ -1432,7 +1523,9 @@ onDeactivated(() => {
           :message="m"
           :mode="chat.mode"
           :streaming="streaming"
-          :is-last-streaming="streaming && i === messages.length - 1 && m.role === 'assistant'"
+          :is-last-streaming="
+            streaming && i === messages.length - 1 && m.role === 'assistant'
+          "
           @preview="openPreview"
           @copy="copyMsg"
           @delete="deleteMsg"
@@ -1443,15 +1536,31 @@ onDeactivated(() => {
 
       <div v-if="eventQuote && chat.mode === 'event'" class="quote-strip">
         <span class="quote-lbl">引用</span>
-        <span class="quote-text">{{ eventQuote.text.length > 80 ? eventQuote.text.slice(0, 80) + '…' : eventQuote.text }}</span>
-        <button type="button" class="quote-x" aria-label="取消引用" @click="clearEventQuote">×</button>
+        <span class="quote-text">{{
+          eventQuote.text.length > 80
+            ? eventQuote.text.slice(0, 80) + '…'
+            : eventQuote.text
+        }}</span>
+        <button
+          type="button"
+          class="quote-x"
+          aria-label="取消引用"
+          @click="clearEventQuote"
+        >
+          ×
+        </button>
       </div>
 
-      <div v-if="attachments.length && chat.mode !== 'voice'" class="attach-strip">
+      <div
+        v-if="attachments.length && chat.mode !== 'voice'"
+        class="attach-strip"
+      >
         <div v-for="a in attachments" :key="a.id" class="attach-item">
           <img v-if="a.isImage" :src="a.previewUrl" alt="" />
           <span v-else class="attach-file">{{ a.name }}</span>
-          <button type="button" class="attach-rm" @click="removeAttach(a.id)">×</button>
+          <button type="button" class="attach-rm" @click="removeAttach(a.id)">
+            ×
+          </button>
         </div>
       </div>
 
@@ -1460,7 +1569,9 @@ onDeactivated(() => {
           type="button"
           class="tool-btn"
           :class="{ on: micActive }"
-          :title="chat.mode === 'voice' ? '麦克风（结束即发送）' : '语音填入输入框'"
+          :title="
+            chat.mode === 'voice' ? '麦克风（结束即发送）' : '语音填入输入框'
+          "
           :aria-label="chat.mode === 'voice' ? '麦克风' : '语音输入'"
           @click="toggleMic"
         >
@@ -1552,8 +1663,12 @@ onDeactivated(() => {
     </section>
 
     <div v-if="previewUrl" class="img-preview" @click.self="closePreview">
-      <button type="button" class="img-preview-close" @click="closePreview">×</button>
-      <button type="button" class="img-preview-save" @click="savePreview">保存</button>
+      <button type="button" class="img-preview-close" @click="closePreview">
+        ×
+      </button>
+      <button type="button" class="img-preview-save" @click="savePreview">
+        保存
+      </button>
       <img :src="previewUrl" alt="预览" />
     </div>
   </div>
@@ -1687,9 +1802,15 @@ header {
   flex-shrink: 0;
 }
 .emo-dot[data-emo='think'],
-.emo-dot[data-emo='listen'] { background: var(--cyan); }
-.emo-dot[data-emo='sad'] { background: var(--red); }
-.emo-dot[data-emo='message'] { background: var(--pink); }
+.emo-dot[data-emo='listen'] {
+  background: var(--cyan);
+}
+.emo-dot[data-emo='sad'] {
+  background: var(--red);
+}
+.emo-dot[data-emo='message'] {
+  background: var(--pink);
+}
 .quote-strip {
   display: flex;
   align-items: center;
@@ -1701,7 +1822,10 @@ header {
   background: color-mix(in srgb, var(--pink) 14%, var(--card));
   font-size: var(--font-xs);
 }
-.quote-lbl { font-weight: 800; flex-shrink: 0; }
+.quote-lbl {
+  font-weight: 800;
+  flex-shrink: 0;
+}
 .quote-text {
   flex: 1;
   min-width: 0;
@@ -1800,9 +1924,15 @@ header {
   line-height: 1;
 }
 .voice-face[data-emo='listen'],
-.voice-face[data-emo='think'] { background: var(--cyan); }
-.voice-face[data-emo='sad'] { background: var(--red); }
-.voice-face[data-emo='message'] { background: var(--pink); }
+.voice-face[data-emo='think'] {
+  background: var(--cyan);
+}
+.voice-face[data-emo='sad'] {
+  background: var(--red);
+}
+.voice-face[data-emo='message'] {
+  background: var(--pink);
+}
 .voice-wave {
   display: flex;
   align-items: flex-end;
@@ -1817,15 +1947,31 @@ header {
   border: 1.5px solid var(--ink);
   background: var(--cyan);
 }
-.voice-wave.active i { animation: wave 0.7s ease-in-out infinite alternate; }
-.voice-wave.active i:nth-child(2) { animation-delay: 0.08s; }
-.voice-wave.active i:nth-child(3) { animation-delay: 0.16s; }
-.voice-wave.active i:nth-child(4) { animation-delay: 0.24s; }
-.voice-wave.active i:nth-child(5) { animation-delay: 0.32s; }
-.voice-wave.active i:nth-child(6) { animation-delay: 0.4s; }
+.voice-wave.active i {
+  animation: wave 0.7s ease-in-out infinite alternate;
+}
+.voice-wave.active i:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.voice-wave.active i:nth-child(3) {
+  animation-delay: 0.16s;
+}
+.voice-wave.active i:nth-child(4) {
+  animation-delay: 0.24s;
+}
+.voice-wave.active i:nth-child(5) {
+  animation-delay: 0.32s;
+}
+.voice-wave.active i:nth-child(6) {
+  animation-delay: 0.4s;
+}
 @keyframes wave {
-  from { height: 6px; }
-  to { height: 26px; }
+  from {
+    height: 6px;
+  }
+  to {
+    height: 26px;
+  }
 }
 .voice-status {
   margin: 0;
@@ -1840,16 +1986,25 @@ header {
   flex-shrink: 0;
   margin-top: auto;
 }
-.composer-input { flex: 1; min-width: 0; }
+.composer-input {
+  flex: 1;
+  min-width: 0;
+}
 .composer-actions {
   display: flex;
   flex-direction: column;
   gap: 4px;
   flex-shrink: 0;
 }
-.voice-main .composer { align-items: center; }
-.voice-main .composer-actions { flex-direction: row; }
-.hidden-file { display: none; }
+.voice-main .composer {
+  align-items: center;
+}
+.voice-main .composer-actions {
+  flex-direction: row;
+}
+.hidden-file {
+  display: none;
+}
 .tool-btn {
   width: 36px;
   height: 36px;
@@ -1878,7 +2033,9 @@ header {
   min-width: 72px;
 }
 @keyframes pulse {
-  50% { transform: scale(1.06); }
+  50% {
+    transform: scale(1.06);
+  }
 }
 .attach-strip {
   display: flex;
