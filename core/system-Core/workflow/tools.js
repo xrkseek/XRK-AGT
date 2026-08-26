@@ -1,4 +1,4 @@
-import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
+﻿import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import path from 'path';
 import { BaseTools } from '#utils/base-tools.js';
@@ -19,7 +19,7 @@ const IS_WINDOWS = process.platform === 'win32';
  *
  * 与 chat 融合：AI 助手 `mergeWorkflows` 含 `tools` 时，工具挂入合成实例；
  * `buildSystemPrompt()` 经 `collectAuxiliaryStreamPrompts` 注入 chat system 的「可用能力」段。
- * 细则见 `agents/skills/standard/core/agent-tools/SKILL.md`、`docs/mcp-guide.md`。
+ * 细则见 `.xrk/skills/core/agent-tools/SKILL.md`、`docs/mcp-guide.md`。
  */
 export default class ToolsStream extends AiWorkflow {
   /** 工作区级会话待办（对齐 OpenCode todowrite / Cline plan） */
@@ -604,7 +604,7 @@ export default class ToolsStream extends AiWorkflow {
     return `【基础工具】read / grep / search_replace / write / delete_file / list_files / run / apply_edit / verify / repo_map / update_todos
 工作区 cwd: ${ws}
 陌生仓库先 repo_map(query=任务关键词) 再 grep/read。改已有：grep → read → search_replace；多文件/多处用 apply_edit（可 dryRun），改后 verify(command=…)。write 仅新建；已存在须 overwrite=true。
-托管技能（对应 agents/skills/standard）可改；主人 #skills更新 会按种子覆盖托管包。用户自建 skills/ 目录不受托管更新影响。装技能见 agent-skillhub。
+托管技能（对应 .xrk/skills）可改；主人 #skills更新 会按种子覆盖托管包。用户自建 skills/ 目录不受托管更新影响。装技能见 agent-skillhub。
 多步任务用 update_todos。run / verify 需 tools.file.runEnabled=true（默认关）；危险命令经 security.toolScan（可选 approval）。`;
   }
 }

@@ -3,7 +3,7 @@ name: xrk-docs
 description: 需要快速定位「该看哪份文档/哪段代码/哪份配置」时使用；提供文档导航与权威路径。
 ---
 
-> **读者：Coding Agent**。产品模型技能在 `agents/skills/`，勿与本索引混用。
+> **读者：Coding Agent**。产品模型技能在 `.xrk/skills/`，勿与本索引混用。
 
 ## 导航
 
@@ -38,4 +38,4 @@ description: 需要快速定位「该看哪份文档/哪段代码/哪份配置�
 - 配置类：给出 YAML 路径 + 字段 + 最小示例。
 - 行为类：给出代码文件 + 函数/类名。
 - 文档与代码冲突：以代码为准。
-- 分清读者：改代码 → `xrk-*`；办事助手怎么用工具 → `agents/skills/.../agent-tools`。
+- 分清读者：改代码 → `xrk-*`；办事助手怎么用工具 → `.xrk/skills/core/agent-tools`。

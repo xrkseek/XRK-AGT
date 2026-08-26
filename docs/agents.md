@@ -1,7 +1,7 @@
 # 办事助手说明
 
 办事助手是 XRK 运行时里的对话 Agent：在群聊、控制台或 stdin 里查资料、写文稿、整理表格、管理工作区文件。  
-种子在 `agents/`；运行时用 `data/ai-workspace/{id}/`（首次从种子复制，之后以工作区为准）。
+种子在 `agents/` + `.xrk/skills/`；运行时用 `data/ai-workspace/{id}/`（首次从种子复制，之后以工作区为准）。
 
 ## 相关文档
 
@@ -10,12 +10,12 @@
 | **本文** | 用户 / 运维 / 维护者 | 办事助手怎么用、改哪里、实现索引 |
 | **[agent-context.md](agent-context.md)** | 框架 / Core / 运维 | 概念地图 + 消息三层 + 出站/安全 + Workspace + 工具环 |
 | 仓库根 [`AGENTS.md`](../AGENTS.md) | **Coding Agent** / Core 开发 | 框架放码、`xrk-*` skill（**不**注入办事助手） |
-| `agents/skills/standard/**` | **产品 Agent 模型** | 工具/场景细则（`tools.read`） |
+| `.xrk/skills/**` | **产品 Agent 模型** | 工具/场景细则（`tools.read`） |
 | `~/.cursor/AGENTS.md` | 本机所有项目 | 全局工程师技能、代理、生图等 |
 | `agents/workspace/AGENTS.md` → `data/ai-workspace/{id}/AGENTS.md` | 办事助手模型 | 注入 prompt 的办事规则 |
 | `core/<core>/AGENTS.md`（若有） | 产品 Agent | 该产品人格与工具边界 |
 
-调办事助手行为：工作区或 `agents/` 种子（见「想改助手行为时」）。  
+调办事助手行为：工作区或 `agents/` + `.xrk/skills/` 种子（见「想改助手行为时」）。  
 写框架 / Core：根 [`AGENTS.md`](../AGENTS.md)。  
 **一次 Agent 跑通、消息三层、Workspace/rules/skills 注入**：见 **[agent-context.md](agent-context.md)**（工程契约真源）。
 
@@ -30,7 +30,7 @@
 | 人设 / MCP 说话纪律 | chat 工作流 | `ai_config.persona` · chat 协议文案 |
 | 工作区人格与记忆 | `data/ai-workspace/{id}/` | AGENTS / USER / MEMORY… |
 | 行为规则全文 | `agents/rules/`（直接注入）∪ 工作区 `rules/`（用户加法；同路径才覆盖） | 共享改 `agents/rules/`；定制只写工作区 |
-| 技能目录 | `agents/skills/standard/` + 工作区 `skills/` | 细则靠 `tools.read`；安装见 **agent-skillhub** |
+| 技能目录 | `.xrk/skills/` + 工作区 `skills/` | 细则靠 `tools.read`；安装见 **agent-skillhub** |
 | 角色路由提示 | `subagents.yaml` | 不启隔离子会话 |
 
 工具并集：`ai_config.mergeWorkflows`（开放模式可并入 web/browser；`remote-mcp.*` 须显式列入）。
@@ -92,7 +92,7 @@
 | `docs/` 等 | 文稿与数据（按需自建） |
 | `subagents.yaml`（可选） | 覆盖种子角色清单 |
 
-日常改 `data/ai-workspace/{id}/`。更新所有人默认模板时改仓库 `agents/` 种子。
+日常改 `data/ai-workspace/{id}/`。更新所有人默认模板时改仓库 `agents/` + `.xrk/skills/` 种子。
 
 ### 想改助手行为时
 
@@ -102,7 +102,7 @@
 | 称呼、偏好 | `USER.md`、`memory/MEMORY.md` |
 | 本机路径、邮箱、依赖 | `TOOLS.md`、`ENV.md` |
 | 注入用行为规则 | 共享改 `agents/rules/`；本工作区加法写 `rules/`（同名可覆盖共享） |
-| 技能细则 | 工作区 `skills/`，或 `agents/skills/standard/` |
+| 技能细则 | 工作区 `skills/`，或 `.xrk/skills/` |
 | 安装 / 同步技能 | **agent-skillhub**；主人 `#skills更新`（托管覆盖；自建不动） |
 | 工作区 Core 业务 | 工作区 `core/workspace-Core/`（**agent-core-dev**；可读项目根 `.cursor/skills/xrk-*`）；种子 `agents/workspace/core/` |
 | 主助手 / 专项角色 | 工作区 `subagents.yaml`（优先）或 `agents/subagents.yaml` |
@@ -125,7 +125,7 @@
 | **环境与工作区** | 依赖、工作区文件、Shell/Web/桌面 | office-env-setup、office-env-workspace、office-env-shell、office-env-web、office-env-desktop |
 | **长文与专业写作** | 长文档、技术写作 | office-long-doc、office-tech-writing |
 
-自建/商店装到 **`data/ai-workspace/{id}/skills/`**（SkillHub：`skillhub install <名> --dir <该目录>`，见 [skillhub 安装说明](https://skillhub.cn/install/skillhub.md) · **agent-skillhub**）。SKILL 写法见 **agent-build-skill**；工作区 Core 业务见 **agent-core-dev**（`core/workspace-Core/`，可导航读 `.cursor/skills/xrk-*`）。路由表：`agents/skills/standard/core/agent-core/SKILL.md`。
+自建/商店装到 **`data/ai-workspace/{id}/skills/`**（SkillHub：`skillhub install <名> --dir <该目录>`，见 [skillhub 安装说明](https://skillhub.cn/install/skillhub.md) · **agent-skillhub**）。SKILL 写法见 **agent-build-skill**；工作区 Core 业务见 **agent-core-dev**（`core/workspace-Core/`，可导航读 `.cursor/skills/xrk-*`）。路由表：`.xrk/skills/core/agent-core/SKILL.md`。
 
 ---
 
@@ -175,7 +175,7 @@
 
 | 主题 | 路径 |
 |------|------|
-| 仓库种子 | `agents/` · [agents/README.md](../agents/README.md) |
+| 仓库种子 | `agents/` + `.xrk/skills/` · [agents/README.md](../agents/README.md) |
 | 运行时工作区 | `data/ai-workspace/{id}/` |
 | 运行链 / 上下文组成 | **[agent-context.md](agent-context.md)** |
 | 注入逻辑 | `src/utils/agent-workspace.js` |
@@ -184,7 +184,7 @@
 | Schema | `core/system-Core/commonconfig/system/system-ai-workflow.js` |
 | 文件工具 | `core/system-Core/workflow/tools.js`、`src/utils/base-tools.js` |
 | Agents 清单种子 | `agents/subagents.yaml` |
-| 技能种子 | `agents/skills/standard/`（含 agent-skillhub） |
+| 技能种子 | `.xrk/skills/`（含 agent-skillhub） |
 | 共享行为规则 | `agents/rules/`（运行时直接注入，不拷进工作区） |
 | 工作区规则（用户加法） | `data/ai-workspace/{id}/rules/` |
 | Microagents（triggers 命中整段注入） | `agents/microagents/`（如 **plugin-write**；写工作区 Core 时少 read 长 skill） |

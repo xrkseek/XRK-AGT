@@ -1,12 +1,12 @@
 /**
  * goose Recipe 可移植核：YAML/JSON 配方（instructions + prompt + parameters）。
- * 目录：agents/recipes/、工作区 recipes/、~/.xrk/recipes/
+ * 目录：`agents/recipes/`、工作区 recipes/、~/.xrk/recipes/
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import YAML from 'yaml';
-import { getProjectRoot, resolveAgentWorkspaceAbs } from '#utils/agent-workspace-paths.js';
+import { getProjectRoot, projectAgentsAbs, resolveAgentWorkspaceAbs } from '#utils/agent-workspace-paths.js';
 
 /**
  * @typedef {{
@@ -73,7 +73,7 @@ function listRecipeFiles(dir, max = 80) {
 /** @returns {Recipe[]} */
 export function listRecipes() {
   const roots = [
-    path.join(getProjectRoot(), 'agents', 'recipes'),
+    projectAgentsAbs(getProjectRoot(), 'recipes'),
     path.join(resolveAgentWorkspaceAbs(), 'recipes'),
     path.join(os.homedir(), '.xrk', 'recipes')
   ];

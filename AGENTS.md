@@ -1,4 +1,4 @@
-# AGENTS.md — XRK-AGT
+﻿# AGENTS.md — XRK-AGT
 
 面向**克隆本仓、开发 / 维护 Core**（以及排查 Runtime）的开发者与 Coding Agent。
 
@@ -56,4 +56,4 @@ core/<core>/
 | `AGENTS.md` · `skills/`（若有） | 产品 Agent | 工作区与工具边界；**不写** LLM 工厂 / commonconfig / `src` 路径 |
 | 独立 Core 仓 `.cursor/rules/` | 该产品 | 精工约定；**勿**塞进主仓 alwaysApply |
 
-办事助手（产品模型，不是写框架）：[docs/agents.md](docs/agents.md) · `agents/`。
+办事助手（产品模型，不是写框架）：[docs/agents.md](docs/agents.md) · `agents/` + `.xrk/skills/`。

@@ -1,11 +1,11 @@
-# Skill 索引（本仓库）
+﻿# Skill 索引（本仓库）
 
 Coding Agent / 克隆本仓写 Core：根 [`AGENTS.md`](../../AGENTS.md)。办事助手运营：[docs/agents.md](../../docs/agents.md)。
 
 | 读者 | 放哪 | 写什么 |
 |------|------|--------|
 | **Coding Agent** | `.cursor/skills/xrk-*` · 根 `AGENTS.md` | 放码、Loader、配置、工厂、Node 26 |
-| **产品 / 办事助手模型** | `agents/skills/standard/**` | 工具与场景；写工作区 Core 时 **只读** `xrk-*`，勿改 `.cursor` / `src` |
+| **产品 / 办事助手模型** | `.xrk/skills/**` | 工具与场景；写工作区 Core 时 **只读** `xrk-*`，勿改 `.cursor` / `src` |
 | **人读契约** | `docs/*` | 现行行为 |
 
 `.claude/` · `.trae/` 由 `sync-skills.ps1` 从 `.cursor/skills` 生成，以 `.cursor` 为准。
@@ -38,4 +38,4 @@ Coding Agent / 克隆本仓写 Core：根 [`AGENTS.md`](../../AGENTS.md)。办�
 - `xrk-project-overview` · `xrk-renderer` · `xrk-subserver` · `xrk-system-core`
 - `xrk-tasker` · `xrk-v3-api` · `xrk-coding-style` · `xrk-crawl`
 
-产品 Agent 技能在 `agents/skills/standard/`（与上表分用）。
+产品 Agent 技能在 `.xrk/skills/`（与上表分用）。

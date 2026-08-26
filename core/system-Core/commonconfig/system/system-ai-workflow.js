@@ -375,7 +375,7 @@ export const aiWorkflowConfig = {
               includeMicroagents: {
                 type: 'boolean',
                 label: '触发式 microagents',
-                description: '扫描 agents/microagents、.openhands/microagents、带 triggers 的 SKILL.md；用户文本命中则整段注入',
+                description: '扫描 agents/microagents、带 triggers 的 SKILL.md；用户文本命中则整段注入',
                 default: true,
                 component: 'Switch'
               },
@@ -470,7 +470,7 @@ export const aiWorkflowConfig = {
                 type: 'array',
                 label: '自定义技能目录',
                 description:
-                  '可填相对项目根或绝对路径；为空则回退 agents/skills/standard（示例：`agents/skills/standard/core`）',
+                  '可填相对项目根或绝对路径；为空则回退 .xrk/skills（示例：`.xrk/skills/core`）',
                 itemType: 'string',
                 default: [],
                 component: 'Tags'

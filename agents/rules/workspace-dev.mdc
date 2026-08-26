@@ -1,6 +1,7 @@
 ---
 description: 工作区写 Core——边界 + 场景选型 + message/MCP 骨架（细则 agent-core-dev）
 alwaysApply: true
+xrk-inject: false
 ---
 
 # 工作区写 Core

@@ -37,7 +37,7 @@
 | `core/<name>/` | 业务：plugin / http / workflow / tasker / events / commonconfig / www | system-Core 是 |
 | `config/default_config/` | 配置模板（仅 AGT / 工厂 / system-Core；产品业务 yaml 见 `core/<名>/default/`） | 是 |
 | `data/` | 运行期数据（按端口分目录；办事助手工作区在 `data/ai-workspace/`） | 否（gitignore） |
-| `agents/` | 办事助手种子：`workspace/` · `rules/` · `skills/standard/` · `subagents.yaml`（契约 [agents.md](agents.md)、种子 [agents/README.md](../agents/README.md)） | 是 |
+| `agents/` + `.xrk/skills/` | 办事助手种子：`workspace/` · `rules/` · `.xrk/skills/` · `subagents.yaml`（契约 [agents.md](agents.md)、种子 [agents/README.md](../agents/README.md)） | 是 |
 | 根 `AGENTS.md` | Cursor / 框架开发入口 | 是 |
 | `core/system-Core/www/xrk/` | 内置 Web 控制台 | 是 |
 | `core/system-Core/site/` | 站点根静态（`/`，favicon 等；`paths.www`） | 是 |
@@ -109,7 +109,7 @@
 - **[工厂系统文档](factory.md)** - LLM（含多模态）/ASR/TTS 工厂系统，统一管理多厂商 AI 服务提供商
 - **[子服务端 API 文档](subserver-api.md)** - Python 子服务端底层系统接口与扩展装载说明
 
-**技能分流**：Coding → `.cursor/skills/xrk-*`；产品 Agent → `agents/skills/standard/`（见 [SKILL_INDEX](../.cursor/skills/SKILL_INDEX.md)）。
+**技能分流**：Coding → `.cursor/skills/xrk-*`；产品 Agent → `.xrk/skills/`（见 [SKILL_INDEX](../.cursor/skills/SKILL_INDEX.md)）。
 
 ### ⚙️ 配置与工具
 

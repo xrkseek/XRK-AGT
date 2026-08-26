@@ -4,9 +4,9 @@
  * 分区顺序固定（跨请求稳定，利于 prefix cache）：
  *   1. assistant — AGENTS.md + WORKSPACE_TEMPLATE_RELS + 日更 memory + MEMORY.md
  *   2. contextFiles — agentWorkspace.contextFiles
- *   3. rules — agents/rules（共享直接注入）∪ 工作区 rules/（用户加法；同名覆盖）
+ *   3. rules — `agents/rules`（共享直接注入）∪ 工作区 rules/（用户加法；同名覆盖）
  *   4. Skills — customSkillRoots / standard + 工作区 skills/
- *   5. Agents — agents/subagents.yaml|yml|json（或工作区同名；OpenCode 式 mode 清单，非隔离执行）
+ *   5. Agents — `agents/subagents.yaml`（或工作区同名；OpenCode 式 mode 清单，非隔离执行）
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,18 +23,19 @@ import { createHash } from 'node:crypto';
 import { reconcileSystemContext } from '#utils/llm/system-context.js';
 import {
   AGENTS_MD,
+  AGENT_MANIFEST_BASENAMES,
   WORKSPACE_TEMPLATE_RELS,
   LONG_TERM_MEMORY_REL,
   PROJECT_RULES_DIR_REL,
   WORKSPACE_RULES_DIR,
+  projectAgentsAbs,
+  projectAgentsRel,
   getProjectRoot,
   resolveAgentWorkspaceAbs,
   resolveSkillRootAbsList,
 } from '#utils/agent-workspace-paths.js';
 
 /** 工作区优先，再项目根 agents/ */
-const AGENT_MANIFEST_BASENAMES = ['subagents.yaml', 'subagents.yml', 'subagents.json'];
-
 const workspaceFileCache = new Map();
 
 function formatPermissionHints(permissions) {
@@ -69,7 +70,7 @@ function formatAgentCatalogLine(item) {
 }
 
 /**
- * 解析 agents 清单：工作区 subagents.* 优先覆盖项目根 agents/subagents.*
+ * 解析 agents 清单：工作区 subagents.* 优先覆盖项目根 `agents/subagents.*`
  * @returns {{ list: object[], sourceRel: string } | null}
  */
 function loadAgentCatalog(workspaceRoot, projectRoot) {
@@ -78,8 +79,8 @@ function loadAgentCatalog(workspaceRoot, projectRoot) {
     candidates.push({ root: workspaceRoot, abs: path.join(workspaceRoot, base), rel: base });
     candidates.push({
       root: projectRoot,
-      abs: path.join(projectRoot, 'agents', base),
-      rel: `agents/${base}`,
+      abs: projectAgentsAbs(projectRoot, base),
+      rel: projectAgentsRel(base),
     });
   }
 
@@ -163,7 +164,7 @@ function indexRuleFiles(rulesDir) {
 }
 
 /**
- * 项目 agents/rules ∪ 工作区 rules/；工作区同名覆盖共享（工作区仅用户加法，共享不 seed 进工作区）。
+ * 项目 `agents/rules` ∪ 工作区 rules/；工作区同名覆盖共享（工作区仅用户加法，共享不 seed 进工作区）。
  * @returns {string}
  */
 function collectMergedRulesText(projectRoot, workspaceRoot, maxChars, readCached) {

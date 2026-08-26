@@ -77,8 +77,8 @@ workspace:
     enabled: true
     maxEntries: 200
 
-# Agent 工作区上下文（data/ai-workspace/{id} 内 AGENTS/SOUL/USER/memory + agents/rules|skills → system prompt）
-# 根目录 AGENTS.md 仅 IDE；agents/workspace/ 仅为首次引导模板，运行时不从项目根注入
+# Agent 工作区上下文（data/ai-workspace/{id} 内 AGENTS/SOUL/USER/memory + agents/rules|.xrk/skills → system prompt）
+# 根目录 AGENTS.md 仅 IDE；agents/workspace/ 仅为首次引导模板，运行时不从项目根 inject standing
 agentWorkspace:
   enabled: true
   root: ""                 # 留空=data/ai-workspace/{workspace.defaultId}；请求 workspace 会覆盖
@@ -100,8 +100,8 @@ agentWorkspace:
   maxSkillsPromptChars: 18000
   maxSkillFileBytes: 256000
   customSkillRoots:
-    - "agents/skills/standard/core"  # agent-core / tools / core-dev / skillhub / build-skill / memory…
-    - "agents/skills/standard"       # office-* 等；工作区 data/ai-workspace/{id}/skills 另自动并入
+    - ".xrk/skills/core"  # agent-core / tools / core-dev / skillhub / build-skill / memory…
+    - ".xrk/skills"       # office-* 等；工作区 data/ai-workspace/{id}/skills 另自动并入
   # 另自动合并 data/ai-workspace/{id}/skills（种子缺啥补啥；托管覆盖见 #skills更新）
   maxRulesChars: 12000
   maxAgentMdChars: 12000

@@ -6,15 +6,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
-import { getProjectRoot, resolveAgentWorkspaceAbs } from '#utils/agent-workspace-paths.js';
+import { getProjectRoot, PROJECT_MICROAGENTS_DIR_REL, PROJECT_SKILLS_STANDARD_REL, resolveAgentWorkspaceAbs } from '#utils/agent-workspace-paths.js';
 import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
 
-const REL_ROOTS = [
-  'agents/microagents',
-  '.openhands/microagents',
-  '.agents/skills',
-  'agents/skills'
-];
+const REL_ROOTS = [PROJECT_MICROAGENTS_DIR_REL, PROJECT_SKILLS_STANDARD_REL];
 
 /**
  * @param {string} raw
@@ -164,7 +159,6 @@ export function buildTriggeredMicroagentsSection(opts = {}) {
     for (const rel of REL_ROOTS) {
       roots.add(path.join(base, rel));
     }
-    roots.add(path.join(base, 'agents', 'skills', 'standard'));
   }
   for (const r of opts.extraRoots || []) {
     if (typeof r === 'string' && r.trim()) {

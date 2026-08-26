@@ -1,5 +1,5 @@
 /**
- * 项目托管技能（agents/skills/standard 有对应包）：
+ * 项目托管技能（`.xrk/skills` 有对应包）：
  * - seed：缺啥补啥
  * - #skills更新：托管包按种子覆盖；用户自建（种子无包）永不碰
  */

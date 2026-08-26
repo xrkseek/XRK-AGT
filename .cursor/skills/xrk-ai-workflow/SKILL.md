@@ -3,7 +3,7 @@ name: xrk-ai-workflow
 description: 当你需要开发/调试 AiWorkflow 工作流、出站压缩、策略安全、RAG 上下文增强、MCP 工具作用域时使用。
 ---
 
-> **读者：Coding Agent**（改 `src` / `core`）。产品模型工具用法见 `agents/skills/.../agent-tools`。
+> **读者：Coding Agent**（改 `src` / `core`）。产品模型工具用法见 `.xrk/skills/core/agent-tools`。
 
 ## 文档与代码
 

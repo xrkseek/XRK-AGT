@@ -5,6 +5,8 @@
 1. **本目录**（产品共享；改这里立即生效，**不**拷进工作区）  
 2. **`data/ai-workspace/{id}/rules/`**（用户自建加法；**同相对路径才会覆盖**本目录同名文件）
 
+各 `.mdc` 含 `xrk-inject: false`：XRK-Harness 打开本仓做 Core 开发时**不** standing 注入；XRK-AGT 运行时仍读本目录。
+
 | | `agents/rules/` | 工作区 `rules/` | `.cursor/rules/` |
 |--|-----------------|-----------------|------------------|
 | 给谁 | 办事助手（全员默认） | 该工作区用户定制 | Cursor 维护者 |
@@ -21,4 +23,4 @@
 | `delivery.mdc` | 交付路径、验收、缺能力降级 |
 | `workspace-dev.mdc` | 只写工作区；可读项目根了解框架 |
 
-工作区如何自建规则：见 `agents/workspace/rules/README.md`。技能：`agents/skills/standard/` · [docs/agents.md](../docs/agents.md)
+工作区如何自建规则：见 `agents/workspace/rules/README.md`。技能：`.xrk/skills/` · [docs/agents.md](../docs/agents.md)

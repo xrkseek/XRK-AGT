@@ -118,7 +118,7 @@ runChatAgent
 |------|------|
 | `data/ai-workspace/{id}/` | 运行时工作区（首次从 `agents/workspace` 种子复制；含 `skills/`、`rules/`、`core/`） |
 | `agents/rules/` ∪ 工作区 `rules/` | 共享护栏直接读 `agents/rules/`；工作区仅为用户加法（同名才覆盖） |
-| `agents/skills/standard/` + 工作区 `skills/` | 技能目录（name + location）；细则靠 `tools.read`；安装见 agent-skillhub |
+| `.xrk/skills/` + 工作区 `skills/` | 技能目录（name + location）；细则靠 `tools.read`；安装见 agent-skillhub |
 | 工作区 `core/<Core>/plugin/` 等 | 业务插件/API（与仓库/子服 core 一并扫描；写法 **agent-core-dev**，编码真源只读 `.cursor/skills/xrk-*`） |
 | `agents/microagents/` | triggers 命中则**整段注入**（如 plugin-write）；不靠 tools.read |
 
@@ -198,7 +198,7 @@ slash 展开（/recipe · /recipes …）
 | 语气 / 红线 | 工作区 `AGENTS.md` |
 | 称呼 / 偏好 | `USER.md` · `memory/MEMORY.md` |
 | 行为规则全文 | `agents/rules/`（共享直接注入）∪ 工作区 `rules/`（用户加法） |
-| 技能细则（产品 Agent） | `agents/skills/standard/` 或工作区 `skills/`（装技能：agent-skillhub） |
+| 技能细则（产品 Agent） | `.xrk/skills/` 或工作区 `skills/`（装技能：agent-skillhub） |
 | Coding Agent 技能 | `.cursor/skills/xrk-*`（**不**注入办事助手） |
 | 托管技能同步 | 主人 `#skills更新`（托管按种子覆盖；自建不动）；锁 `.xrk/managed-skills-lock.json` |
 | 角色路由提示 | `subagents.yaml` |
@@ -219,7 +219,7 @@ slash 展开（/recipe · /recipes …）
 | [ai-workflow.md](ai-workflow.md) | 框架开发 | `AiWorkflow` / Loader / 配置键 | 办事语气 |
 | [agents.md](agents.md) | 用户 / 运维 | 怎么用、改种子/工作区 | 出站实现细节（链到本文） |
 | [mcp-guide.md](mcp-guide.md) | 运维 / 集成 | MCP 工具清单与排错 | 上下文注入顺序 |
-| `agents/skills/standard/**` | **产品 Agent 模型** | 工具/场景怎么干活 | `.cursor`、工厂、三准则 |
+| `.xrk/skills/**` | **产品 Agent 模型** | 工具/场景怎么干活 | `.cursor`、工厂、三准则 |
 | `.cursor/skills/xrk-*` | **Coding Agent** | 改本仓怎么放码 | 注入到办事助手 prompt |
 | 根 [AGENTS.md](../AGENTS.md) | Cursor / Core | skill 路由与放码 | 运行时 prompt 注入 |
 

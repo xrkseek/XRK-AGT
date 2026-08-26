@@ -51,7 +51,8 @@ XRK-AGT/
 │
 ├── config/default_config/    # AGT 运行时配置模板（非独立产品业务 yaml）
 ├── data/server_bots/         # 运行时配置（gitignore）
-├── agents/                   # Agent 面：workspace 模板 / rules / skills / subagents
+├── agents/                  # 办事助手种子：workspace / rules / recipes / microagents
+├── .xrk/skills/              # 产品 Agent 技能（office-* · agent-core 等）
 ├── docs/                     # 开发文档
 └── resources/                # 渲染模板
 ```

@@ -2,7 +2,7 @@
  * Agent 工作区路径约定（对齐 OpenClaw：独立工作区目录，非项目根）。
  *
  * - 根目录 AGENTS.md：IDE 开发规则，不参与运行时
- * - agents/：仓库内 Agent 面（模板 / 规则 / 技能种子 / subagents）
+ * - `agents/` + `.xrk/skills/`：仓库内 Agent 面（模板 / 规则 / 技能种子 / subagents）
  * - data/ai-workspace/{id}/*：运行时工作区（AGENTS.md、SOUL.md、rules/、skills/、core/、memory/…）
  */
 import fs from 'node:fs';
@@ -12,6 +12,12 @@ import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
 
 export const AGENTS_MD = 'AGENTS.md';
+
+/** 仓库内办事助手种子根（workspace / rules / recipes / microagents / subagents） */
+export const PROJECT_AGENTS_DIR_REL = 'agents';
+
+/** subagents 清单文件名（工作区根与 agents/ 下均支持） */
+export const AGENT_MANIFEST_BASENAMES = ['subagents.yaml', 'subagents.yml', 'subagents.json'];
 
 /** 工作区根目录下的助手模板文件名（OpenClaw 风格扁平布局） */
 export const WORKSPACE_TEMPLATE_RELS = [
@@ -27,21 +33,38 @@ export const WORKSPACE_TEMPLATE_RELS = [
 export const LONG_TERM_MEMORY_REL = 'memory/MEMORY.md';
 
 /** 仓库内首次引导用的模板目录（只读，运行时不从此处注入） */
-export const WORKSPACE_BUNDLE_DIR_REL = 'agents/workspace';
+export const WORKSPACE_BUNDLE_DIR_REL = `${PROJECT_AGENTS_DIR_REL}/workspace`;
 
-/** 项目级共享规则（注入；≠ `.cursor/rules`） */
-export const PROJECT_RULES_DIR_REL = 'agents/rules';
+/** 项目级共享规则（运行时注入；≠ `.cursor/rules`；`.mdc` 带 `xrk-inject: false` 不进 XRKH standing） */
+export const PROJECT_RULES_DIR_REL = `${PROJECT_AGENTS_DIR_REL}/rules`;
+
+/** 项目级 subagents 清单种子 */
+export const PROJECT_SUBAGENTS_REL = `${PROJECT_AGENTS_DIR_REL}/subagents.yaml`;
+
+/** 项目级配方与 microagents 目录 */
+export const PROJECT_RECIPES_DIR_REL = `${PROJECT_AGENTS_DIR_REL}/recipes`;
+export const PROJECT_MICROAGENTS_DIR_REL = `${PROJECT_AGENTS_DIR_REL}/microagents`;
 
 /** 工作区内用户规则目录（相对 data/ai-workspace/{id}；同相对路径覆盖项目规则） */
 export const WORKSPACE_RULES_DIR = 'rules';
 
 /** 办公技能包（复制到工作区 skills/，与 ai-workflow customSkillRoots 对齐） */
-export const PROJECT_SKILLS_STANDARD_REL = 'agents/skills/standard';
+export const PROJECT_SKILLS_STANDARD_REL = '.xrk/skills';
 
 /** 工作区内技能目录名（相对 data/ai-workspace/{id}） */
 export const WORKSPACE_SKILLS_DIR = 'skills';
 
 export const DEFAULT_WORKSPACE_ID = 'default';
+
+/** 项目根下 agents/ 子路径（绝对） */
+export function projectAgentsAbs(projectRoot, ...segments) {
+  return path.join(projectRoot, PROJECT_AGENTS_DIR_REL, ...segments);
+}
+
+/** 项目根下 agents/ 子路径（相对项目根，POSIX 斜杠） */
+export function projectAgentsRel(...segments) {
+  return path.posix.join(PROJECT_AGENTS_DIR_REL, ...segments);
+}
 
 /**
  * 缺文件才拷；不覆盖已有（用户定制优先）。
@@ -128,14 +151,14 @@ export function resolveSkillRootAbsList({ projectRoot, workspaceRoot, customSkil
   return [...roots].sort((a, b) => a.localeCompare(b));
 }
 
-/** 从仓库 agents/workspace + rules/skills 种子复制缺失项到 data 工作区（不覆盖已有） */
+/** 从仓库 `agents/workspace` + `.xrk/skills` 种子复制缺失项到 data 工作区（不覆盖已有） */
 export function seedWorkspaceFromBundle(workspaceAbs) {
   if (!isAgentDataWorkspaceAbs(workspaceAbs)) return;
   fs.mkdirSync(workspaceAbs, { recursive: true });
   fs.mkdirSync(path.join(workspaceAbs, 'memory'), { recursive: true });
 
   const projectRoot = getProjectRoot();
-  const bundleDir = path.join(projectRoot, WORKSPACE_BUNDLE_DIR_REL);
+  const bundleDir = projectAgentsAbs(projectRoot, 'workspace');
   const seedNames = [AGENTS_MD, ...WORKSPACE_TEMPLATE_RELS];
 
   for (const name of seedNames) {
@@ -154,7 +177,7 @@ export function seedWorkspaceFromBundle(workspaceAbs) {
   }
 
   const wsRules = path.join(workspaceAbs, WORKSPACE_RULES_DIR);
-  // 工作区 rules/ 仅用户自建（加法）；共享护栏运行时直接读 agents/rules，勿拷进工作区（否则同名会盖住种子更新）
+  // 工作区 rules/ 仅用户自建（加法）；共享护栏运行时直接读 `agents/rules`，勿拷进工作区（否则同名会盖住种子更新）
   copyTreeMissingOnly(path.join(bundleDir, WORKSPACE_RULES_DIR), wsRules, {
     skipNames: new Set(['README.md']),
   });

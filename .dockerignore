@@ -48,11 +48,13 @@ tmp/
 .gitmodules
 .gitkeep
 
-# 文档（排除文档以减小镜像大小）
+# 文档（agents/ 运行时种子须保留）
 docs/
 *.md
 !README.md
 !PROJECT_OVERVIEW.md
+!agents/**/*.md
+!agents/**/*.mdc
 
 # 测试文件
 test/
@@ -158,11 +160,12 @@ AUTHORS*
 .circleci/
 .travis.yml
 .github/
+# IDE / 本地 Agent 工具（不进镜像；运行时种子见 agents/）
 .cursor/
 .claude/
 .trae/
-.agents/
 .agent/
+.agents/
 .vendor/
 *.bak
 *.backup

@@ -42,10 +42,10 @@
 ## 相关配置路径（XRK）
 
 - 工作区：`data/ai-workspace/{id}/`
-- 技能种子：`agents/skills/standard/`（含 `core/` 基础 + `office-*` 扩展）→ 同步到工作区 `skills/`
+- 技能种子：`.xrk/skills/`（含 `core/` 基础 + `office-*` 扩展）→ 同步到工作区 `skills/`
 - 业务插件种子：`agents/workspace/core/` → 工作区 `core/`（Loader 扫描；见 agent-core-dev）
 - 项目规则：`agents/rules/` → 注入 system prompt
 - run 开关：`config/default_config/ai-workflow.yaml` → `tools.file.runEnabled`
-- 技能注入：`agentWorkspace.customSkillRoots`（默认 `agents/skills/standard/core` + `agents/skills/standard`）
+- 技能注入：`agentWorkspace.customSkillRoots`（默认 `.xrk/skills/core` + `.xrk/skills`）
 - 开放域检索：`web.web_search`（`ai-workflow.crawl.webSearch` + 13 提供商；无 Key 默认 parallel-free）。查状态：`web.web_search_providers`
 - Web 抓取 / 浏览器：`ai-workflow.crawl.webFetch` / `ai-workflow.crawl.browser`；Playwright 启动参数另见 `renderer.playwright`（控制台 renderer 配置）

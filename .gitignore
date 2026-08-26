@@ -131,7 +131,8 @@ scripts/*
 # 本地 Windows 注册表/卸载项清理备份（scripts/clean-empty-shell-uninstall.ps1）
 xrk-uninstall-backup-*.reg
 
-# Agent 运行时记忆在 data/ai-workspace/{id}/memory/（由 agents/workspace/memory 种子）
+# 办事助手：种子 agents/ 入库；运行时 data/ai-workspace/{id}/ 见 data/.gitignore
+.agents/
 
 # 业务 Core 本地部署，主仓 framework Core：system-Core
 core/*
