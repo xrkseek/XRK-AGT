@@ -37,7 +37,7 @@
   - 爬虫：`/xrk`、`/core` 默认 `robots.txt` Disallow + `X-Robots-Tag`/`noindex`（见 `server.robots`）；不能替代关端口 / 鉴权
 - **`enabled === false`**：关闭 API Key 时校验恒通过（含远程；生产勿关）。
 
-默认 `tools.file.runEnabled: false`（见 `config/default_config/ai-workflow.yaml`）。
+默认 `tools.file.runEnabled: true`（见 `config/default_config/ai-workflow.yaml`）。开启时 loopback 也强制 API Key。
 
 ---
 

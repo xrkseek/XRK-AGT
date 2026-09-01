@@ -605,7 +605,7 @@ export default class ToolsStream extends AiWorkflow {
 工作区 cwd: ${ws}
 陌生仓库先 repo_map(query=任务关键词) 再 grep/read。改已有：grep → read → search_replace；多文件/多处用 apply_edit（可 dryRun），改后 verify(command=…)。write 仅新建；已存在须 overwrite=true。
 托管技能（对应 .xrk/skills）可改；主人 #skills更新 会按种子覆盖托管包。用户自建 skills/ 目录不受托管更新影响。装技能见 agent-skillhub。
-多步任务用 update_todos。run / verify 需 tools.file.runEnabled=true（默认关）；危险命令经 security.toolScan（可选 approval）。`;
+多步任务用 update_todos。run / verify 默认可用（tools.file.runEnabled）；危险命令经 security.toolScan（可选 approval）。`;
   }
 }
 

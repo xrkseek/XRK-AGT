@@ -1,0 +1,49 @@
+# Feishu-Core 飞书通道默认配置（首次缺失时从本文件复制到 data/server_bots/{port}/feishu.yaml）
+# 路径见 commonconfig/feishu.js 的 filePath
+
+enabled: false
+name: ""
+domain: feishu
+connectionMode: websocket
+
+appId: ""
+appSecret: ""
+appSecretFile: ""
+encryptKey: ""
+verificationToken: ""
+
+webhookPath: "/feishu/events"
+webhookPort: 3000
+botName: ""
+
+dmPolicy: open
+groupPolicy: open
+allowFrom: []
+groupAllowFrom: []
+requireMention: true
+topicSessionMode: disabled
+groupSessionScope: group
+replyInThread: disabled
+reactionNotifications: own
+
+historyLimit: 0
+dmHistoryLimit: 0
+textChunkLimit: 4096
+chunkMode: length
+mediaMaxMb: 30
+
+blockStreaming: false
+streaming: true
+responsePrefix: ""
+renderMode: auto
+
+defaultAccount: ""
+httpTimeoutMs: 30000
+typingIndicator: true
+resolveSenderNames: true
+
+tools: {}
+heartbeat: {}
+blockStreamingCoalesce: {}
+groups: {}
+accounts: {}

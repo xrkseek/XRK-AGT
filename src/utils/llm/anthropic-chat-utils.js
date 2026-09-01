@@ -1,5 +1,3 @@
-import { MCPToolAdapter } from './mcp-tool-adapter.js';
-import RuntimeUtil from '../runtime-util.js';
 import { parseToolCallArguments } from '#utils/llm/parse-tool-arguments.js';
 
 
@@ -79,45 +77,13 @@ export function normalizeAnthropicToolHistory(messages = [], toolNameMapper = nu
 
 export function applyAnthropicTools(body, config = {}, overrides = {}, toolNameMapper = null) {
   const customTools = Array.isArray(overrides.tools) ? overrides.tools.filter(Boolean) : [];
-  if (customTools.length) {
-    body.tools = toolNameMapper
-      ? customTools.map((t) => ({ ...t, name: toolNameMapper.normalize(t.name) }))
-      : customTools;
-    const choice = overrides.tool_choice ?? overrides.toolChoice ?? config.toolChoice;
-    if (choice != null) body.tool_choice = mapToolChoice(choice, toolNameMapper);
-    return body;
-  }
+  if (!customTools.length) return body;
 
-  const hasMcpTools = MCPToolAdapter.hasTools();
-  const workflows = Array.isArray(overrides.workflows) ? overrides.workflows : null;
-  const enableMcp = Boolean(workflows?.length) && config.enableTools !== false && hasMcpTools;
-  if (!enableMcp) return body;
-
-  const workflow = overrides.workflow || config.workflow || config.streamName || null;
-  const mcpTools = MCPToolAdapter.convertMCPToolsToAnthropic({ workflow, workflows });
-
-  if (mcpTools.length) {
-    body.tools = toolNameMapper
-      ? mcpTools.map((t) => ({ ...t, name: toolNameMapper.normalize(t.name) }))
-      : mcpTools.slice();
-    const useCache = overrides.anthropic_prompt_cache === true
-      || config.anthropic_prompt_cache === true;
-    if (useCache && body.tools.length > 0) {
-      const last = body.tools[body.tools.length - 1];
-      body.tools[body.tools.length - 1] = {
-        ...last,
-        cache_control: { type: 'ephemeral' }
-      };
-    }
-    const choice = overrides.tool_choice ?? overrides.toolChoice ?? config.toolChoice;
-    body.tool_choice = mapToolChoice(choice, toolNameMapper);
-    RuntimeUtil.makeLog(
-      'debug',
-      `[anthropic-chat-utils] 注入 MCP tools=${mcpTools.length}, streams=${JSON.stringify(workflows)}`,
-      'LLMFactory'
-    );
-  }
-
+  body.tools = toolNameMapper
+    ? customTools.map((t) => ({ ...t, name: toolNameMapper.normalize(t.name) }))
+    : customTools;
+  const choice = overrides.tool_choice ?? overrides.toolChoice ?? config.toolChoice;
+  if (choice != null) body.tool_choice = mapToolChoice(choice, toolNameMapper);
   return body;
 }
 

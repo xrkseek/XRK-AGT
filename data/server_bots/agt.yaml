@@ -1,0 +1,96 @@
+# ============================================
+# AGT 全局配置
+# ============================================
+# 全局配置，不随服务器端口变化。
+# 位置：data/server_bots/agt.yaml
+# 包含：日志、渲染器、文件系统、系统行为、状态插件等。
+
+# ----------------------------------------
+# 日志配置
+# ----------------------------------------
+logging:
+  # 日志等级：trace、debug、info、warn、fatal、mark、error、off（mark 时只显示执行命令，不显示聊天记录）
+  level: info
+  # 日志头内容，将显示为 [align]
+  align: "XRKAGT"
+  # 日志头颜色方案：default、scheme1～scheme7
+  color: default
+  # 日志 ID 显示长度（字符数）
+  idLength: 20
+  # ID 空白填充字符，可选：.、·、─、•、═、»、→
+  idFiller: "."
+  # 日志对象序列化（console 输出对象时的选项）
+  object:
+    depth: 10
+    colors: true
+    showHidden: true
+    showProxy: true
+    getters: true
+    breakLength: 100
+    maxArrayLength: 100
+    maxStringLength: 1000
+  # 单条日志截断（RuntimeUtil.makeLog）；warn/error 默认更长
+  # maxLength: 16000
+  # truncateHead: 6000
+  # truncateTail: 4000
+  # 日志目录（相对于项目根）
+  dir: "logs"
+  # 主日志 / trace 日志保留天数
+  maxDays: 30
+  traceDays: 1
+  # 日志发送插件：发送到群/私聊时的条数限制
+  send:
+    defaultLines: 120
+    maxLines: 1000
+    maxPerForward: 30
+    maxLineLength: 300
+
+# ----------------------------------------
+# 渲染器
+# ----------------------------------------
+# 渲染后端：playwright（默认）、puppeteer。详细配置见 data/server_bots/{port}/renderers/{type}/config.yaml
+browser:
+  renderer: playwright
+
+# ----------------------------------------
+# 文件系统
+# ----------------------------------------
+files:
+  watch: true
+  # 文件 URL 有效时间（分钟）、访问次数限制
+  urlTime: 60
+  urlTimes: 5
+  # 以下路径均相对于项目根：消息数据、违禁词、违禁图、违禁词配置
+  messageDataPath: "data/messageJson/"
+  bannedWordsPath: "data/bannedWords/"
+  bannedImagesPath: "data/bannedWords/images/"
+  bannedConfigPath: "data/bannedWords/config/"
+
+# ----------------------------------------
+# 系统行为
+# ----------------------------------------
+system:
+  # 指令中自动将 / 替换为 #
+  '/→#': true
+  # 群聊/频道中是否过滤自己发出的消息
+  ignoreSelf: true
+
+# ----------------------------------------
+# 状态插件
+# ----------------------------------------
+status:
+  showNetwork: true
+  showProcess: true
+  showDisk: true
+
+# ----------------------------------------
+# 自动更新（update 插件定时任务）
+# ----------------------------------------
+autoUpdate:
+  # 是否启用自动更新
+  enabled: true
+  # node-schedule：秒 分 时 日 月 周（默认每天 12:00）；也可写数组挂多条
+  cron: "0 0 12 * * *"
+  # 冲突才强制（与 #全部强制更新 同策略）
+  forceOnConflict: true
+

@@ -1,0 +1,26 @@
+# Wechat-entreprise-Core 默认配置（首次缺失时复制到 data/server_bots/{port}/wecom.yaml）
+
+enabled: false
+name: ""
+
+corpId: ""
+agentId: ""
+agentSecret: ""
+agentSecretFile: ""
+
+token: ""
+encodingAESKey: ""
+
+callbackPath: "/wecom/callback"
+
+dmPolicy: open
+groupPolicy: open
+allowFrom: []
+groupAllowFrom: []
+
+responsePrefix: ""
+renderMode: auto
+
+defaultAccount: ""
+
+accounts: {}

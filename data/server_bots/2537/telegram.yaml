@@ -1,0 +1,19 @@
+# Telegram-Core 默认配置（首次缺失时复制到 data/server_bots/{port}/telegram.yaml）
+
+enabled: false
+
+# BotFather 下发的 token，可多个机器人
+tokens: []
+
+# 可选：HTTP/HTTPS 代理，如 http://127.0.0.1:7890
+proxy: ""
+
+# 可选：自建 Telegram API 反代根 URL（末尾无斜杠），留空则用官方 api.telegram.org
+reverseProxy: ""
+
+dmPolicy: open
+groupPolicy: open
+allowFrom: []
+groupAllowFrom: []
+
+responsePrefix: ""

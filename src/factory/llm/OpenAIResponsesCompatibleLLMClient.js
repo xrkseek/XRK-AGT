@@ -3,12 +3,8 @@ import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
 import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
 import { ensureMessagesImagesDataUrl } from '#utils/llm/image-utils.js';
 import { iterateSSE } from '#utils/llm/sse-utils.js';
-import { partitionAndExecuteToolCalls } from '#utils/llm/tool-partition-utils.js';
-import { MCPToolAdapter } from '#utils/llm/mcp-tool-adapter.js';
-import { appendToolBudgetExhaustedNudge } from '#utils/llm/tool-loop-finalize.js';
 import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
 import RuntimeUtil from '#utils/runtime-util.js';
-import { normalizeError } from '#utils/normalize-error.js';
 
 /** @see https://developers.openai.com/api/docs/guides/reasoning */
 const OPENAI_REASONING_EFFORTS = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
@@ -94,6 +90,17 @@ function extractResponsesText(resp) {
 function extractFunctionCalls(resp) {
   const outputs = Array.isArray(resp.output) ? resp.output : [];
   return outputs.filter((item) => item.type === 'function_call' && item.name);
+}
+
+function functionCallsToToolCalls(functionCalls = []) {
+  return functionCalls.map((fc, idx) => ({
+    id: fc.call_id || fc.id || `call_${idx}_${String(fc.name || 'tool').replace(/\W/g, '_')}`,
+    type: 'function',
+    function: {
+      name: String(fc.name || ''),
+      arguments: typeof fc.arguments === 'string' ? fc.arguments : JSON.stringify(fc.arguments || {})
+    }
+  }));
 }
 
 export default class OpenAIResponsesCompatibleLLMClient {
@@ -230,21 +237,12 @@ export default class OpenAIResponsesCompatibleLLMClient {
   buildTools(overrides = {}) {
     if (Object.hasOwn(overrides, 'tools')) return overrides.tools || undefined;
 
-    const workflow = overrides.workflow || this.config.workflow || this.config.streamName || null;
-    const workflows = Array.isArray(overrides.workflows) ? overrides.workflows : null;
-
-    const mcpTools = this.config.enableTools !== false && MCPToolAdapter.hasTools()
-      ? MCPToolAdapter.convertMCPToolsToOpenAI({ workflow, workflows })
-      : [];
-
     const customTools = Array.isArray(this.config.tools) ? this.config.tools : [];
-
-    const merged = [...mcpTools, ...customTools]
+    const merged = customTools
       .map((tool) => {
         if (!tool || typeof tool !== 'object') return null;
         if (isOpenAIResponsesBuiltInTool(tool)) return tool;
 
-        // Chat 风格 function tool -> Responses function tool
         if (tool.type === 'function' && tool.function?.name) {
           return {
             type: 'function',
@@ -254,7 +252,6 @@ export default class OpenAIResponsesCompatibleLLMClient {
           };
         }
 
-        // 已是 Responses function tool
         if (tool.type === 'function' && tool.name) {
           return {
             type: 'function',
@@ -269,37 +266,6 @@ export default class OpenAIResponsesCompatibleLLMClient {
       .filter(Boolean);
 
     return merged.length ? merged : undefined;
-  }
-
-  async executeResponsesFunctionCalls(functionCalls, overrides = {}, onDelta) {
-    if (!Array.isArray(functionCalls) || !functionCalls.length) return [];
-
-    const openaiToolCalls = functionCalls.map((fc, idx) => ({
-      id: fc.call_id || fc.id || `call_${idx}_${String(fc.name || 'tool').replace(/\W/g, '_')}`,
-      type: 'function',
-      function: {
-        name: String(fc.name || ''),
-        arguments: typeof fc.arguments === 'string' ? fc.arguments : JSON.stringify(fc.arguments || {})
-      }
-    }));
-
-    const buildPayload = (mid, res) => mid.map((tc, i) => ({
-      name: tc.function?.name || `工具${i + 1}`,
-      arguments: tc.function?.arguments || '{}',
-      result: res[i]?.content ?? ''
-    }));
-    const toolResults = await partitionAndExecuteToolCalls(openaiToolCalls, overrides, {
-      buildMcpPayload: buildPayload,
-      onDelta
-    });
-
-    if (toolResults === null) return null;
-
-    return functionCalls.map((fc, idx) => ({
-      type: 'function_call_output',
-      call_id: fc.call_id || fc.id || openaiToolCalls[idx].id,
-      output: toolResults[idx]?.content ?? ''
-    }));
   }
 
   async requestResponses(input, overrides = {}, opts = {}) {
@@ -329,52 +295,24 @@ export default class OpenAIResponsesCompatibleLLMClient {
     const transformed = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformed, { timeoutMs: this.timeout });
 
-    let input = toResponsesInput(transformed);
-    let previousResponseId = undefined;
-    const enableMcpTools = overrides?.mcpToolMode !== 'passthrough';
-    const maxToolRounds = this.config.maxToolRounds || 7;
-    const executedToolNames = [];
+    const input = toResponsesInput(transformed);
+    const resp = await this.requestResponses(input, overrides, { stream: false });
+    const json = await resp.json();
+    const text = extractResponsesText(json);
+    const functionCalls = extractFunctionCalls(json);
 
-    for (let round = 0; round < maxToolRounds; round++) {
-      const resp = await this.requestResponses(input, overrides, { stream: false, previousResponseId });
-      const json = await resp.json();
-      previousResponseId = json?.id || previousResponseId;
-
-      const functionCalls = extractFunctionCalls(json);
-      if (!functionCalls.length) {
-        const text = extractResponsesText(json);
-        return executedToolNames.length ? { content: text, executedToolNames } : text;
-      }
-      if (!enableMcpTools) return executedToolNames.length ? { content: '', executedToolNames } : '';
-
-      for (const fc of functionCalls) {
-        if (fc?.name && !executedToolNames.includes(fc.name)) executedToolNames.push(fc.name);
-      }
-
-      const execResult = await this.executeResponsesFunctionCalls(functionCalls, overrides);
-      if (execResult === null) return executedToolNames.length ? { content: '', executedToolNames } : '';
-      input = execResult;
-    }
-
-    RuntimeUtil.makeLog('warn', `[OpenAIResponsesCompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
-    try {
-      const finalizeInput = toResponsesInput(appendToolBudgetExhaustedNudge([]));
-      const resp = await this.requestResponses(
-        finalizeInput,
-        { ...overrides, tools: [], tool_choice: 'none' },
-        { stream: false, previousResponseId }
-      );
-      const json = await resp.json();
-      const text = extractResponsesText(json);
-      return executedToolNames.length ? { content: text || '', executedToolNames } : (text || '');
-    } catch (err) {
+    if (functionCalls.length) {
       RuntimeUtil.makeLog(
         'warn',
-        `[OpenAIResponsesCompatibleLLMClient] 工具轮次收尾失败: ${normalizeError(err).message}`,
-        'LLMFactory'
+        `[OpenAIResponsesCompatibleLLMClient] 单次补全含 function_call×${functionCalls.length}（本客户端不执行工具）`,
+        'LLMFactory',
       );
-      return executedToolNames.length ? { content: '', executedToolNames } : '';
+      return {
+        content: text,
+        tool_calls: functionCallsToToolCalls(functionCalls),
+      };
     }
+    return text;
   }
 
   /**
@@ -387,7 +325,6 @@ export default class OpenAIResponsesCompatibleLLMClient {
     }
 
     let completed = null;
-    const mode = overrides?.mcpToolMode || 'execute';
 
     for await (const { data } of iterateSSE(resp)) {
       try {
@@ -407,7 +344,7 @@ export default class OpenAIResponsesCompatibleLLMClient {
         }
 
         if (type === 'response.output_item.done' && evt.item?.type === 'function_call') {
-          if ((mode === 'passthrough' || mode === 'hybrid') && typeof onDelta === 'function') {
+          if (typeof onDelta === 'function') {
             onDelta('', {
               tool_calls: [{
                 id: evt.item.call_id || evt.item.id,
@@ -438,46 +375,8 @@ export default class OpenAIResponsesCompatibleLLMClient {
     const transformed = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformed, { timeoutMs: this.timeout });
 
-    let input = toResponsesInput(transformed);
-    let previousResponseId = undefined;
-    const enableMcpTools = overrides?.mcpToolMode !== 'passthrough';
-    const maxToolRounds = this.config.maxToolRounds || 7;
-
-    for (let round = 0; round < maxToolRounds; round++) {
-      const resp = await this.requestResponses(input, overrides, { stream: true, previousResponseId });
-      const completed = await this.consumeResponsesStream(resp, onDelta, overrides);
-      previousResponseId = completed?.id || previousResponseId;
-
-      const functionCalls = extractFunctionCalls(completed || {});
-      if (!functionCalls.length) return;
-      if (!enableMcpTools) return;
-
-      RuntimeUtil.makeLog(
-        'info',
-        `[OpenAIResponsesCompatibleLLMClient] 检测到工具调用，执行工具: ${functionCalls.length}个`,
-        'LLMFactory',
-      );
-
-      const execResult = await this.executeResponsesFunctionCalls(functionCalls, overrides, onDelta);
-      if (execResult === null) return;
-      input = execResult;
-    }
-
-    RuntimeUtil.makeLog('warn', `[OpenAIResponsesCompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
-    try {
-      const finalizeInput = toResponsesInput(appendToolBudgetExhaustedNudge([]));
-      const resp = await this.requestResponses(
-        finalizeInput,
-        { ...overrides, tools: [], tool_choice: 'none' },
-        { stream: true, previousResponseId }
-      );
-      await this.consumeResponsesStream(resp, onDelta, overrides);
-    } catch (err) {
-      RuntimeUtil.makeLog(
-        'warn',
-        `[OpenAIResponsesCompatibleLLMClient] 流式工具轮次收尾失败: ${normalizeError(err).message}`,
-        'LLMFactory'
-      );
-    }
+    const input = toResponsesInput(transformed);
+    const resp = await this.requestResponses(input, overrides, { stream: true });
+    await this.consumeResponsesStream(resp, onDelta, overrides);
   }
 }

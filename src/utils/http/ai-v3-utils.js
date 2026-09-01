@@ -67,6 +67,22 @@ export function resolveWorkflowStreams(body = {}) {
   return normalized.length > 0 ? normalized : null;
 }
 
+/**
+ * Whether /v1 should embed @xrkseek/harness (web console + MCP workflows).
+ * Client-supplied `tools` without workflows stay on factory passthrough
+ * (return tool_calls to the client without server-side MCP execute).
+ *
+ * @param {object} body
+ * @param {string[]|null|undefined} effectiveStreams
+ * @returns {boolean}
+ */
+export function shouldUseHarnessModuleLoop(body = {}, effectiveStreams = null) {
+  if (Array.isArray(effectiveStreams) && effectiveStreams.length > 0) return true;
+  const tools = pickFirst(body, ['tools']);
+  if (Array.isArray(tools) && tools.length > 0) return false;
+  return true;
+}
+
 export function buildOverridesFromBody(body = {}) {
   const overrides = {};
   const addNum = (key, ...aliases) => {

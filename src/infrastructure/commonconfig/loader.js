@@ -54,7 +54,8 @@ class CommonConfigRegistry {
         : module.default;
 
       configInstance.key = key;
-      configInstance.filePath = filePath;
+      // 勿覆盖 ConfigBase 构造里的 filePath（数据文件路径）；模块路径单独挂
+      configInstance.modulePath = filePath;
       this.configs.set(key, configInstance);
       // 短名用 get() 回退解析（system-Core/x → x），勿再 Map 双挂同一实例
       RuntimeUtil.makeLog('debug', `加载配置: ${configInstance.displayName ?? key}`, 'CommonConfigRegistry');

@@ -19,7 +19,14 @@ import {
   applyRequestWorkspaceToStreams
 } from '../lib/ai-workspace-runtime.js';
 import { runWithAiConsoleContext, installMcpAuditHook } from '../lib/ai-workspace-context.js';
-import { initOpenAIChatSSE, pipeOpenAIChatCompletionsStream, writeOpenAiWorkflowError } from '#utils/sse-openai.js';
+import {
+  initOpenAIChatSSE,
+  pipeOpenAIChatCompletionsStream,
+  writeOpenAiWorkflowError,
+  writeSSEChunk,
+  createOpenAIChunk,
+  createOpenAiWorkflowDeltaHandler,
+} from '#utils/sse-openai.js';
 import { pickPromptCacheOverrides } from '#utils/llm/prompt-cache-policy.js';
 import { transformOpenAIStyleVisionMessages } from '#utils/llm/message-transform.js';
 import { mergeUploadedImagesIntoMessages } from '#utils/llm/vision-content.js';
@@ -31,8 +38,10 @@ import {
   extractMessageText,
   estimateTokens,
   resolveWorkflowStreams,
+  shouldUseHarnessModuleLoop,
   buildOverridesFromBody
 } from '#utils/http/ai-v3-utils.js';
+import { resolveInputTokenBudget, trimMessagesToTokenBudget } from '#utils/llm/message-token-budget.js';
 import {
   buildOpenAIModelsPayload,
   buildOpenAIModelPayload,
@@ -45,6 +54,7 @@ import {
   initResponsesSSE,
   pipeResponsesStream
 } from '../lib/ai-gateway/index.js';
+import { runHarnessModuleLoop } from '#infrastructure/ai-workflow/harness-module-loop.js';
 
 function safePreview(value, { maxLen = 500 } = {}) {
   if (value == null) return value;
@@ -351,16 +361,13 @@ async function handleChatCompletionsV3(req, res) {
     );
   }
 
-  // 工具面仅认请求体 workflow.workflows（含 remote-mcp.*）；未传 = 无中游 MCP
+  // 工具面：请求体 workflow.workflows（含 remote-mcp.*）；未传 = 无中游 MCP
   const effectiveStreams = resolveWorkflowStreams(body);
+  // Web 控制台 / 无 client tools → harness；仅 client tools 透传 → 工厂单次
+  const useHarnessLoop = shouldUseHarnessModuleLoop(body, effectiveStreams);
 
-  const client = LLMFactory.createClient(llmConfig);
   const overrides = buildOverridesFromBody(body);
-  // hybrid：有 body.tools 时区分中游(MCP)/下游(请求)，中游 XRK 执行、下游透传客户端执行
-  // execute：无 body.tools 且有声明的 workflows 时，仅中游由 XRK 执行
-  // passthrough：无 body.tools 且无 workflows 时，tool_calls 透传
-  const hasRequestTools = Array.isArray(body.tools) && body.tools.length > 0;
-  overrides.mcpToolMode = hasRequestTools ? 'hybrid' : (effectiveStreams?.length ? 'execute' : 'passthrough');
+  // 工厂透传路径：不在服务端执行工具（MCP 多轮仅 harness）
 
   if (effectiveStreams?.length) {
     overrides.workflows = effectiveStreams;
@@ -377,6 +384,222 @@ async function handleChatCompletionsV3(req, res) {
   const restoreStreamWorkspace = applyRequestWorkspaceToStreams(AiWorkflowLoader, fileWorkspaceAbs);
   const auditWorkspaceId = workspaceCtx.presetId || null;
 
+  // Web 控制台 · /v1+MCP · 无 client-tools 纯对话：runHarnessModuleLoop
+  if (useHarnessLoop) {
+    const responseModel = llmConfig.provider || 'unknown';
+    const wantLiveSse = streamFlag
+      && req.xrkGatewayFormat !== 'anthropic'
+      && req.xrkGatewayFormat !== 'responses';
+    let liveId = null;
+    let liveCreated = null;
+    try {
+      const budget = resolveInputTokenBudget({ ...llmConfig, ...overrides });
+      let harnessMessages = llmMessages;
+      if (budget > 0) {
+        const trimmed = trimMessagesToTokenBudget(llmMessages, budget, estimateTokens);
+        if (trimmed.length < llmMessages.length) {
+          RuntimeUtil.makeLog(
+            'info',
+            `[v1] 按 contextWindow 裁剪消息 ${llmMessages.length}→${trimmed.length}（budget≈${budget}）`,
+            'ai.v3.chat.completions'
+          );
+        }
+        harnessMessages = trimmed;
+      }
+
+      const sessionKey = pickFirst(body, ['xrk_session_id', 'conversation_id', 'session_id'])
+        || (workspaceCtx.presetId ? `ws_${workspaceCtx.presetId}` : null);
+
+      let liveHandler = null;
+      /** @type {Map<string, { name?: string, arguments?: unknown }>} */
+      const pendingToolArgs = new Map();
+      if (wantLiveSse) {
+        liveId = `chatcmpl_${Date.now()}`;
+        liveCreated = Math.floor(Date.now() / 1000);
+        initOpenAIChatSSE(res);
+        liveHandler = createOpenAiWorkflowDeltaHandler(res, {
+          id: liveId,
+          created: liveCreated,
+          model: responseModel,
+        });
+      }
+
+      const harnessResult = await runWithAiConsoleContext(
+        { workspaceId: auditWorkspaceId },
+        () => runHarnessModuleLoop({
+          stream: {
+            name: 'http-v3',
+            _getToolWorkflowNames: () => effectiveStreams || [],
+          },
+          messages: harnessMessages,
+          config: {
+            ...llmConfig,
+            ...overrides,
+            ...(effectiveStreams?.length ? { workflows: effectiveStreams } : {}),
+          },
+          apiConfig: {
+            ...overrides,
+            ...(effectiveStreams?.length ? { workflows: effectiveStreams } : {}),
+            ...(sessionKey ? { sessionKey: String(sessionKey) } : {}),
+            ...(liveHandler ? {
+              onSessionEvent(ev) {
+                if (ev?.type === 'assistant/chunk') {
+                  if (ev.kind === 'text' && ev.text) liveHandler.callback(ev.text);
+                  else if (ev.kind === 'reasoning' && ev.text) {
+                    liveHandler.callback('', { reasoning_content: ev.text });
+                  }
+                } else if (ev?.type === 'tool/call' && ev.call?.id) {
+                  // Buffer args only; emit once on tool/result (complete card).
+                  pendingToolArgs.set(ev.call.id, {
+                    name: ev.call.name,
+                    arguments: ev.call.arguments ?? {},
+                  });
+                } else if (ev?.type === 'tool/result' && ev.result) {
+                  const id = ev.result.toolCallId;
+                  const pending = id ? pendingToolArgs.get(id) : null;
+                  if (id) pendingToolArgs.delete(id);
+                  liveHandler.callback('', {
+                    mcp_tools: [{
+                      id,
+                      name: ev.result.name || pending?.name,
+                      arguments: pending?.arguments ?? {},
+                      result: ev.result.content,
+                      ...(ev.result.isError ? { isError: true } : {}),
+                    }],
+                  });
+                }
+              },
+            } : {}),
+          },
+        })
+      );
+      const text = harnessResult?.content != null ? String(harnessResult.content) : '';
+      const mcpTools = Array.isArray(harnessResult?.mcpTools) ? harnessResult.mcpTools : [];
+      const executedToolNames = Array.isArray(harnessResult?.executedToolNames)
+        ? harnessResult.executedToolNames
+        : mcpTools.map((t) => t?.name).filter(Boolean);
+
+      const promptText = extractMessageText(messages);
+      const usage = harnessResult?.usage && typeof harnessResult.usage === 'object'
+        ? harnessResult.usage
+        : {
+          prompt_tokens: estimateTokens(promptText),
+          completion_tokens: estimateTokens(text),
+          total_tokens: estimateTokens(promptText) + estimateTokens(text),
+        };
+      if (usage.total_tokens == null) {
+        usage.total_tokens = (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
+      }
+      const finishReason = harnessResult?.safetyLimited || harnessResult?.toolRoundsExhausted
+        ? 'length'
+        : 'stop';
+      const openaiPayload = {
+        id: liveId || `chatcmpl_${Date.now()}`,
+        object: 'chat.completion',
+        created: liveCreated || Math.floor(Date.now() / 1000),
+        model: responseModel,
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: text || '' },
+          finish_reason: finishReason
+        }],
+        ...(mcpTools.length > 0
+          ? { mcp_tools: mcpTools }
+          : (executedToolNames.length > 0
+            ? { mcp_tools: executedToolNames.map((name) => ({ name })) }
+            : {})),
+        ...(harnessResult?.sessionId ? { xrk_session_id: harnessResult.sessionId } : {}),
+        ...(harnessResult?.compacted ? { xrk_compacted: true } : {}),
+        usage
+      };
+
+      if (streamFlag && (req.xrkGatewayFormat === 'anthropic' || req.xrkGatewayFormat === 'responses')) {
+        RuntimeUtil.makeLog(
+          'warn',
+          `[v1] MCP workflows + ${req.xrkGatewayFormat}：返回完整响应（非 SSE）`,
+          'ai.v3.chat.completions'
+        );
+      }
+
+      if (!streamFlag || req.xrkGatewayFormat === 'anthropic' || req.xrkGatewayFormat === 'responses') {
+        if (req.xrkGatewayFormat === 'anthropic') {
+          return HttpResponse.json(res, openAIChatToAnthropicMessage(openaiPayload, { model: responseModel }));
+        }
+        if (req.xrkGatewayFormat === 'responses') {
+          const meta = req.xrkResponsesMeta || {};
+          const finish = openaiPayload.choices?.[0]?.finish_reason;
+          return HttpResponse.json(res, openAIChatToResponsesObject(openaiPayload, {
+            model: responseModel,
+            instructions: meta.instructions ?? null,
+            temperature: meta.temperature ?? null,
+            topP: meta.top_p ?? null,
+            maxOutputTokens: meta.max_output_tokens ?? null,
+            toolChoice: meta.tool_choice ?? 'auto',
+            tools: meta.tools || [],
+            status: finish === 'length' ? 'incomplete' : 'completed'
+          }));
+        }
+        return HttpResponse.json(res, openaiPayload);
+      }
+
+      // OpenAI stream：步内已写出完整工具卡 + 文本；此处只收尾
+      const stats = liveHandler?.getStats?.() || { totalContent: '' };
+      if (!stats.totalContent && text) {
+        writeSSEChunk(res, createOpenAIChunk({
+          id: openaiPayload.id,
+          created: openaiPayload.created,
+          model: responseModel,
+          delta: { role: 'assistant', content: text },
+          finishReason: null,
+        }));
+      }
+      writeSSEChunk(res, createOpenAIChunk({
+        id: openaiPayload.id,
+        created: openaiPayload.created,
+        model: responseModel,
+        delta: {},
+        finishReason,
+        usage: openaiPayload.usage,
+      }));
+      if (harnessResult?.sessionId) {
+        writeSSEChunk(res, {
+          id: openaiPayload.id,
+          object: 'chat.completion.chunk',
+          created: openaiPayload.created,
+          model: responseModel,
+          xrk_session_id: harnessResult.sessionId,
+        });
+      }
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    } catch (error) {
+      RuntimeUtil.makeLog(
+        'error',
+        `[v1] harness loop 失败: ${error?.message || error}`,
+        'ai.v3.chat.completions'
+      );
+      if (wantLiveSse) {
+        try {
+          writeOpenAiWorkflowError(res, {
+            id: liveId || `chatcmpl_${Date.now()}`,
+            created: liveCreated || Math.floor(Date.now() / 1000),
+            model: responseModel,
+            error,
+          });
+          res.end();
+        } catch { /* ignore */ }
+        return;
+      }
+      return HttpResponse.error(res, error, error?.code === 'session_busy' ? 409 : 500, 'ai.v3.chat.completions');
+    } finally {
+      restoreStreamWorkspace();
+    }
+  }
+
+  // 仅 client tools 透传：工厂单次 / 流式（不经 harness）
+  const client = LLMFactory.createClient(llmConfig);
+
   if (!streamFlag) {
     try {
       const chatResult = await runWithAiConsoleContext(
@@ -385,6 +608,7 @@ async function handleChatCompletionsV3(req, res) {
       );
       const text = typeof chatResult === 'string' ? chatResult : (chatResult?.content || '');
       const executedToolNames = Array.isArray(chatResult?.executedToolNames) ? chatResult.executedToolNames : [];
+      const toolCalls = Array.isArray(chatResult?.tool_calls) ? chatResult.tool_calls : [];
 
       const promptText = extractMessageText(messages);
       const promptTokens = estimateTokens(promptText);
@@ -392,6 +616,8 @@ async function handleChatCompletionsV3(req, res) {
 
       // 对外返回 model=provider
       const responseModel = llmConfig.provider || 'unknown';
+      const message = { role: 'assistant', content: text || (toolCalls.length ? null : '') };
+      if (toolCalls.length) message.tool_calls = toolCalls;
       const openaiPayload = {
         id: `chatcmpl_${Date.now()}`,
         object: 'chat.completion',
@@ -399,8 +625,8 @@ async function handleChatCompletionsV3(req, res) {
         model: responseModel,
         choices: [{
           index: 0,
-          message: { role: 'assistant', content: text || '' },
-          finish_reason: 'stop'
+          message,
+          finish_reason: toolCalls.length ? 'tool_calls' : 'stop'
         }],
         // Web 工具卡片只读此字段（与 SSE metadata.mcp_tools 同形态），与 QQ 气泡文案无关
         ...(executedToolNames.length > 0 ? { mcp_tools: executedToolNames.map((name) => ({ name })) } : {}),

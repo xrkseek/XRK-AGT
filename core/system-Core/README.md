@@ -21,6 +21,8 @@
 - `ai-assistant-runtime.js` / `ai-workspace-*.js` — 控制台与助手编排
 - `content-safety/` — system 产品能力
 
+Agent loop 不在 Core：固定 `@xrkseek/harness` 模块嵌入（见主仓 `docs/harness-module-loop.md`）。
+
 ## 禁止写进 Core（放 `src/`）
 
 | 能力 | 落点 |

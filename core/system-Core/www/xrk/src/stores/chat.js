@@ -11,12 +11,16 @@ import { clearStoredChatScroll } from '@/chat/scroll';
 function readWorkflows() {
   try {
     const raw = localStorage.getItem('chatWorkflows');
-    const arr = raw ? JSON.parse(raw) : [];
+    // null = never set → ChatView applies preferred defaults once
+    if (raw == null) return null;
+    const arr = JSON.parse(raw);
     return Array.isArray(arr) ? arr : [];
   } catch {
     return [];
   }
 }
+
+const initialWorkflows = readWorkflows();
 
 export const useChatStore = defineStore('chat', () => {
   const mode = ref(localStorage.getItem('chatMode') || 'ai');
@@ -25,7 +29,9 @@ export const useChatStore = defineStore('chat', () => {
     provider: localStorage.getItem('chatProvider') || '',
     llmFactory: localStorage.getItem('chatLlmFactory') || '',
     workspace: normalizeWorkspaceId(localStorage.getItem('chatWorkspace')),
-    workflows: readWorkflows(),
+    workflows: initialWorkflows ?? [],
+    /** true when localStorage never had chatWorkflows (apply preferred MCP defaults once) */
+    workflowsUnset: initialWorkflows === null,
   });
   const llmOptions = ref(null);
   const workspacePresets = ref([{ id: 'default', label: '默认工作区' }]);
@@ -66,6 +72,7 @@ export const useChatStore = defineStore('chat', () => {
   function persistWorkflows() {
     try {
       localStorage.setItem('chatWorkflows', JSON.stringify(settings.workflows || []));
+      settings.workflowsUnset = false;
     } catch {
       /* ignore */
     }

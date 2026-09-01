@@ -1,4 +1,3 @@
-import { partitionAndExecuteToolCalls } from '#utils/llm/tool-partition-utils.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools, buildOpenAICompatEndpoint } from '#utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
@@ -7,12 +6,7 @@ import { cleanupMessages } from '#utils/llm/message-cleanup.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { iterateSSE } from '#utils/llm/sse-utils.js';
 import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
-import {
-  appendToolBudgetExhaustedNudge,
-  toolBudgetFinalizeOverrides
-} from '#utils/llm/tool-loop-finalize.js';
 import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
-import { normalizeError } from '#utils/normalize-error.js';
 
 /**
  * OpenAI 兼容第三方网关客户端（NewAPI / CherryIN / 自建反代等）。
@@ -110,17 +104,7 @@ export default class OpenAICompatibleLLMClient {
     return normalized;
   }
 
-  _buildMcpToolsPayload(toolCalls, toolResults) {
-    return toolCalls.map((tc, idx) => ({
-      name: tc.function?.name || `工具${idx + 1}`,
-      arguments: tc.function?.arguments || {},
-      result: toolResults[idx]?.content ?? ''
-    }));
-  }
-
   _buildRequestOptions(messages, overrides = {}, stream = false) {
-    // 重要：直接修改 overrides 对象，不要创建新对象
-    // 这样 applyOpenAITools 对 overrides 的修改（如添加 downstreamToolNames）才能生效
     overrides.stream = stream;
     const body = this.buildBody(messages, overrides);
     const bodyStr = JSON.stringify(body);
@@ -194,16 +178,7 @@ export default class OpenAICompatibleLLMClient {
     return resp;
   }
 
-  async _executeToolCalls(toolCalls, overrides = {}, onDelta) {
-    const normalized = toolCalls.map((tc, idx) => this._normalizeToolCall(tc, idx));
-    return partitionAndExecuteToolCalls(normalized, overrides, {
-      buildMcpPayload: (mid, res) => this._buildMcpToolsPayload(mid, res),
-      onDelta
-    });
-  }
-
   async _consumeSSEWithToolCalls(resp, onDelta, options = {}) {
-    const mcpToolMode = options?.mcpToolMode || 'execute';
     const toolCallsMap = new Map();
     const result = { content: '', toolCalls: [] };
     let sseEventCount = 0;
@@ -243,8 +218,8 @@ export default class OpenAICompatibleLLMClient {
             if (tc.function?.arguments) item.function.arguments += tc.function.arguments;
           }
 
-          // passthrough/hybrid 时透传 tool_calls，由客户端处理下游工具
-          if ((mcpToolMode === 'passthrough' || mcpToolMode === 'hybrid') && typeof onDelta === 'function' && delta.tool_calls.length > 0) {
+          // 透传 tool_calls，由客户端处理下游工具（工厂单次补全，不服务端执行）
+          if (typeof onDelta === 'function' && delta.tool_calls.length > 0) {
             onDelta('', { tool_calls: delta.tool_calls });
           }
         }
@@ -268,121 +243,42 @@ export default class OpenAICompatibleLLMClient {
     return result;
   }
 
-  _collectToolNames(toolCalls = [], toolNameSet = new Set()) {
-    for (const tc of toolCalls) {
-      const name = tc?.function?.name;
-      if (name) toolNameSet.add(name);
-    }
-  }
-
-  async _runWithToolRounds(initialMessages, overrides = {}, handlers = {}) {
-    const maxToolRounds = this.config.maxToolRounds || 7;
-    const enableMcpTools = overrides?.mcpToolMode !== 'passthrough';
-    const state = {
-      messages: [...initialMessages],
-      toolNameSet: new Set()
-    };
-
-    for (let round = 0; round < maxToolRounds; round++) {
-      state.messages = cleanupMessages(state.messages, { ensureUserFirst: false });
-
-      const roundResult = await handlers.requestRound(state.messages, overrides, state);
-      const content = roundResult?.content || '';
-      const toolCalls = Array.isArray(roundResult?.toolCalls) ? roundResult.toolCalls : [];
-
-      if (!toolCalls.length || !enableMcpTools) {
-        return { content, executedToolNames: Array.from(state.toolNameSet) };
-      }
-
-      this._collectToolNames(toolCalls, state.toolNameSet);
-
-      const assistantMsg = { role: 'assistant', tool_calls: toolCalls };
-      if (content?.trim()) assistantMsg.content = content;
-      state.messages.push(assistantMsg);
-
-      const toolResults = await this._executeToolCalls(toolCalls, overrides, handlers.onDelta);
-      if (toolResults === null) return { content, executedToolNames: Array.from(state.toolNameSet) };
-      state.messages.push(...toolResults);
-
-      if (typeof overrides.onAfterToolRound === 'function') {
-        const early = await overrides.onAfterToolRound({
-          toolNames: toolCalls.map((tc) => tc?.function?.name),
-          toolResults,
-          round
-        });
-        if (early?.stop) {
-          return {
-            content: early.content != null ? early.content : content,
-            executedToolNames: Array.from(state.toolNameSet)
-          };
-        }
-      }
-    }
-
-    RuntimeUtil.makeLog('warn', `[OpenAICompatibleLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
-    try {
-      const finalizeMsgs = appendToolBudgetExhaustedNudge(
-        cleanupMessages(state.messages, { ensureUserFirst: false })
-      );
-      const roundResult = await handlers.requestRound(
-        finalizeMsgs,
-        toolBudgetFinalizeOverrides(overrides),
-        state
-      );
-      return {
-        content: roundResult?.content || '',
-        executedToolNames: Array.from(state.toolNameSet)
-      };
-    } catch (err) {
-      RuntimeUtil.makeLog(
-        'warn',
-        `[OpenAICompatibleLLMClient] 工具轮次收尾失败: ${normalizeError(err).message}`,
-        'LLMFactory'
-      );
-      return {
-        content: '',
-        executedToolNames: Array.from(state.toolNameSet)
-      };
-    }
-  }
-
+  /**
+   * 单次补全。MCP tool 环：@xrkseek/harness（AiWorkflow.callAI / /v1）。
+   * 本客户端仅透传 tool_calls，不执行工具。
+   */
   async chat(messages, overrides = {}) {
-    const transformedMessages = await this._prepareMessages(messages);
-
-    const result = await this._runWithToolRounds(transformedMessages, overrides, {
-      requestRound: async (currentMessages, ov) => {
-        const resp = await this._fetchRound(currentMessages, ov, false);
-        const json = await resp.json();
-        logPromptCacheUsage(json?.usage, 'OpenAICompatible');
-        const message = json?.choices?.[0]?.message;
-        return {
-          content: message?.content || '',
-          toolCalls: Array.isArray(message?.tool_calls) ? message.tool_calls : []
-        };
-      }
-    });
-
-    return result.executedToolNames.length > 0
-      ? { content: result.content, executedToolNames: result.executedToolNames }
-      : result.content;
+    const prepared = await this._prepareMessages(messages);
+    const current = cleanupMessages([...prepared], { ensureUserFirst: false });
+    const resp = await this._fetchRound(current, overrides, false);
+    const json = await resp.json();
+    logPromptCacheUsage(json?.usage, 'OpenAICompatible');
+    const message = json?.choices?.[0]?.message;
+    const content = message?.content || '';
+    const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+    if (toolCalls.length) {
+      RuntimeUtil.makeLog(
+        'info',
+        `[OpenAICompatibleLLMClient] 单次补全含 tool_calls×${toolCalls.length}（本客户端不执行工具）`,
+        'LLMFactory',
+      );
+      return { content, toolCalls, tool_calls: toolCalls };
+    }
+    return content;
   }
 
   async chatStream(messages, onDelta, overrides = {}) {
-    const transformedMessages = await this._prepareMessages(messages);
+    const prepared = await this._prepareMessages(messages);
+    const current = cleanupMessages([...prepared], { ensureUserFirst: false });
 
     RuntimeUtil.makeLog(
       'info',
-      `[OpenAICompatibleLLMClient] chatStream 开始: messages=${transformedMessages.length}`,
+      `[OpenAICompatibleLLMClient] chatStream 开始: messages=${current.length}`,
       'LLMFactory'
     );
 
-    const result = await this._runWithToolRounds(transformedMessages, overrides, {
-      onDelta,
-      requestRound: async (currentMessages, ov) => {
-        const resp = await this._fetchRound(currentMessages, ov, true);
-        return await this._consumeSSEWithToolCalls(resp, onDelta, ov);
-      }
-    });
+    const resp = await this._fetchRound(current, overrides, true);
+    const result = await this._consumeSSEWithToolCalls(resp, onDelta, overrides);
 
     RuntimeUtil.makeLog(
       'info',

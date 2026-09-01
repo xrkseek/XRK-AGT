@@ -673,6 +673,14 @@ async function loadLlmOptions(force = false) {
       vendors: data?.vendors || [],
       workflows: data?.workflows || [],
     };
+    if (chat.settings.workflowsUnset) {
+      const keys = (chat.llmOptions.workflows || [])
+        .map((w) => w.key || w.name || '')
+        .filter(Boolean);
+      const preferred = ['tools', 'web'].filter((k) => keys.includes(k));
+      chat.settings.workflows = preferred.length ? preferred : keys.slice(0, 2);
+      chat.persistWorkflows();
+    }
     const sel = resolveAiLlmSelection(
       getLlmVendors(chat.llmOptions),
       chat.settings

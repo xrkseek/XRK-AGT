@@ -76,7 +76,7 @@ LLMFactory 负责管理所有大语言模型服务提供商，支持多种 LLM A
 
 | 类型 | 提供商 | 网关 `model` 示例 | 说明 | 官方文档 / 协议 | 多模态 |
 |------|--------|--------------------|------|------------------|--------|
-| 官方 | 火山引擎 | `volcengine` | 火山方舟 Responses（thinking / 工具多轮） | `POST …/api/v3/responses` | ✅ |
+| 官方 | 火山引擎 | `volcengine` | 火山方舟 Responses（thinking；工具环走 harness） | `POST …/api/v3/responses` | ✅ |
 | 官方 | 小米 MiMo | `xiaomimimo` | 兼容 OpenAI API 的 MiMo 大语言模型（仅文本） | OpenAI Chat Completions | ❌ |
 | 官方 | OpenAI | `openai` | OpenAI 官方 Chat Completions 工厂，配置文件 `openai_llm.yaml` | `POST https://api.openai.com/v1/chat/completions` | ✅ |
 | 官方 | Gemini | `gemini` | Google Generative Language API 工厂，配置文件 `gemini_llm.yaml` | `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` | ✅ |
@@ -151,14 +151,14 @@ class LLMClient {
 
 #### 特殊功能
 
-- **Tool Calling 支持**：支持 OpenAI tools / tool_calls 协议的 LLM 客户端（如 Volcengine、OpenAI、Azure OpenAI、OpenAI-Compatible 等）都会将工具调用统一交给 `MCPToolAdapter` 处理；**执行前门禁**在 `MCPServer.handleToolCall`（策略 + 威胁扫描 + 可选审批）。
-- **工具轮收尾（finalize）**：达到 `maxToolRounds` 后，Chat Completions / Responses 客户端可再请求一轮无工具终答（`tool-loop-finalize.js`），避免把最后一条 tool 结果当成助手回复。
+- **Tool Calling**：`/v1` client `tools` 可由工厂透传；MCP schema/执行环在 `@xrkseek/harness`（`MCPToolAdapter` → ToolRegistry，见 [harness-module-loop.md](harness-module-loop.md)）。**执行前门禁**在 `MCPServer.handleToolCall`。
+- **`maxToolRounds`**：办事助手 / `/v1`+MCP 映射为 harness `maxSteps`；工厂单次路径不消费该环。
 - **variants / reasoning**：Provider 可配 `variant`/`variants` 与 reasoning budget；解析见 `provider-variant.js` · `reasoning-budget.js`（schema 在 `llm-provider-fields.js`）。
-- **重试**：空回复 / rate_limit 等经 `llm-retry.js`（含 Retry-After）；HTTP 错误形状见 `llm-http-error.js`。
-- **工作流作用域控制（streams）**：当通过 `POST /v1/chat/completions` 调用时，请求体中的 `workflow` 字段会被整理为 `streams` 白名单，LLM 工厂据此只注入这些工作流下的 MCP 工具，其它未在 `streams` 中声明的工具不会被注入和调用。
+- **重试**：办事助手 / `/v1`+MCP 由 harness 步内 `llmRetry`（`llm.retry` → `resolveHarnessLlmRetry`）；工厂单次路径不跑外层 retry 环。HTTP 错误形状见 `llm-http-error.js`。
+- **工作流作用域（streams）**：`POST /v1/chat/completions` 的 `workflow` → 白名单；有 workflows 时走 harness，无则工厂单次（透传 tool_calls）。
 - **多模态输入**：部分 LLM（如 Volcengine、OpenAI、Gemini、Azure OpenAI 等）直接支持图片输入，消息结构会通过 `transformMessagesWithVision` 统一转成各家兼容的 `text + image_url`（含 base64 data URL）格式。
 
-出站压缩与策略不在工厂内，而在 AiWorkflow `prepareOutboundMessages`（见 [agent-context.md](agent-context.md) §5 · [ai-workflow.md](ai-workflow.md)）。
+出站：`prepareOutboundMessages` 仅按 Provider `contextWindow` 裁剪；多轮压缩归 harness session（见 [agent-context.md](agent-context.md) §5 · [harness-module-loop.md](harness-module-loop.md)）。
 
 ---
 
@@ -812,7 +812,7 @@ data: [DONE]
       }
     }
     ```
-  - 后端会将这些名称整理为 `streams` 白名单并透传给 LLM 工厂，再由 `MCPToolAdapter` 进行 MCP 工具过滤；未出现在 `streams` 中的工作流工具**不会被注入和调用**。
+  - 有 `workflows` 时走 `@xrkseek/harness`（`runHarnessModuleLoop`）；无则工厂单次补全（`tool_calls` 透传、不执行）。未出现在白名单中的工作流工具**不会被注册/调用**。
 
 ### 模型和工作流列表
 

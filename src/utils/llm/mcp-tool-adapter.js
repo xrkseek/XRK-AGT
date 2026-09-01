@@ -7,8 +7,8 @@ import { previewToolCallArguments } from '#utils/llm/parse-tool-arguments.js';
  * MCP 工具适配器
  *
  * 职责边界：
- * - 将 AiWorkflowLoader 暴露的 MCP 工具转换为 OpenAI tools 数组格式，供各 LLM 工厂在构造请求体时注入
- * - 在收到 OpenAI style tool_calls 时，实际调用 MCP 工具，并返回 role=tool 的消息列表
+ * - 将 AiWorkflowLoader 暴露的 MCP 工具转为 OpenAI tools 形态，供 harness ToolRegistry 注册
+ * - 在 harness 工具执行时调用 MCP，并返回 role=tool 的消息列表
  * - 基于 workflows/allowedTools 做工具白名单过滤：保证"未通过接口声明的工具"不会被调用
  * - 安全/策略门禁在 MCPServer.handleToolCall 统一执行（覆盖 LLM / HTTP / WS / JSON-RPC）
  */
@@ -69,16 +69,6 @@ export class MCPToolAdapter {
     return tools;
   }
 
-  static convertMCPToolsToAnthropic(options = {}) {
-    return filterToolsByPolicy(
-      this.listMcpTools(options).map((tool) => ({
-        name: tool.name,
-        description: tool.description || '',
-        input_schema: this.convertSchemaToOpenAI(tool.inputSchema || {})
-      }))
-    );
-  }
-
   /**
    * 将 JSON Schema 转换为 OpenAI function.parameters 定义
    * @param {Object} schema - JSON Schema
@@ -126,7 +116,8 @@ export class MCPToolAdapter {
    * 权限控制策略：
    * - 若传入 options.allowedTools，则仅允许显式列出的工具被调用
    * - 否则，若传入 options.workflows，则基于 streams 计算允许的 MCP 工具白名单
-   * - 调用方传入 body.tools 时由 v3 设置为 mcpToolMode=passthrough，tool_calls 透传客户端执行，不进入本方法
+   * - /v1 + body.tools（无 workflows）走工厂单次补全，tool_calls 透传客户端，不进入本方法
+   * - MCP 多轮执行在 harness module loop（经本方法）
    *
    * @param {Array} toolCalls - OpenAI tool_calls
    * @param {Object} options - 选项

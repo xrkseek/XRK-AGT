@@ -216,12 +216,6 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
       providerConfig.maxToolRounds,
       llm.maxToolRounds
     ),
-    mcpToolMode: pick(
-      apiConfig.mcpToolMode,
-      runtimeConfig.mcpToolMode,
-      providerConfig.mcpToolMode,
-      llm.mcpToolMode
-    ),
     promptCache: pick(
       apiConfig.promptCache,
       runtimeConfig.promptCache,
@@ -235,33 +229,5 @@ export function resolveStreamLLMConfig(stream, apiConfig = {}) {
 
   const { _clientClass, factoryType, ...out } = merged;
   return out;
-}
-
-/**
- * 弱/辅模型配置（对齐 goose fast_model / aider weak_model）。
- * 用于摘要、命名、压缩等轻量任务；未配置则返回 null。
- * @param {object} [apiConfig]
- * @returns {object|null}
- */
-export function resolveAuxLLMConfig(apiConfig = {}) {
-  const ai = getAiWorkflowConfigOptional();
-  const aux = ai.llm?.aux || {};
-  const providerRaw = String(
-    apiConfig.provider || aux.Provider || aux.provider || ''
-  ).toLowerCase().trim();
-  if (!providerRaw || !LLMFactory.hasProvider(providerRaw)) return null;
-
-  const base = resolveStreamLLMConfig(
-    { config: {}, name: 'aux' },
-    {
-      ...apiConfig,
-      provider: providerRaw,
-      model: apiConfig.model ?? aux.model,
-      temperature: apiConfig.temperature ?? aux.temperature ?? 0.3,
-      maxTokens: apiConfig.maxTokens ?? aux.maxTokens ?? 2048,
-      enableTools: false
-    }
-  );
-  return { ...base, provider: providerRaw, _aux: true };
 }
 

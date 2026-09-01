@@ -1,0 +1,27 @@
+# 全局开关 + 推送 cron + 按 QQ 分用户
+# 运行时：data/cut/cut.yaml（首次从本模板复制）
+# 每用户训练日志：data/cut/userdata/{qq}.json
+# 网页/Electron 不读本文件，用 www/cut 本地 plan + 本地 user 数据
+
+enabled: true
+
+push:
+  enabled: true
+  breakfastCron: '0 0 7 * * *'
+  lunchCron: '0 0 12 * * *'
+  dinnerCron: '0 30 18 * * *'
+
+# 按 QQ 隔离；请把 qq 改成真实号码后启用
+users:
+  - qq: '10001'
+    enabled: false
+    nickname: demo
+    pushMeals: true
+    pushWorkout: true
+    profile:
+      heightCm: 170
+      startWeightJin: 0
+      targetLossJin: 0
+      days: 30
+      injury: ''
+      startDate: ''

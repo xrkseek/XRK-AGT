@@ -1,8 +1,3 @@
-import { partitionAndExecuteToolCalls } from '#utils/llm/tool-partition-utils.js';
-import {
-  appendToolBudgetExhaustedNudge,
-  toolBudgetFinalizeOverrides
-} from '#utils/llm/tool-loop-finalize.js';
 import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
 import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '#utils/llm/openai-chat-utils.js';
@@ -10,7 +5,7 @@ import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
 import { createToolNameMapper } from '#utils/llm/tool-name-utils.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { iterateSSE } from '#utils/llm/sse-utils.js';
-import { normalizeError } from '#utils/normalize-error.js';
+import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
 
 /**
  * DeepSeek Chat Completions：`reasoning_effort` ∈ low | high | max
@@ -122,165 +117,83 @@ export default class DeepSeekLLMClient {
 
   async chat(messages, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
-    const enableMcpTools = overrides?.mcpToolMode !== 'passthrough';
-    const maxToolRounds = this.config.maxToolRounds || 7;
-    const currentMessages = [...transformedMessages];
-    const executedToolNames = [];
+    
+    const resp = await fetch(
+      this.endpoint,
+      buildFetchOptionsWithProxy(this.config, {
+        method: 'POST',
+        headers: this.buildHeaders(overrides.headers),
+        body: JSON.stringify(this.buildBody(transformedMessages, overrides)),
+        signal: AbortSignal.timeout(this.timeout)
+      })
+    );
 
-    for (let round = 0; round < maxToolRounds; round++) {
-      const resp = await fetch(
-        this.endpoint,
-        buildFetchOptionsWithProxy(this.config, {
-          method: 'POST',
-          headers: this.buildHeaders(overrides.headers),
-          body: JSON.stringify(this.buildBody(currentMessages, overrides)),
-          signal: AbortSignal.timeout(this.timeout)
-        })
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      throw createLlmHttpError(
+        `DeepSeekLLMClient 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        { status: resp.status, headers: resp.headers }
       );
-
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => '');
-        throw createLlmHttpError(
-          `DeepSeek LLM 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
-          { status: resp.status, headers: resp.headers }
-        );
-      }
-
-      const message = (await resp.json())?.choices?.[0]?.message;
-      if (!message) break;
-
-      if (message.tool_calls?.length > 0 && enableMcpTools) {
-        const denormalized = this._toolNames.denormalizeToolCalls(message.tool_calls);
-        for (const tc of denormalized) {
-          const name = tc.function?.name;
-          if (name && !executedToolNames.includes(name)) executedToolNames.push(name);
-        }
-        currentMessages.push({
-          role: 'assistant',
-          content: message.content ?? null,
-          reasoning_content: message.reasoning_content ?? null,
-          tool_calls: message.tool_calls
-        });
-        const toolResults = await partitionAndExecuteToolCalls(denormalized, overrides);
-        if (toolResults === null) return executedToolNames.length ? { content: '', executedToolNames } : '';
-        currentMessages.push(...toolResults);
-        continue;
-      }
-      if (message.tool_calls?.length > 0 && !enableMcpTools) break;
-
-      const content = message.content || '';
-      return executedToolNames.length > 0 ? { content, executedToolNames } : content;
     }
 
-    const lastContent = currentMessages[currentMessages.length - 1]?.content || '';
-    try {
-      const finalizeMsgs = appendToolBudgetExhaustedNudge(currentMessages);
-      const resp = await fetch(
-        this.endpoint,
-        buildFetchOptionsWithProxy(this.config, {
-          method: 'POST',
-          headers: this.buildHeaders(overrides.headers),
-          body: JSON.stringify(
-            this.buildBody(finalizeMsgs, toolBudgetFinalizeOverrides({ ...overrides }))
-          ),
-          signal: AbortSignal.timeout(this.timeout)
-        })
-      );
-      if (resp.ok) {
-        const content = (await resp.json())?.choices?.[0]?.message?.content || lastContent;
-        return executedToolNames.length > 0 ? { content, executedToolNames } : content;
-      }
-    } catch (err) {
+    const json = await resp.json();
+    logPromptCacheUsage(json?.usage, 'DeepSeekLLMClient');
+    const message = json?.choices?.[0]?.message;
+    const content = message?.content || '';
+    if (message?.tool_calls?.length) {
       RuntimeUtil.makeLog(
-        'warn',
-        `[DeepSeekLLMClient] 工具轮次收尾失败: ${normalizeError(err).message}`,
-        'LLMFactory'
+        'info',
+        `[DeepSeekLLMClient] 单次补全含 tool_calls×${message.tool_calls.length}（本客户端不执行工具）`,
+        'LLMFactory',
       );
+      return { content, tool_calls: message.tool_calls };
     }
-    return executedToolNames.length > 0 ? { content: lastContent, executedToolNames } : lastContent;
+    return content;
   }
 
   async chatStream(messages, onDelta, overrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
-    const maxToolRounds = this.config.maxToolRounds || 7;
-    let currentMessages = [...transformedMessages];
-    let round = 0;
+    
+    const resp = await fetch(
+      this.endpoint,
+      buildFetchOptionsWithProxy(this.config, {
+        method: 'POST',
+        headers: this.buildHeaders(overrides.headers),
+        body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
+        signal: AbortSignal.timeout(this.timeout)
+      })
+    );
 
-    while (round < maxToolRounds) {
-      const resp = await fetch(
-        this.endpoint,
-        buildFetchOptionsWithProxy(this.config, {
-          method: 'POST',
-          headers: this.buildHeaders(overrides.headers),
-          body: JSON.stringify(this.buildBody(currentMessages, { ...overrides, stream: true })),
-          signal: AbortSignal.timeout(this.timeout)
-        })
-      );
-
-      if (!resp.ok || !resp.body) {
-        const text = await resp.text().catch(() => '');
-        throw new Error(`DeepSeek LLM 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
-      }
-
-      const collector = { toolCalls: [], content: '', reasoningContent: '', finishReason: null };
-      const enableMcp = overrides?.mcpToolMode !== 'passthrough';
-      await this._consumeSSEWithToolCalls(resp, onDelta, collector, overrides);
-
-      if (collector.toolCalls.length > 0 && collector.finishReason === 'tool_calls' && enableMcp) {
-        RuntimeUtil.makeLog('info', `[DeepSeekLLMClient] 检测到工具调用，执行工具: ${collector.toolCalls.length}个`, 'LLMFactory');
-
-        currentMessages.push({
-          role: 'assistant',
-          content: collector.content || null,
-          reasoning_content: collector.reasoningContent || null,
-          tool_calls: collector.toolCalls
-        });
-
-        const denormalized = this._toolNames.denormalizeToolCalls(collector.toolCalls);
-        const toolResults = await partitionAndExecuteToolCalls(denormalized, overrides, {
-          buildMcpPayload: (mid, res) => mid.map((tc, i) => ({
-            name: tc.function?.name || `工具${i + 1}`,
-            arguments: tc.function?.arguments || {},
-            result: res[i]?.content ?? ''
-          })),
-          onDelta
-        });
-        if (toolResults === null) break;
-        currentMessages.push(...toolResults);
-        round++;
-        if (round >= maxToolRounds) {
-          RuntimeUtil.makeLog('warn', `[DeepSeekLLMClient] 达到最大工具调用轮数: ${maxToolRounds}`, 'LLMFactory');
-          try {
-            const finalizeMsgs = appendToolBudgetExhaustedNudge(currentMessages);
-            const finalResp = await fetch(
-              this.endpoint,
-              buildFetchOptionsWithProxy(this.config, {
-                method: 'POST',
-                headers: this.buildHeaders(overrides.headers),
-                body: JSON.stringify(
-                  this.buildBody(finalizeMsgs, toolBudgetFinalizeOverrides({ ...overrides, stream: true }))
-                ),
-                signal: AbortSignal.timeout(this.timeout)
-              })
-            );
-            if (finalResp.ok && finalResp.body) {
-              const collector = { toolCalls: [], content: '', finishReason: null, reasoningContent: '' };
-              await this._consumeSSEWithToolCalls(finalResp, onDelta, collector, overrides);
-            }
-          } catch (err) {
-            RuntimeUtil.makeLog(
-              'warn',
-              `[DeepSeekLLMClient] 流式工具轮次收尾失败: ${normalizeError(err).message}`,
-              'LLMFactory'
-            );
-          }
-          break;
-        }
-        continue;
-      }
-      if (collector.content || !collector.toolCalls.length || !enableMcp) break;
-      round++;
+    if (!resp.ok || !resp.body) {
+      const text = await resp.text().catch(() => '');
+      throw new Error(`DeepSeekLLMClient 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
+
+    const collector = { toolCalls: [], content: '', reasoningContent: '', finishReason: null };
+    if (typeof this._consumeSSEWithToolCalls === 'function') {
+      await this._consumeSSEWithToolCalls(resp, onDelta, collector, overrides);
+    } else {
+      // fallback: text-only SSE
+      const { iterateSSE } = await import('#utils/llm/sse-utils.js');
+      for await (const { data } of iterateSSE(resp)) {
+        try {
+          const j = JSON.parse(data);
+          const delta = j?.choices?.[0]?.delta?.content;
+          if (delta) {
+            collector.content += delta;
+            if (typeof onDelta === 'function') onDelta(delta);
+          }
+        } catch { /* ignore */ }
+      }
+    }
+    if (collector.toolCalls.length) {
+      RuntimeUtil.makeLog(
+        'info',
+        `[DeepSeekLLMClient] 流式单次补全含 tool_calls×${collector.toolCalls.length}（本客户端不执行工具）`,
+        'LLMFactory',
+      );
+    }
+    return collector.content;
   }
 
   async _consumeSSEWithToolCalls(resp, onDelta, collector, options = {}) {
@@ -304,8 +217,7 @@ export default class DeepSeekLLMClient {
         }
 
         if (delta?.tool_calls?.length) {
-          const mode = options?.mcpToolMode || 'execute';
-          if ((mode === 'passthrough' || mode === 'hybrid') && typeof onDelta === 'function') {
+          if (typeof onDelta === 'function') {
             onDelta('', { tool_calls: delta.tool_calls });
           }
           for (const tc of delta.tool_calls) {

@@ -1,10 +1,5 @@
 import AnthropicLLMClient from './AnthropicLLMClient.js';
 import { iterateSSE } from '#utils/llm/sse-utils.js';
-import { partitionAndExecuteToolCalls } from '#utils/llm/tool-partition-utils.js';
-import {
-  appendToolBudgetExhaustedNudge,
-  toolBudgetFinalizeOverrides,
-} from '#utils/llm/tool-loop-finalize.js';
 import {
   applyAnthropicTools,
   ensureAnthropicMaxTokens,
@@ -14,7 +9,6 @@ import {
 import { createToolNameMapper } from '#utils/llm/tool-name-utils.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
-import { normalizeError } from '#utils/normalize-error.js';
 
 /**
  * Anthropic Messages 兼容网关（anthropic_compat_llm.providers）
@@ -68,17 +62,6 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
 
   async _postMessages(body, overrides = {}) {
     return this._postNativeBody(body, overrides);
-  }
-
-  _toolUsesToOpenAiCalls(toolUses = []) {
-    return toolUses.map((tu, i) => ({
-      id: tu.id || `toolu_${i}`,
-      type: 'function',
-      function: {
-        name: this._toolNames.denormalize(tu.name || 'tool'),
-        arguments: JSON.stringify(tu.input ?? {})
-      }
-    }));
   }
 
   _parseMessageToolUses(message = {}) {
@@ -152,137 +135,48 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
     return result;
   }
 
-  async _runToolLoop(initialMessages, overrides, { stream = false, onDelta } = {}) {
-    const maxRounds = overrides.maxToolRounds ?? this.config.maxToolRounds ?? 7;
-    const useCustomExecutor = typeof overrides.toolExecutor === 'function';
-    const enableMcp = !useCustomExecutor
-      && overrides.mcpToolMode !== 'passthrough'
-      && Array.isArray(overrides.workflows)
-      && overrides.workflows.length > 0;
-    let currentMessages = normalizeAnthropicToolHistory(
+  async _completeOnce(initialMessages, overrides, { stream = false, onDelta } = {}) {
+    const currentMessages = normalizeAnthropicToolHistory(
       normalizeAnthropicMessages(await this.transformMessages(initialMessages)),
       this._toolNames
     );
-    let lastText = '';
 
-    for (let round = 0; round < maxRounds; round++) {
-      if (typeof overrides.onBeforeRound === 'function') {
-        await overrides.onBeforeRound(currentMessages, round);
-      }
+    const body = this.buildBody(currentMessages, overrides);
+    body.stream = stream;
 
-      const body = this.buildBody(currentMessages, overrides);
-      body.stream = stream;
+    const resp = await this._postMessages(body, overrides);
 
-      const resp = await this._postMessages(body, overrides);
-
-      let roundText = '';
-      let toolUses = [];
-
-      if (stream) {
-        const streamed = await this._consumeAnthropicStream(resp, onDelta);
-        roundText = streamed.text;
-        toolUses = streamed.toolUses;
-      } else {
-        const json = await resp.json();
-        logPromptCacheUsage(json?.usage, 'AnthropicCompatible');
-        const parsed = this._parseMessageToolUses(json);
-        roundText = parsed.text;
-        toolUses = parsed.toolUses;
-        if (roundText && typeof onDelta === 'function') onDelta(roundText);
-      }
-
-      if (roundText) lastText = roundText;
-
-      if (!toolUses.length) {
-        return lastText;
-      }
-
-      const assistantBlocks = [];
-      if (roundText?.trim()) assistantBlocks.push({ type: 'text', text: roundText });
-      for (const tu of toolUses) {
-        assistantBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input ?? {} });
-      }
-      currentMessages.push({ role: 'assistant', content: assistantBlocks });
-
-      let toolResultBlocks = null;
-
-      if (useCustomExecutor) {
-        const results = await overrides.toolExecutor(toolUses);
-        toolResultBlocks = (Array.isArray(results) ? results : []).map((r) => ({
-          type: 'tool_result',
-          tool_use_id: r.tool_use_id ?? r.toolUseId ?? r.id,
-          content: typeof r.content === 'string' ? r.content : JSON.stringify(r.content ?? '')
-        }));
-      } else if (enableMcp) {
+    if (stream) {
+      const streamed = await this._consumeAnthropicStream(resp, onDelta);
+      if (streamed.toolUses.length) {
         RuntimeUtil.makeLog(
-          'info',
-          `[AnthropicCompatibleLLMClient] 执行 MCP 工具 ${toolUses.length} 个: [${toolUses.map((t) => t.name).join(', ')}]`,
-          'LLMFactory'
+          'warn',
+          `[AnthropicCompatibleLLMClient] 单次补全含 tool_use×${streamed.toolUses.length}（本客户端不执行工具）`,
+          'LLMFactory',
         );
-
-        const openAiCalls = this._toolUsesToOpenAiCalls(toolUses);
-        const toolResults = await partitionAndExecuteToolCalls(openAiCalls, overrides, {
-          buildMcpPayload: (mid, res) => mid.map((tc, idx) => ({
-            name: tc.function?.name || `工具${idx + 1}`,
-            arguments: tc.function?.arguments || {},
-            result: res[idx]?.content ?? ''
-          })),
-          onDelta
-        });
-        if (toolResults === null) return lastText;
-
-        if (typeof overrides.onAfterToolRound === 'function') {
-          const early = await overrides.onAfterToolRound({
-            toolNames: toolUses.map((t) => t.name),
-            toolResults,
-            round
-          });
-          if (early?.stop) {
-            return early.content != null ? early.content : lastText;
-          }
-        }
-
-        toolResultBlocks = toolResults.map((tr) => ({
-          type: 'tool_result',
-          tool_use_id: tr.tool_call_id,
-          content: tr.content
-        }));
-      } else {
-        return lastText;
       }
-
-      currentMessages.push({ role: 'user', content: toolResultBlocks });
+      return streamed.text;
     }
 
-    RuntimeUtil.makeLog('warn', `[AnthropicCompatibleLLMClient] 达到最大工具轮数: ${maxRounds}`, 'LLMFactory');
-    if (typeof overrides.onTruncated === 'function') overrides.onTruncated();
-    try {
-      const finalizeMsgs = appendToolBudgetExhaustedNudge(currentMessages);
-      const body = this.buildBody(finalizeMsgs, toolBudgetFinalizeOverrides({ ...overrides }));
-      body.stream = false;
-      body.tool_choice = { type: 'none' };
-      const resp = await this._postMessages(body, overrides);
-      const json = await resp.json();
-      const parsed = this._parseMessageToolUses(json);
-      if (parsed.text) {
-        if (stream && typeof onDelta === 'function') onDelta(parsed.text);
-        return parsed.text;
-      }
-    } catch (err) {
+    const json = await resp.json();
+    logPromptCacheUsage(json?.usage, 'AnthropicCompatible');
+    const parsed = this._parseMessageToolUses(json);
+    if (parsed.toolUses.length) {
       RuntimeUtil.makeLog(
         'warn',
-        `[AnthropicCompatibleLLMClient] 工具轮次收尾失败: ${normalizeError(err).message}`,
-        'LLMFactory'
+        `[AnthropicCompatibleLLMClient] 单次补全含 tool_use×${parsed.toolUses.length}（本客户端不执行工具）`,
+        'LLMFactory',
       );
     }
-    return lastText;
+    if (parsed.text && typeof onDelta === 'function') onDelta(parsed.text);
+    return parsed.text;
   }
 
   async chat(messages, overrides = {}) {
-    return this._runToolLoop(messages, overrides, { stream: false });
+    return this._completeOnce(messages, overrides, { stream: false });
   }
 
   async chatStream(messages, onDelta, overrides = {}) {
-    await this._runToolLoop(messages, overrides, { stream: true, onDelta });
+    await this._completeOnce(messages, overrides, { stream: true, onDelta });
   }
 }

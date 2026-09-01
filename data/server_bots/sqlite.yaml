@@ -1,0 +1,21 @@
+# ============================================
+# SQLite 配置（全局配置）
+# ============================================
+# Runtime 嵌入式库（Node 内置 node:sqlite），与 Redis 同级启动。
+# 位置：data/server_bots/sqlite.yaml
+# 勿与可选 Mongo/PG/Qdrant Core 混淆。
+
+# ----------------------------------------
+# 开关与路径
+# ----------------------------------------
+enabled: true
+# 相对项目根；也可用绝对路径。设为 ":memory:" 或 memory: true 则纯内存。
+filePath: "data/runtime/xrk_agt.db"
+memory: false              # true 时忽略 filePath，使用 :memory:
+
+# ----------------------------------------
+# 引擎选项
+# ----------------------------------------
+walMode: true              # 磁盘库启用 WAL（:memory: 下跳过）
+busyTimeoutMs: 5000        # 锁等待毫秒（DatabaseSync timeout）
+foreignKeys: true          # PRAGMA foreign_keys = ON

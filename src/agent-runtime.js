@@ -1,4 +1,8 @@
 import './bootstrap-globals.js';
+/**
+ * AgentRuntime = **Host** (HTTP/WS/多 bot/Loader)，不是 LLM agent loop。
+ * 勿在此文件堆 turn/工具结算/会话笔录真源 —— Agent loop 在 `@xrkseek/harness`（见 docs/adr/0001 · harness-module-loop.md）。
+ */
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { EventEmitter } from 'node:events';

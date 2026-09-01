@@ -161,7 +161,7 @@ system-Core 提供了 **11 个** HTTP API 模块，覆盖系统管理的各个�
 | `/v1/responses` | POST | OpenAI Responses（需 API Key；`store=false`） |
 | `/api/ai/models` | GET | 控制台 LLM 目录（vendors / workflows；`ai-workspace.js`；需 API Key） |
 
-> 网关路径一律 `systemAuth`；`model` = provider key。前端勾选的「带 MCP 工具的工作流」经 `workflow.workflows` 整理为白名单注入工厂。
+> 网关路径一律 `systemAuth`；`model` = provider key。前端勾选的「带 MCP 工具的工作流」经 `workflow.workflows` 进入 harness `ToolRegistry` 白名单。
 >
 > **已移除**：`/api/v3/*`、`GET /api/ai/stream`。
 

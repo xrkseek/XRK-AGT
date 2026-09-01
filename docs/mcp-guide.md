@@ -35,6 +35,18 @@
 
 端点与工作流分组见下文 [HTTP API](#http-api)；外部平台连接配置见 [MCP配置指南](mcp-config-guide.md)。
 
+### 被 XRK-Harness 反向挂载
+
+Harness Host 可将本仓 MCP 当作远程工具源（AGT 继续拥有 Tasker/产品工具实现）：
+
+```bash
+XRK_MCP_ALLOW=1
+XRK_MCP_SERVERS=[{"name":"agt","url":"http://127.0.0.1:<agt-port>/api/mcp/jsonrpc"}]
+xrkh serve --preset server --workspace <shared-workspace>
+```
+
+AGT 侧打开模块 loop 后，工具仍走本仓 MCPServer（经 `MCPToolAdapter` → harness ToolRegistry）。远程 MCP 配置见 [MCP配置指南](mcp-config-guide.md)。
+
 ---
 
 ## 核心工具列表
@@ -104,7 +116,7 @@
 **参数**：
 - `command` (string, 必需): 要执行的命令
 
-**注意**：需 `ai-workflow.tools.file.runEnabled=true`（默认关）。Windows 与 Unix 均可（Unix 为 `/bin/sh -lc`）。危险命令经 `security.toolScan`；可选 `security.approval`。
+**注意**：依赖 `ai-workflow.tools.file.runEnabled`（**默认开**）。Windows 与 Unix 均可（Unix 为 `/bin/sh -lc`）。危险命令经 `security.toolScan`；可选 `security.approval`。
 
 #### `tools.apply_edit`
 批量应用 aider 式 SEARCH/REPLACE 块（一次改多文件/多处）。
@@ -376,19 +388,20 @@ GET /api/mcp/health
 
 ---
 
-## 与 v3 接口 / LLM 工厂的集成
+## 与 `/v1` / harness 的集成
 
-在 AI 聊天链路中，MCP 不仅可以被外部（Cursor/Claude 等）直接调用，也会被 **LLM 工厂 + `/v1/chat/completions`** 间接调用，用于实现 OpenAI style tool calling：
+在 AI 聊天链路中，MCP 可被外部（Cursor/Claude 等）直接调用，也可经 **`@xrkseek/harness` 模块 loop** 间接调用（OpenAI style tool calling）：
 
-- `/v1/chat/completions` 会将前端选择的「带 MCP 工具的工作流」打包进请求体的 `workflow` 字段；
-- 后端将其解析为 `streams` 白名单，传给 LLM 工厂和 `MCPToolAdapter`；
-- LLM 客户端在收到 `tool_calls` 时，会通过 `MCPToolAdapter.handleToolCalls(tool_calls, options)` 执行工具；
-- `options` 可含 `streams`（白名单）、`parallel_tool_calls`（为 `false` 时**顺序**执行同轮 tool_calls，避免 reply 与其它 MCP 抢状态）；
-- MCP handler 的 `context.e` / `context.turnState` 从 `runWithWorkflowRequestContext`（AsyncLocalStorage）读取，并发消息互不串线；调用工作流前须建立 ALS；
-- 远程 MCP **stdio** 子进程默认 `shell: false`（防命令注入）；确需 shell 语法时在该服务器配置里显式 `"shell": true`；
-- `MCPToolAdapter` 会基于 `streams` 计算出**允许的工具集合**，只有这些工具可以被真正调用，其它工具调用会被拒绝并返回错误结果。
+- `/v1/chat/completions` 将「带 MCP 工具的工作流」放进请求体 `workflow`；
+- 有 `workflows` 时后端走 `runHarnessModuleLoop`：`MCPToolAdapter.convert*` → harness `ToolRegistry`，执行仍 `MCPToolAdapter.handleToolCalls` → `MCPServer`；
+- 无 `workflows` 时走 LLM 工厂**单次**补全（`tool_calls` 透传，工厂不执行）；
+- `options` / ALS：`context.e` / `context.turnState` 仍从 `runWithWorkflowRequestContext` 读取；
+- 远程 MCP **stdio** 子进程默认 `shell: false`；确需 shell 时显式 `"shell": true`；
+- 白名单外的工作流工具不会被注册进 harness，也不会被执行。
 
-> 换句话说：**前端/调用方在 v3 接口里没有显式允许的工作流，其下所有 MCP 工具都不会被 AI 使用**，确保工具权限和作用域可控。
+详见 [harness-module-loop.md](harness-module-loop.md)。
+
+> **前端/调用方未显式允许的工作流，其下 MCP 工具都不会被 AI 使用。**
 
 **响应**：
 ```json

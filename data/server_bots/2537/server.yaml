@@ -1,0 +1,465 @@
+# ============================================
+# 服务器配置（随端口变化）
+# ============================================
+# 每个端口有独立副本，控制该端口的 HTTP/HTTPS、反向代理、静态资源、安全与认证等。
+# 位置：data/server_bots/{port}/server.yaml
+# 包含：基础服务、反向代理、HTTPS、静态文件、安全、CORS、认证、限流、压缩、日志、重定向、CDN、性能等。
+
+# ----------------------------------------
+# 基础服务器配置
+# ----------------------------------------
+server:
+  # 服务器名称（将显示在日志中）
+  name: "XRK Server"
+  # 监听地址
+  # 0.0.0.0: 监听所有网卡（默认；外层安全组/防火墙负责暴露面）
+  # 127.0.0.1: 仅本机
+  host: "0.0.0.0"
+  # HTTP端口（此端口由命令行参数指定，此处仅作说明）
+  # 实际端口从 process.argv 中获取
+  # 对外访问基址（可选）。启动日志 / Web 控制台以此为准。
+  # 留空：misc.detectPublicIP=true 时用公网 IP，否则用 http://127.0.0.1:{port}
+  # 示例: https://bot.example.com
+  url: ""
+
+# ----------------------------------------
+# 反向代理配置
+# ----------------------------------------
+proxy:
+  # 是否启用反向代理功能
+  # 启用后可以实现多域名解析、路径重写、负载均衡等
+  enabled: false
+  # HTTP监听端口（作为反向代理时建议使用80）
+  httpPort: 80
+  # HTTPS监听端口（作为反向代理时建议使用443）
+  httpsPort: 443
+  # 健康检查配置（用于负载均衡和故障转移）
+  healthCheck:
+    # 是否启用健康检查
+    enabled: false
+    # 检查间隔（毫秒）
+    interval: 30000
+    # 最大失败次数（超过后标记为不健康）
+    maxFailures: 3
+    # 健康检查超时时间（毫秒）
+    timeout: 5000
+    # 健康检查结果缓存时间（毫秒，减少频繁检查）
+    cacheTime: 5000
+    # 自定义健康检查路径（可选，默认 /health）
+    # path: "/health"
+  # 域名配置列表
+  # 每个域名可以有不同的配置和处理方式
+  # 注意：
+  # - 已经通过CDN做HTTPS的域名：可以只在这里做HTTP反向代理，不需要在本机配置证书
+  #   这种情况下直接配置domain/target，省略ssl或将ssl.enabled设为false即可
+  domains:
+    # 主域名 + 本机证书配置示例（本机同时承担TLS终结）
+    - domain: "xrkk.cc"
+      # 站点根静态目录（/favicon.ico 等）；默认 core/system-Core/site
+      # 不配置时亦回退 paths.www（同上）
+      staticRoot: "./core/system-Core/site"
+      # 是否启用SSL（需要在本机配置证书）
+      # 如果该域名已经交给CDN做HTTPS，请删除整个ssl段或将enabled设为false
+      ssl:
+        enabled: false
+        # 本机终结TLS时才需要配置certificate
+        # certificate:
+        #   key: "/path/to/xrkk.cc.key"
+        #   cert: "/path/to/xrkk.cc.cert"
+        #   ca: ""  # CA证书链（可选）
+      # 目标服务器（支持字符串或数组，数组时启用负载均衡）
+      # 字符串：单个目标服务器
+      # 数组：多个服务器，支持负载均衡
+      # 不配置则直接提供静态文件服务
+      # 例如：仅做静态站，交给CDN调用本机80端口，则可不配置target
+      # target: "http://localhost:3000"
+      # 负载均衡配置示例：
+      # target:
+      #   - url: "http://localhost:3001"
+      #     weight: 3  # 权重（用于weighted算法）
+      #     healthUrl: "http://localhost:3001/health"  # 自定义健康检查URL
+      #   - url: "http://localhost:3002"
+      #     weight: 1
+      # 负载均衡算法（可选）
+      # 可选值：round-robin（轮询）、weighted（加权轮询）、least-connections（最少连接）、
+      #        ip-hash（IP哈希）、consistent-hash（一致性哈希）、least-response-time（最少响应时间）
+      # loadBalance: "round-robin"
+      # 自定义健康检查路径（可选，覆盖全局配置）
+      # healthUrl: "http://localhost:3000/custom-health"
+    # 仅通过CDN做HTTPS、在本机只做HTTP反代的示例：
+    # - domain: "cdn.example.com"
+    #   # 不需要ssl段，也不需要证书，CDN直接回源到本机httpPort
+    #   # 将/api/*代理到本机API服务
+    #   target: "http://localhost:3000"
+
+# ----------------------------------------
+# HTTPS配置
+# ----------------------------------------
+https:
+  # 是否启用HTTPS服务（全局默认证书）
+  # 注意：现在每个域名可以有自己的证书
+  enabled: false
+  # HTTPS 端口（可选）
+  # - 不填写：默认使用 HTTP端口 + portOffset（portOffset 默认 1）
+  # - 填写具体端口：强制使用该端口（仅在未启用 proxy 时作为核心 HTTPS 端口）
+  # port: 8443
+  portOffset: 1
+  # 默认SSL证书配置（当域名没有配置专用证书时使用）
+  certificate:
+    # 私钥文件路径（必需）
+    key: "/path/to/default/privkey.pem"
+    # 证书文件路径（必需）
+    cert: "/path/to/default/fullchain.pem"
+    # CA证书链文件路径（可选）
+    # 某些证书可能需要提供完整的证书链
+    ca: ""
+  # TLS配置
+  tls:
+    # 最低TLS版本（建议不低于TLSv1.2）
+    minVersion: "TLSv1.2"
+    # 是否启用HTTP/2协议（提升性能）
+    http2: true
+  # HSTS（HTTP严格传输安全）配置
+  # 警告：启用后所有HTTP请求将强制重定向到HTTPS
+  hsts:
+    # 是否启用HSTS
+    enabled: false
+    # 有效期（秒），31536000 = 1年
+    maxAge: 31536000
+    # 是否包含子域名
+    includeSubDomains: true
+    # 是否允许预加载（需要提交到浏览器预加载列表）
+    preload: false
+
+# ----------------------------------------
+# 静态文件服务
+# ----------------------------------------
+static:
+  # 默认首页文件列表（按顺序查找，返回第一个存在的文件）
+  index:
+    - "index.html"
+    - "index.htm"
+    - "default.html"
+  # 是否允许自动添加扩展名（例如：/page会尝试/page.html）
+  extensions: false
+  # 缓存时间设置
+  cache:
+    # 静态资源缓存时间（秒）
+    static: 86400     # CSS/JS文件
+    images: 604800    # 图片文件
+  # 缓存总时间（适用于其他文件）
+  # 支持格式：1d = 1天, 1h = 1小时
+  cacheTime: "1d"
+  # data 目录静态文件缓存（/media, /uploads），默认更短，避免调试时缓存干扰
+  dataCacheTime: "1h"
+
+# ----------------------------------------
+# robots.txt 配置
+# ----------------------------------------
+robots:
+  # 是否启用 robots.txt 路由（默认启用；关闭后会返回 404 或交给静态文件）
+  enabled: true
+  # 如果提供 content，则完全覆盖默认生成逻辑（支持多行字符串）
+  # content: |
+  #   User-agent: *
+  #   Disallow: /
+  #   Sitemap: https://example.com/sitemap.xml
+  # /xrk、/core 运行时强制并入 Disallow
+  disallow:
+    - "/xrk"
+    - "/xrk/"
+    - "/core/"
+    - "/api/"
+    - "/config/"
+    - "/data/"
+    - "/lib/"
+    - "/plugins/"
+    - "/trash/"
+  # Allow 留空；勿写 Allow: /
+  allow: []
+  # 是否自动追加 Sitemap 行（默认 true，会使用 server.url 或自动检测的访问 URL）
+  autoSitemap: true
+  # sitemapPath: "/sitemap.xml"
+
+# ----------------------------------------
+# 安全配置
+# ----------------------------------------
+security:
+  # Helmet安全头配置（自动添加安全相关的HTTP头部）
+  helmet:
+    # 是否启用Helmet
+    enabled: true
+  # HSTS配置（需要HTTPS启用）
+  hsts:
+    # 是否启用HSTS
+    enabled: false
+    # 有效期（秒），31536000 = 1年
+    maxAge: 31536000
+    # 是否包含子域名
+    includeSubDomains: true
+    # 是否允许预加载
+    preload: false
+  # 隐藏文件/目录模式
+  # 匹配这些模式的文件将返回404
+  # 注意：这些模式不会影响/api/*路径
+  hiddenFiles:
+    - "^\\..*"        # 所有点开头的文件
+    - "node_modules"  # Node.js依赖目录
+    - "\\.git"        # Git版本控制目录
+    - "\\.env"        # 环境变量文件
+    - "^/config/"     # 配置目录（仅根路径下的config）
+    - "^/private/"    # 私有目录（仅根路径下的private）
+
+# ----------------------------------------
+# 跨域资源共享（CORS）
+# ----------------------------------------
+cors:
+  # 是否启用CORS
+  enabled: true
+  # 允许的来源
+  # "*": 允许所有来源（不安全）
+  # 具体域名列表: ["https://example.com", "https://xrkk.cc"]
+  origins: ["*"]
+  # 允许的HTTP方法
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"]
+  # 允许的请求头
+  headers: ["Content-Type", "Authorization", "X-API-Key"]
+  # 是否允许携带凭证（cookies等）
+  credentials: false
+  # 预检请求缓存时间（秒）
+  maxAge: 86400
+  # 暴露给浏览器读取的响应头
+  exposeHeaders: ["X-Request-Id", "X-Response-Time"]
+
+# ----------------------------------------
+# 认证配置
+# ----------------------------------------
+auth:
+  # API密钥配置
+  apiKey:
+    # 是否启用API密钥认证
+    enabled: true
+    # 密钥存储文件路径
+    file: "config/server_config/api_key.json"
+    # 密钥长度（字符数）
+    length: 64
+  # NapCat 反向 WS（/OneBotv11）：true 时 127.* 也须 Bearer/access_token
+  onebot:
+    requireLoopbackAuth: true
+  # 是否允许「本机 Host + 127 对端」免 API Key。默认 false（公网/反代安全）。
+  # 仅本机开发且确认无反代把公网流量转到 127 时，才可设为 true。
+  loopbackExempt: false
+  # ai-workflow.tools.file.runEnabled=true 时，loopback 也强制 API Key（默认开启该强制）
+  requireLoopbackAuthWhenToolsRun: true
+  # API 鉴权白名单（仅影响 /api 的 Key 校验）
+  # 禁止填 "/" 或 "/api"（会放行全部，代码会忽略并打警告）
+  # /health、/status、静态 /xrk 本就不走 API Key，无需列入
+  # 示例： "/api/public/"、"/api/hooks/xxx"、"^/api/open/.*"
+  whitelist: []
+
+# ----------------------------------------
+# 速率限制
+# ----------------------------------------
+rateLimit:
+  # 是否启用速率限制（防止恶意请求）
+  enabled: true
+  # 全局限制（所有请求）
+  global:
+    # 时间窗口（毫秒）
+    windowMs: 900000
+    # 最大请求数
+    max: 1000
+    # 提示信息
+    message: "请求过于频繁，请稍后再试"
+  # API接口限制（更严格）
+  api:
+    # 时间窗口（毫秒）
+    windowMs: 60000
+    # 最大请求数
+    max: 60
+    # 提示信息
+    message: "API请求过于频繁"
+
+# ----------------------------------------
+# 请求限制
+# ----------------------------------------
+limits:
+  # 各种请求体大小限制
+  urlencoded: "10mb"  # URL编码数据
+  json: "10mb"        # JSON数据
+  raw: "50mb"         # 原始数据
+  text: "10mb"        # 文本数据
+  fileSize: "100mb"   # 文件上传
+  files: 8            # 单次 multipart 最大文件数
+
+# ----------------------------------------
+# 内容安全（HTTP侧）
+# ----------------------------------------
+contentSafety:
+  http:
+    # 是否启用 HTTP 入口的违禁词/图片 hash 检测（使用 data/bannedWords/global.json）
+    enabled: true
+    # action: reject | warn
+    action: "reject"
+    # 是否检测 AI 输入文本
+    checkAiInput: true
+    # 是否检测上传文件的 md5（图片/媒体）
+    checkUploadMd5: true
+
+# ----------------------------------------
+# 外联请求（HTTP client）
+# ----------------------------------------
+outbound:
+  # 可选：统一外联代理（undici ProxyAgent）。示例: "http://127.0.0.1:<port>"
+  proxy: ""
+
+# ----------------------------------------
+# 压缩配置
+# ----------------------------------------
+compression:
+  # 是否启用响应压缩（减少带宽使用）
+  enabled: true
+  # 压缩级别（0-9）
+  # 0: 无压缩（最快）
+  # 9: 最大压缩（最慢）
+  # 推荐：6（平衡）
+  level: 6
+  # 最小压缩大小（字节）
+  # 小于此大小的响应不会被压缩
+  threshold: 1024
+
+# ----------------------------------------
+# 日志配置（服务器请求日志）
+# ----------------------------------------
+logging:
+  # 是否记录请求日志
+  requests: true
+  # 是否记录错误日志
+  errors: true
+  # 是否启用调试日志（详细）
+  debug: false
+  # 静默路径列表（这些路径的请求不会记录日志，避免刷屏）
+  quiet:
+    - "/health"
+    - "/favicon.ico"
+    - "/robots.txt"
+
+# ----------------------------------------
+# HTTP重定向配置
+# ----------------------------------------
+# 重定向规则列表
+# 支持301(永久)、302(临时)、307(临时保持方法)、308(永久保持方法)
+# 示例：
+# redirects:
+#   - from: "/old-path"
+#     to: "/new-path"
+#     status: 301
+#     preserveQuery: true  # 是否保留查询参数
+#   - from: "/blog/*"
+#     to: "/articles/*"
+#     status: 301
+#   - from: "/old-page"
+#     to: "https://example.com/new-page"  # 外部重定向
+#     status: 302
+#     condition: "req.headers['user-agent'].includes('Mobile')"  # 可选条件
+redirects: []
+
+# ----------------------------------------
+# CDN配置
+# ----------------------------------------
+cdn:
+  # 是否启用CDN支持
+  enabled: false
+  # CDN域名（如果启用，静态资源将使用此域名）
+  # domain: "cdn.example.com"
+  # 静态资源前缀（CDN只应用于这些路径的资源）
+  staticPrefix: "/static"
+  # 是否使用HTTPS CDN
+  https: true
+  # CDN类型（可选，用于优化CDN特定头部）
+  # 可选值：cloudflare、aliyun、tencent、aws、baidu、qiniu、ucloud、general
+  # type: "general"
+  # CDN缓存控制配置（秒）
+  cacheControl:
+    static: 31536000    # CSS/JS/字体文件：1年
+    images: 604800      # 图片文件：7天
+    default: 3600        # 其他文件：1小时
+
+# ----------------------------------------
+# 性能优化配置
+# ----------------------------------------
+performance:
+  # Keep-Alive配置
+  keepAlive:
+    enabled: true
+    initialDelay: 1000  # 初始延迟（毫秒）
+    timeout: 120000     # 超时时间（毫秒）
+  # HTTP/HTTPS 服务器底层参数（net/http server）
+  httpServer:
+    maxHeadersCount: 2000
+    maxRequestsPerSocket: 0
+    serverTimeout: 120000      # server.timeout（毫秒）
+    headersTimeout: 60000      # server.headersTimeout（毫秒）
+    socketTimeout: 120000      # socket.setTimeout（毫秒）
+  # HTTP/2 Server Push（需要HTTP/2支持）
+  http2Push:
+    enabled: false
+    # 关键资源列表（自动推送）
+    criticalAssets:
+      - "/static/css/main.css"
+      - "/static/js/main.js"
+  # 连接池配置
+  connectionPool:
+    maxSockets: 50      # 每个主机的最大socket数
+    maxFreeSockets: 10  # 空闲socket的最大数量
+    timeout: 30000      # socket超时时间（毫秒）
+
+# ----------------------------------------
+# WebSocket 配置
+# ----------------------------------------
+websocket:
+  # 心跳检测
+  heartbeatInterval: 30000  # ping 间隔（毫秒）
+  heartbeatTimeout: 60000   # 超时（毫秒）
+  # 单条消息最大 payload（字节），默认 100MB
+  maxPayload: 104857600
+  # perMessageDeflate 压缩（ws）
+  perMessageDeflate:
+    enabled: true
+    zlibDeflateOptions:
+      chunkSize: 1024
+      memLevel: 7
+      level: 3
+    zlibInflateOptions:
+      chunkSize: 10240
+    clientNoContextTakeover: true
+    serverNoContextTakeover: true
+    serverMaxWindowBits: 10
+    concurrencyLimit: 10
+    threshold: 1024
+
+# ----------------------------------------
+# 其他配置
+# ----------------------------------------
+misc:
+  # 无 server.url 时是否探测公网 IP 作为启动展示基址（失败则 127.0.0.1）
+  detectPublicIP: true
+  # 公网 IP 查询接口（按顺序尝试；仅 detectPublicIP=true 时使用）
+  publicIpApis:
+    - "https://ifconfig.me/ip"
+    - "https://api.ipify.org"
+    - "https://icanhazip.com"
+    - "https://ipinfo.io/ip"
+  publicIpTimeoutMs: 3000
+
+  # trash 目录清理（临时文件）
+  trashCleanupIntervalMinutes: 60
+  trashMaxAgeHours: 24
+  trashPreserve:
+    - ".gitignore"
+    - "instruct.txt"
+
+  # 内部缓存（毫秒）
+  cache:
+    ttlMs: 60000
+

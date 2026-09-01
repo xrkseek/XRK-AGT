@@ -58,6 +58,7 @@
 
 ### 正文约定
 
+- **写现行契约**：说明「现在是什么 / 落在哪」；changelog、迁移日记、「已删除 XXX」放 `docs/releases/` 或 ADR 后果，不进专题教科书
 - **行为以代码为准**；写清「文件 + 符号名」  
 - 配置：YAML 路径 + 字段名 + 一行示例  
 - API：method + path + 是否 `systemAuth`  

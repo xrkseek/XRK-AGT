@@ -12,7 +12,8 @@
 | **写法与性能** | **[coding-style.md](coding-style.md)** → [node-26-runtime.md](node-26-runtime.md) |
 | **Cursor / 框架开发约定** | 根 [AGENTS.md](../AGENTS.md) · `.cursor/skills/` |
 | **办事助手（群聊/控制台）** | **[agents.md](agents.md)** · **[agent-context.md](agent-context.md)** · 种子 [agents/](../agents/) |
-| 懂架构 | [底层架构设计](底层架构设计.md) → [startup.md](startup.md) → [database.md](database.md) |
+| 懂架构 | [底层架构设计](底层架构设计.md) → [status.md](status.md) → [adr/](adr/README.md) → [startup.md](startup.md) |
+| **接 Harness 模块 loop** | **[harness-module-loop.md](harness-module-loop.md)** · [status.md](status.md) |
 | 用内置能力 | [system-core.md](system-core.md) |
 | 写插件 / API / 工作流 | [框架可扩展性指南](框架可扩展性指南.md) |
 | 发布前检查 | [框架测试指南](框架测试指南.md) → [代码审查清单](代码审查清单.md) → [文档审查清单](文档审查清单.md) |
@@ -70,7 +71,7 @@
 
 ### 🏗️ 架构
 
-分层与职责见 **[底层架构设计](底层架构设计.md)**（本页不重复架构图）。业务实现放在 `core/*/`；`src/` 为基础设施，**勿写业务 API/工作流**。
+分层与职责见 **[底层架构设计](底层架构设计.md)**（本页不重复架构图）。业务实现放在 `core/*/`；`src/` 为基础设施，**勿写业务 API/工作流**。能力诚实与决策见 **[status.md](status.md)** · **[adr/](adr/README.md)**；Harness 模块见 **[harness-module-loop.md](harness-module-loop.md)**。
 
 **system-Core 内置模块**：11 HTTP / 7 工作流 / 15 插件 / 4 Tasker / 4 events；MCP 工具在七个自带工作流内合计 **80** 个（`registerMCPTool` 计数）。详见 **[system-Core 特性文档](system-core.md)**；标准值见本地 **`tests/helpers/system-core.mjs`**（`tests/` 不入库）与 **[框架测试指南](框架测试指南.md)**。
 

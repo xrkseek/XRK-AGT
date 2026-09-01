@@ -3037,39 +3037,6 @@ export default class ChatStream extends AiWorkflow {
     return (llmText ?? '').toString().trim();
   }
 
-  /**
-   * 本轮工具结束后：若末工具为 reply 且已发出，跳过下一轮 LLM 收尾（省十数秒）
-   */
-  buildCallOverrides(resolvedConfig, apiConfig = {}, opts = {}) {
-    const base = super.buildCallOverrides(resolvedConfig, apiConfig, opts);
-    const prevHook = base.onAfterToolRound;
-    return {
-      ...base,
-      onAfterToolRound: async (info = {}) => {
-        if (typeof prevHook === 'function') {
-          const early = await prevHook(info);
-          if (early?.stop) return early;
-        }
-        const turn = getWorkflowRequestContext()?.turnState;
-        if (!turn?.replyFlushed) return null;
-        const names = (info.toolNames || []).map((n) => {
-          const s = String(n || '');
-          return s.includes('.') ? s.split('.').pop() : s;
-        });
-        const last = names[names.length - 1];
-        if (last === 'reply') {
-          RuntimeUtil.makeLog(
-            'debug',
-            '[ChatStream] reply 已发出，跳过后续 LLM 收尾轮',
-            'ChatStream'
-          );
-          return { stop: true, content: '' };
-        }
-        return null;
-      }
-    };
-  }
-
   async execute(e, question, config) {
     // 保留 process() 写入的 strictToolStreams / toolStreamNames，只刷新 turnState
     const parent = getWorkflowRequestContext() || {};

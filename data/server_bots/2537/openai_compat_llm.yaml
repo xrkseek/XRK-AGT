@@ -1,0 +1,31 @@
+providers:
+  - key: qwen
+    label: qwen
+    protocol: openai
+    baseUrl: https://llm-l0mebf13z0y6cybl.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+    path: ""
+    apiKey: sk-ws-H.PMDHIHM.cXqN.MEYCIQDYo08DC7ryrOxSK_Ukx4-xprZez1ZLJAhmg7_duIcWCAIhAJGC-5s499jC-Zq9-aALEHouSSGfdksJKT_e5j8zsGz6
+    authMode: bearer
+    authHeaderName: ""
+    model: qwen3.8-max
+    tokenField: ""
+    stop: []
+    serviceTier: ""
+    promptCacheKey: ""
+    promptCacheRetention: ""
+    safetyIdentifier: ""
+    reasoningEffort: ""
+    enableTools: true
+    toolChoice: auto
+    parallelToolCalls: true
+    maxToolRounds: 7
+    stripToolTraces: false
+    timeout: 360000
+    enableStream: true
+    variant: ""
+    variants: {}
+    headers: {}
+    extraBody: {}
+    proxy:
+      enabled: false
+      url: ""

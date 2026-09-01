@@ -257,12 +257,12 @@ export default class ConfigBase {
         if (templatePath) {
           content = await fs.readFile(templatePath, 'utf8');
           RuntimeUtil.makeLog(
-            'info',
+            'debug',
             `使用默认配置模板 [${this.name}] ← ${path.relative(paths.root, templatePath)}`,
             'ConfigBase'
           );
         } else {
-          throw new Error(`配置文件不存在: ${this.filePath || filePath}`);
+          throw new Error(`配置文件不存在: ${filePath}`);
         }
       } else {
         // 读取实际文件内容
@@ -840,6 +840,11 @@ export default class ConfigBase {
       }
     }
     return result;
+  }
+
+  /** @deprecated Prefer {@link buildDefaultFromSchema} */
+  getDefaultFromSchema(schema = this.schema) {
+    return this.buildDefaultFromSchema(schema);
   }
 
   /**

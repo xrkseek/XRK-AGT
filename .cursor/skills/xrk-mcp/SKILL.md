@@ -11,9 +11,9 @@ description: 当你需要理解或扩展 MCP 工具（注册/分组/远程连接
 
 ## 要点
 
-- 工作流内 `registerMCPTool` → `MCPToolAdapter` → OpenAI tools。
+- 工作流内 `registerMCPTool` → harness `ToolRegistry`（`MCPToolAdapter`）→ 执行仍进 `MCPServer`。
 - **执行前门禁**统一在 `MCPServer.handleToolCall` → `inspectToolCallSecurity`（policies + toolScan + 可选审批）；勿只在适配器拦一层。
-- v3 / LLMFactory 的 tool calling 最终执行 MCP 工具。
+- 办事助手 / `/v1`+MCP 的 tool 环在 `@xrkseek/harness`；仅无 workflows 的 `/v1` client-tools 走工厂透传。
 - 远程 MCP：`ai-workflow.mcp.remote` **或** workflow 模块 `export function getMcpServers()`（Loader → 插件 MCP 表）；连接前 `mcp.connect`（`checkMcpConnectAllowed`）。HTTP 用 `fetchWithPolicy`（`#utils/fetch-with-retry.js`），无 `RuntimeUtil.fetch`。
 - 产品 Agent 挂远程：**优先 JS `getMcpServers`**，勿改系统 yaml（见 `.xrk/skills/core/agent-core-dev` §3.5）。
 - `tools` 增强：`apply_edit` / `verify` / `repo_map` / `update_todos`（实现 `workspace/apply-edit-blocks.js` · `repo-map-lite.js`）。

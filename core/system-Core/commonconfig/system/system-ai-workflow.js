@@ -53,20 +53,20 @@ export const aiWorkflowConfig = {
               retry: {
                 type: 'object',
                 label: '重试配置',
-                description: 'LLM 请求失败时的自动重试策略',
+                description: '映射到 @xrkseek/harness 步内 llmRetry（enabled:false 关闭）',
                 component: 'SubForm',
                 fields: {
                   enabled: {
                     type: 'boolean',
                     label: '启用重试',
-                    description: '超时或网络错误时按条件自动重试',
+                    description: '关闭则 harness llmRetry=false；开启按下方条件重试',
                     default: true,
                     component: 'Switch'
                   },
                   maxAttempts: {
                     type: 'number',
-                    label: '最大重试次数',
-                    description: '含首次请求在内的总尝试次数上限',
+                    label: '最大尝试次数',
+                    description: '含首次；映射为 SDK maxRetries = maxAttempts - 1',
                     min: 1,
                     max: 10,
                     default: 3,
@@ -74,8 +74,8 @@ export const aiWorkflowConfig = {
                   },
                   delay: {
                     type: 'number',
-                    label: '重试延迟（毫秒）',
-                    description: '两次重试之间的等待时间',
+                    label: '初始延迟（毫秒）',
+                    description: '映射 harness initialDelayMs；退避由 SDK 处理',
                     min: 100,
                     default: 2000,
                     component: 'InputNumber'
@@ -83,48 +83,11 @@ export const aiWorkflowConfig = {
                   retryOn: {
                     type: 'array',
                     label: '重试条件',
-                    description: 'timeout / network / 5xx / rate_limit（429+Retry-After）/ empty（空响应）/ all',
+                    description: '映射 SDK retryableCodes：timeout/network/5xx/rate_limit/empty/all',
                     itemType: 'string',
                     enum: ['timeout', 'network', '5xx', 'rate_limit', 'empty', 'all'],
                     default: ['timeout', 'network', '5xx', 'rate_limit', 'empty'],
                     component: 'MultiSelect'
-                  }
-                }
-              },
-              aux: {
-                type: 'object',
-                label: '辅模型（weak / fast）',
-                description:
-                  '对齐 goose GOOSE_FAST_MODEL / aider weak_model：摘要、命名、压缩等轻量任务。业务经 resolveAuxLLMConfig() 读取；未配则不用',
-                component: 'SubForm',
-                fields: {
-                  Provider: {
-                    type: 'string',
-                    label: '辅模型 Provider key',
-                    description: '任一工厂 providers[].key；留空=不启用辅模型',
-                    default: '',
-                    component: 'Input'
-                  },
-                  model: {
-                    type: 'string',
-                    label: '覆盖 model（可选）',
-                    description: '不填则用该 Provider 条目自带 model',
-                    component: 'Input'
-                  },
-                  temperature: {
-                    type: 'number',
-                    label: 'temperature',
-                    default: 0.3,
-                    min: 0,
-                    max: 2,
-                    component: 'InputNumber'
-                  },
-                  maxTokens: {
-                    type: 'number',
-                    label: 'maxTokens',
-                    default: 2048,
-                    min: 256,
-                    component: 'InputNumber'
                   }
                 }
               },
@@ -234,14 +197,6 @@ export const aiWorkflowConfig = {
                 min: 1024,
                 max: 65535,
                 component: 'InputNumber'
-              },
-              toolMergeStrategy: {
-                type: 'string',
-                label: '工具合并策略',
-                description: '当接口请求体同时传入 tools 且启用了工作流/MCP 工具时的合并策略：preferRequest=以接口 tools 为准，preferStream=以工作流/MCP 工具为准，merge=尽量合并（同名以接口为准）',
-                enum: ['preferRequest', 'preferStream', 'merge'],
-                default: 'preferRequest',
-                component: 'Select'
               },
               remote: {
                 type: 'object',
@@ -673,184 +628,10 @@ export const aiWorkflowConfig = {
           },
           context: {
             type: 'object',
-            label: '上下文压缩',
-            description: '超预算时用辅/主模型摘要中间段并保留近期原文（opencode/goose/aider 融合）',
+            label: '上下文策略',
+            description: '群聊笔录注入等；出站 token 裁剪用 Provider contextWindow；多轮压缩由 @xrkseek/harness session 负责',
             component: 'SubForm',
             fields: {
-              compaction: {
-                type: 'object',
-                label: '自动压缩',
-                component: 'SubForm',
-                fields: {
-                  enabled: {
-                    type: 'boolean',
-                    label: '启用',
-                    default: true,
-                    component: 'Switch'
-                  },
-                  auto: {
-                    type: 'boolean',
-                    label: '自动触发',
-                    default: true,
-                    component: 'Switch'
-                  },
-                  threshold: {
-                    type: 'number',
-                    label: '触发比例',
-                    description: '估算 tokens > budget×threshold 时压缩；默认 0.9 略晚触发',
-                    default: 0.9,
-                    min: 0.5,
-                    max: 1,
-                    component: 'InputNumber'
-                  },
-                  keepRecentTokens: {
-                    type: 'number',
-                    label: '保留近期 tokens',
-                    default: 12000,
-                    min: 1000,
-                    component: 'InputNumber'
-                  },
-                  toolOutputMaxChars: {
-                    type: 'number',
-                    label: '压缩前 tool 输出截断',
-                    description: '摘要前对过长 tool 结果截断，避免辅模型吃满上下文',
-                    default: 3500,
-                    min: 200,
-                    component: 'InputNumber'
-                  },
-                  summaryMaxTokens: {
-                    type: 'number',
-                    label: '摘要 maxTokens',
-                    description: '默认 1024：够连续即可，控制辅/主模型成本',
-                    default: 1024,
-                    min: 256,
-                    component: 'InputNumber'
-                  },
-                  useAux: {
-                    type: 'boolean',
-                    label: '优先辅模型',
-                    description: 'true 时用 llm.aux；未配置则回退主模型',
-                    default: true,
-                    component: 'Switch'
-                  },
-                  maxMessages: {
-                    type: 'number',
-                    label: '消息条数上限触发',
-                    description: '长工具环按条数软触发；0=仅按 token。默认 48',
-                    default: 48,
-                    min: 0,
-                    component: 'InputNumber'
-                  },
-                  preserveLastUser: {
-                    type: 'boolean',
-                    label: '保留最后一条用户消息',
-                    default: true,
-                    component: 'Switch'
-                  },
-                  backup: {
-                    type: 'object',
-                    label: '压缩前备份',
-                    description: '对齐 agent-zero：备份完整 messages，路径写入 checkpoint',
-                    component: 'SubForm',
-                    fields: {
-                      enabled: {
-                        type: 'boolean',
-                        label: '启用备份',
-                        default: true,
-                        component: 'Switch'
-                      },
-                      dir: {
-                        type: 'string',
-                        label: '备份目录',
-                        description: '留空= ~/.xrk/compaction-backups',
-                        default: '',
-                        component: 'Input'
-                      },
-                      maxFiles: {
-                        type: 'number',
-                        label: '最多保留文件数',
-                        default: 40,
-                        min: 5,
-                        component: 'InputNumber'
-                      }
-                    }
-                  },
-                  sessionCache: {
-                    type: 'object',
-                    label: '压缩会话 sidecar',
-                    description: 'cline：前缀哈希缓存落盘，重启后同前缀可跳过辅模型摘要',
-                    component: 'SubForm',
-                    fields: {
-                      persist: {
-                        type: 'boolean',
-                        label: '落盘持久化',
-                        default: true,
-                        component: 'Switch'
-                      },
-                      dir: {
-                        type: 'string',
-                        label: '缓存目录',
-                        description: '留空= ~/.xrk/compaction-sessions',
-                        default: '',
-                        component: 'Input'
-                      },
-                      maxFiles: {
-                        type: 'number',
-                        label: '最多保留文件数',
-                        default: 80,
-                        min: 10,
-                        component: 'InputNumber'
-                      }
-                    }
-                  }
-                }
-              },
-              toolPair: {
-                type: 'object',
-                label: '旧工具结果投影',
-                description: 'goose tool_pair：出站前压缩过旧 role=tool 内容，不改持久历史',
-                component: 'SubForm',
-                fields: {
-                  enabled: {
-                    type: 'boolean',
-                    label: '启用',
-                    default: true,
-                    component: 'Switch'
-                  },
-                  protectLastN: {
-                    type: 'number',
-                    label: '保护最近 N 条 tool',
-                    description: '默认 8：多留近期工具原文给改码/排障',
-                    default: 8,
-                    min: 1,
-                    max: 50,
-                    component: 'InputNumber'
-                  },
-                  maxResultChars: {
-                    type: 'number',
-                    label: '摘要后最大字符',
-                    description: '旧 tool 投影保留路径/报错片段；默认 800',
-                    default: 800,
-                    min: 80,
-                    component: 'InputNumber'
-                  },
-                  batchSize: {
-                    type: 'number',
-                    label: '每轮最多压缩条数',
-                    default: 8,
-                    min: 1,
-                    max: 30,
-                    component: 'InputNumber'
-                  },
-                  useLlm: {
-                    type: 'boolean',
-                    label: '辅模型批摘要',
-                    description: 'true 时用 llm.aux 对旧 tool 写一句话（goose）；失败回退启发式',
-                    default: false,
-                    component: 'Switch'
-                  }
-                }
-              },
               chatHistory: {
                 type: 'object',
                 label: '群聊历史笔录',
@@ -1407,8 +1188,8 @@ export const aiWorkflowConfig = {
                   runEnabled: {
                     type: 'boolean',
                     label: '允许 run 执行命令',
-                    description: '开启后 LLM 可通过 run 工具执行 shell 命令',
-                    default: false,
+                    description: '开启后 LLM 可通过 run / verify 执行 shell；默认开；危险命令经 toolScan',
+                    default: true,
                     component: 'Switch'
                   },
                   runTimeoutMs: {

@@ -1,0 +1,9 @@
+{"ts":1788272056544,"tool":"tools.list_files","ok":true,"detail":""}
+{"ts":1788272056550,"tool":"tools.run","ok":false,"detail":"run 已在 ai-workflow.tools.file.runEnabled 中关闭"}
+{"ts":1788272060150,"tool":"web.web_search_providers","ok":true,"detail":""}
+{"ts":1788272060151,"tool":"tools.list_files","ok":true,"detail":""}
+{"ts":1788272060151,"tool":"tools.list_files","ok":true,"detail":""}
+{"ts":1788272068624,"tool":"web.web_search","ok":true,"detail":""}
+{"ts":1788272068625,"tool":"browser.browser_status","ok":true,"detail":""}
+{"ts":1788272124659,"tool":"web.web_search","ok":true,"detail":""}
+{"ts":1788272893619,"tool":"web.web_search","ok":true,"detail":""}

@@ -7,11 +7,11 @@
 
 `AiWorkflow` 是 XRK-AGT 的工作流基类，用于统一处理：
 - 消息上下文构建
-- LLM 调用（经 `LLMFactory`）
-- MCP 工具调用（tool calling）
+- LLM 调用（`callAI` → `@xrkseek/harness` 模块 loop；工厂仅 `/v1` 无 MCP 透传）
+- MCP 工具调用（经 harness ToolRegistry → `MCPToolAdapter` → MCPServer）
 - 记忆/知识增强（按已加载工作流能力）
 
-**工具环语义**：多轮 `tool_calls` + MCP 中游执行；**禁止**解析文本假函数 / 旧式文本 ReAct。步数预算与出站见 [agent-context.md](agent-context.md) §5。
+**工具环语义**：多轮 `tool_calls` + MCP 中游执行由 harness 负责；**禁止**解析文本假函数 / 旧式文本 ReAct。步数预算与出站见 [agent-context.md](agent-context.md) §5 · [harness-module-loop.md](harness-module-loop.md)。
 
 ---
 
@@ -33,17 +33,18 @@
 Schema：`core/system-Core/commonconfig/system/system-ai-workflow.js`（Web `/xrk` 表单同源）
 
 常用字段：
-- `llm.Provider` · `llm.aux`（辅模型：压缩/摘要）· `llm.timeout` · `llm.retry.*`
-- Provider 条目：`contextWindow` · `variant` / `variants` · `maxToolRounds` 等（见工厂字段预设）
+- `llm.Provider` · `llm.timeout` · `llm.retry.*`
+- Provider 条目：`contextWindow` · `variant` / `variants` · `maxToolRounds`（→ harness `maxSteps`）等
 - `embedding.enabled` / `embedding.maxContexts`（现行为关键词召回，非向量）
 - `mcp.*` · `agentWorkspace.*`（注入与预算；运营见 [agents.md](agents.md)；跑通见 [agent-context.md](agent-context.md)）
 - `tools.file.*`（含 `runEnabled`；`run` / `verify` 依赖）
-- **`context.*`**：`compaction`（阈值摘要 + backup + sessionCache）· `toolPair`（旧 tool 出站投影）· `chatHistory`（limit / keepFirst）
+- **`context.chatHistory`**：群聊笔录 limit / keepFirst
 - **`policies[]`**：`provider.use` / `tool.call` / `mcp.connect`；effect=`allow|deny|ask`
 - **`security.toolScan`** · **`security.approval`**（默认关；开启后主人 `#批准`）
 - **`recipes.scheduleEnabled`**：配方 cron（插件默认仅日志）
 
-出站准备：`prepareOutboundMessages` → toolPair → compaction(+sidecar) → contextWindow 裁剪 → LLM。  
+出站准备：`prepareOutboundMessages` → contextWindow 裁剪 → harness（`callAI` / `/v1`+MCP）或工厂单次。  
+多轮压缩归 harness session；见 [harness-module-loop.md](harness-module-loop.md)。
 工具执行门禁：`MCPServer.handleToolCall` → `inspectToolCallSecurity`（覆盖 LLM / HTTP / WS）。  
 斜杠：`chat-pipeline` + `slash-commands`（`/recipe` · `/recipes`）。细则见 [agent-context.md](agent-context.md) §5。
 
@@ -88,11 +89,12 @@ Schema：`core/system-Core/commonconfig/system/system-ai-workflow.js`（Web `/xr
 
 ## 函数调用与 MCP 工具
 
-AiWorkflow **不再解析/执行任何“文本函数调用 / ReAct”**，所有工具调用均通过 **LLM 工厂的 tool calling + MCP 协议** 完成：
+AiWorkflow **不**解析/执行文本函数调用或 ReAct。办事助手与带 MCP 的 `/v1` 走 **`@xrkseek/harness` 模块 loop**；工厂客户端只做单次补全（不执行工具）：
 
-- **tool calls 多轮交互**：由 `LLMFactory` 及各提供商客户端内部处理 `tool_calls` 循环，最终返回整理好的 `assistant.content` 文本给 AiWorkflow；流式场景下，客户端一边向前端推送 `delta.content`，一边在遇到 `finish_reason = "tool_calls"` 时收集并执行 MCP 工具。
+- **tool 环**：`callAI` / `/v1`+`workflow.workflows` → `runHarnessModuleLoop` → `continueTurn`；MCP 经 `MCPToolAdapter` 注册进 harness `ToolRegistry`，执行进 `MCPServer.handleToolCall`。
 - **MCP 工具注册**：AiWorkflow 通过 `registerMCPTool(name, options)` 将工具注册到 `this.mcpTools`，供 MCP 服务器发现和调用。
-- **工作流工具作用域（streams）**：当通过 `/v1/chat/completions` 调用时，前端选择的工作流名称会被整理为 `streams` 白名单，传递给 LLM 客户端和 `MCPToolAdapter`，保证只有这些工作流下的工具可以被使用。
+- **工作流工具作用域（streams）**：`/v1` 请求体 `workflow.workflows` 整理为白名单，注入 harness；未声明的工作流工具不会被注册/调用。
+- **流式**：无 MCP 的 `/v1 stream` 用工厂 `chatStream`（单次）；带 MCP 的 `/v1 stream`（OpenAI 形态）先完成 harness 再写 SSE。
 
 ### `registerMCPTool(name, options)`
 
@@ -127,7 +129,7 @@ sequenceDiagram
     Plugin->>Stream: 📞 process(e, question, options)<br/>调用工作流
     Stream->>Stream: 📝 buildChatContext(e, question)<br/>构建基础消息
     Stream->>Stream: 🔍 buildEnhancedContext(e, question)<br/>RAG增强上下文
-    Stream->>LLM: 📡 调用 LLMFactory
+    Stream->>LLM: 📡 callAI → @xrkseek/harness
     LLM-->>Stream: ✅ 返回响应
     Stream->>Memory: 💾 按工作流能力存储/检索上下文
     Stream-->>Plugin: ✅ 返回结果<br/>最终响应
@@ -139,10 +141,9 @@ sequenceDiagram
 
 | 方法 | 说明 |
 |------|------|
-| `callAI(messages, apiConfig)` | 非流式调用 AI 接口 |
-| `callAiWorkflow(messages, apiConfig, onDelta, options)` | 流式调用AI接口，通过 `onDelta` 回调返回增量文本 |
-| `execute(e, question, config)` | 执行：构建上下文 → 调用LLM（含 MCP tool calling）→ 存储记忆 |
-| `process(e, question, options)` | 工作流处理入口（单次对话 + MCP 工具调用） |
+| `callAI(messages, apiConfig)` | 非流式：harness 模块 loop（含 MCP） |
+| `execute(e, question, config)` | 执行：构建上下文 → callAI → 存储记忆 |
+| `process(e, question, options)` | 工作流处理入口（单次对话 + MCP） |
 
 **process 方法参数**：
 - `mergeWorkflows` - 副工作流 / 工具面名单（**唯一**组合入口）
@@ -161,7 +162,7 @@ sequenceDiagram
 **调用流程**：
 1. `buildChatContext` / chat 自定义上下文 - 构建消息
 2. `buildEnhancedContext` - 可选知识库钩子；长期记忆为简单 includes，**非**向量 embedding RAG
-3. `callAI` - 调用 LLM（含 MCP tool calling）
+3. `callAI` - harness 模块 loop（MCP tool calling）
 4. 基类可 `storeMessageMemory` 写短期；chat 可见历史另有通路
 5. 发送回复（chat 走 reply 协议；基类可直接 `e.reply`）
 
@@ -205,40 +206,18 @@ await stream.process(e, e.msg, {
 
 #### `async callAI(messages, apiConfig)`
 
-非流式调用AI接口，支持重试和错误处理。
+非流式调用：`@xrkseek/harness` 模块 loop（MCP、compaction、厂商 adapter）。
 
 **参数**：
 - `messages` - 消息数组（OpenAI格式）
 - `apiConfig` - API配置（可选）
 
-**返回**：`Promise<string>` - AI回复文本
+**返回**：`Promise<{ content, executedToolNames, ... }|null>`
 
 **特点**：
-- 通过 LLMFactory 执行统一调用
-- 支持重试机制（可配置）
-- 自动记录 Token 使用和成本
-
-#### `async callAiWorkflow(messages, apiConfig, onDelta, options)`
-
-流式调用AI接口，实时返回增量文本。
-
-**参数**：
-- `messages` - 消息数组
-- `apiConfig` - API配置
-- `onDelta` - 增量回调函数 `(delta: string) => void`
-- `options` - 选项（可选）
-
-**返回**：`Promise<string>` - 完整回复文本
-
-**示例**：
-```javascript
-let fullText = '';
-await stream.callAiWorkflow(messages, {}, (delta) => {
-  fullText += delta;
-  // 实时发送增量文本
-  e.reply(delta);
-});
-```
+- harness `continueTurn` + AGT `MCPToolAdapter`
+- 步内 `llmRetry` 来自 `llm.retry`（`enabled:false` → 关闭；无外层 `runWithLlmRetry`）
+- Provider `contextWindow` → harness soft compact
 
 #### `async buildEnhancedContext(e, question, baseMessages)`
 
@@ -248,8 +227,7 @@ await stream.callAiWorkflow(messages, {}, (delta) => {
 1. 提取查询文本
 2. 检索历史对话（`retrieveRelevantContexts`）
 3. 检索知识库（`retrieveKnowledgeContexts`）
-4. 优化和压缩上下文
-5. 合并到消息数组
+4. 合并到消息数组
 
 **返回**：`Promise<Array>` - 增强后的消息数组
 
@@ -365,13 +343,6 @@ await stream.process(e, e.msg);
 await stream.process(e, e.msg, {
   mergeWorkflows: ['memory', 'database', 'desktop'],
 });
-
-// 流式调用（需要手动发送回复）
-let fullText = '';
-await stream.callAiWorkflow(messages, {}, (delta) => {
-  fullText += delta;
-  e.reply(delta);
-});
 ```
 
 ---
@@ -395,7 +366,7 @@ llm:
 
 ### 错误分类（概念）
 
-工厂侧可能对错误做分类与重试策略；具体以 **`LLMFactory`** 及各 provider 客户端为准。
+- 办事助手 / `/v1`+MCP：`callAI` → harness 步内 `llmRetry`（`llm.retry`）。工厂单次透传路径无外层 retry 环；HTTP 错误形状见 `llm-http-error.js`。
 
 ---
 

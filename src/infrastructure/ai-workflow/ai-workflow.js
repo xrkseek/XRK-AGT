@@ -1,6 +1,5 @@
 ﻿import RuntimeUtil from '#utils/runtime-util.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
-import LLMFactory from '#factory/llm/LLMFactory.js';
 import MemoryManager from '#infrastructure/ai-workflow/memory-manager.js';
 import MonitorService from '#infrastructure/ai-workflow/monitor-service.js';
 import { getAiWorkflowHost } from '#infrastructure/ai-workflow/workflow-host.js';
@@ -8,14 +7,10 @@ import { appendAgentWorkspaceToPrompt } from '#utils/agent-workspace.js';
 import { estimateTokensMixed } from '#utils/token-estimate.js';
 import { applyPromptCachePolicy } from '#utils/llm/prompt-cache-policy.js';
 import { resolveStreamLLMConfig } from '#utils/llm/llm-config-resolve.js';
-import { runWithLlmRetry } from '#utils/llm/llm-retry.js';
-import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
 import {
   resolveInputTokenBudget,
   trimMessagesToTokenBudget
 } from '#utils/llm/message-token-budget.js';
-import { compactMessagesIfNeeded } from '#utils/llm/context-compaction.js';
-import { projectToolPairViewAsync } from '#utils/llm/tool-pair-compact.js';
 import {
   getWorkflowRequestContext,
   runWithWorkflowRequestContext
@@ -27,9 +22,9 @@ import {
   resolveToolStreamNames,
 } from '#infrastructure/ai-workflow/chat-tool-streams.js';
 import { normalizeStringArray } from '#utils/string-array-utils.js';
-import { unpackFactoryChatRaw } from '#utils/llm/llm-nonstream-reply.js';
 import { createUserVisibleTurnState } from '#utils/chat-user-visible-ack.js';
 import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/ai-workflow/chat-pipeline.js';
+import { runHarnessModuleLoop } from '#infrastructure/ai-workflow/harness-module-loop.js';
 
 export default class AiWorkflow {
   /** @type {Map<string, object>} MCP 工具注册表 */
@@ -402,84 +397,71 @@ export default class AiWorkflow {
     const traceId = this.name;
     MonitorService.recordTokens(traceId, { input: inputTokens });
 
-    return runWithLlmRetry({
-      label: this.name,
-      kind: 'AI调用',
-      run: async (_attempt) => {
-        const client = LLMFactory.createClient(config);
-        const overrides = this.buildCallOverrides(config, apiConfig, { stream: false });
-        const raw = await client.chat(outbound, overrides);
-        const { text, usedReplyTool, toolRoundsExhausted, executedToolNames } = unpackFactoryChatRaw(raw);
-        const content = text != null ? String(text) : '';
-        MonitorService.recordTokens(traceId, { output: this.estimateTokens(content) });
-
-        if (toolRoundsExhausted) {
-          return { content, executedToolNames, usedReplyTool, toolRoundsExhausted: true };
-        }
-        if (content.trim()) {
-          return { content, executedToolNames, usedReplyTool };
-        }
-        if (usedReplyTool || executedToolNames.length > 0) {
-          return { content: '', executedToolNames, usedReplyTool };
-        }
-        // 对齐 cline empty-turn：无文本且无工具时抛错以触发重试
-        throw createLlmHttpError('empty LLM response', { code: 'empty_turn' });
+    // Provider 重试由 harness llmRetry 负责；此处只吞 empty_turn
+    try {
+      const overrides = this.buildCallOverrides(config, apiConfig, { stream: false });
+      const e = getWorkflowRequestContext()?.e ?? null;
+      const sessionKey = overrides.sessionKey
+        ?? apiConfig.sessionKey
+        ?? (typeof this.constructor.getEventHistoryKey === 'function'
+          ? this.constructor.getEventHistoryKey(e)
+          : null);
+      const harnessResult = await runHarnessModuleLoop({
+        stream: this,
+        messages: outbound,
+        config: { ...config, ...overrides },
+        apiConfig: {
+          ...overrides,
+          ...(sessionKey ? { sessionKey: String(sessionKey) } : {}),
+        },
+      });
+      const content = harnessResult?.content != null ? String(harnessResult.content) : '';
+      const executedToolNames = harnessResult?.executedToolNames || [];
+      const usedReplyTool = !!harnessResult?.usedReplyTool;
+      const meta = {
+        ...(harnessResult?.sessionId ? { sessionId: harnessResult.sessionId } : {}),
+        ...(harnessResult?.steps != null ? { steps: harnessResult.steps } : {}),
+        ...(harnessResult?.compacted ? { compacted: true } : {}),
+        ...(harnessResult?.usage ? { usage: harnessResult.usage } : {}),
+      };
+      MonitorService.recordTokens(traceId, { output: this.estimateTokens(content) });
+      if (harnessResult?.safetyLimited) {
+        RuntimeUtil.makeLog('warn', `[${this.name}] harness session safety 触发上限，结束本轮`, 'AiWorkflow');
+        return { content, executedToolNames, usedReplyTool, safetyLimited: true, ...meta };
       }
-    }).catch((err) => {
+      if (harnessResult?.toolRoundsExhausted) {
+        return { content, executedToolNames, usedReplyTool, toolRoundsExhausted: true, ...meta };
+      }
+      if (content.trim()) return { content, executedToolNames, usedReplyTool, ...meta };
+      if (usedReplyTool || executedToolNames.length > 0) {
+        return { content: '', executedToolNames, usedReplyTool, ...meta };
+      }
+      RuntimeUtil.makeLog('warn', `[${this.name}] AI 空响应，放弃本轮`, 'AiWorkflow');
+      return null;
+    } catch (err) {
       if (err?.code === 'empty_turn' || /empty llm response/i.test(String(err?.message || ''))) {
         RuntimeUtil.makeLog('warn', `[${this.name}] AI 连续空响应，放弃本轮`, 'AiWorkflow');
         return null;
       }
-      throw err;
-    });
-  }
-
-
-  /**
-   * 调用AI（流式）
-   * @param {Array<Object>} messages - 消息列表
-   * @param {Object} apiConfig - API配置
-   * @param {Function} onDelta - 增量回调
-   * @returns {Promise<string>}
-   */
-  async callAiWorkflow(messages, apiConfig = {}, onDelta, options = {}) {
-    const run = async () => {
-      const config = applyPromptCachePolicy(this.resolveLLMConfig(apiConfig), {
-        stream: this,
-        e: getWorkflowRequestContext()?.e ?? options?.context?.e ?? null,
-      });
-
-      let fullText = '';
-      const wrapDelta = (delta) => {
-        if (!delta) return;
-        fullText += delta;
-        if (typeof onDelta === 'function') onDelta(delta);
-      };
-
-      if (config.enableStream === false) {
-        const result = await this.callAI(messages, apiConfig);
-        if (result?.content) wrapDelta(result.content);
-        return result?.content || '';
+      if (err?.code === 'session_busy') {
+        RuntimeUtil.makeLog('warn', `[${this.name}] harness session busy，放弃本轮`, 'AiWorkflow');
+        return null;
       }
-
-      return runWithLlmRetry({
-        label: this.name,
-        kind: 'AI流式调用',
-        run: async () => {
-          fullText = '';
-          const outbound = await this.prepareOutboundMessages(messages, config);
-          const client = LLMFactory.createClient(config);
-          const overrides = this.buildCallOverrides(config, apiConfig, { stream: true });
-          await client.chatStream(outbound, wrapDelta, overrides);
-          return fullText;
-        }
-      });
-    };
-
-    if (getWorkflowRequestContext()) return run();
-    const e = options?.context?.e ?? null;
-    return runWithWorkflowRequestContext({ e, turnState: null }, run);
+      if (err?.code === 'context_overflow') {
+        RuntimeUtil.makeLog('warn', `[${this.name}] harness context overflow，放弃本轮`, 'AiWorkflow');
+        return null;
+      }
+      if (err?.code === 'unsupported_content') {
+        RuntimeUtil.makeLog('warn', `[${this.name}] harness unsupported content，放弃本轮`, 'AiWorkflow');
+        return null;
+      }
+      throw err;
+    }
   }
+
+
+
+
 
   resolveLLMConfig(apiConfig = {}) {
     const merged = resolveStreamLLMConfig(this, apiConfig);
@@ -487,35 +469,18 @@ export default class AiWorkflow {
   }
 
   /**
-   * 出站消息准备：aux 摘要压缩（可选）→ contextWindow 尾部裁剪。
-   * @param {Array<Object>} messages
-   * @param {object} config - resolveLLMConfig 结果
-   * @returns {Promise<Array<Object>>}
+   * 出站消息准备：按 contextWindow 裁剪。
+   * 多轮压缩 / soft budget 由 harness CompactionOptions 负责。
    */
   async prepareOutboundMessages(messages, config = {}) {
-    // OpenHands 式：不改原历史，只投影出站 View
     let outbound = Array.isArray(messages) ? messages : [];
-    const { messages: toolView } = await projectToolPairViewAsync(outbound, {
-      contextWindow: config.contextWindow,
-      threshold: getAiWorkflowConfigOptional()?.context?.compaction?.threshold,
-      fallbackConfig: config
-    });
-    outbound = toolView;
-
     const budget = resolveInputTokenBudget(config);
     if (budget > 0) {
-      const { messages: compacted, compacted: did } = await compactMessagesIfNeeded(outbound, {
-        budgetTokens: budget,
-        estimate: (t) => this.estimateTokens(t),
-        label: this.name,
-        fallbackConfig: config
-      });
-      outbound = compacted;
       const trimmed = trimMessagesToTokenBudget(outbound, budget, (t) => this.estimateTokens(t));
       if (trimmed.length < outbound.length) {
         RuntimeUtil.makeLog(
           'info',
-          `[${this.name}] 按 contextWindow 裁剪消息 ${outbound.length}→${trimmed.length}（budget≈${budget}${did ? ', post-compact' : ''}）`,
+          `[${this.name}] 按 contextWindow 裁剪消息 ${outbound.length}→${trimmed.length}（budget≈${budget}）`,
           'AiWorkflow'
         );
       }
@@ -536,10 +501,7 @@ export default class AiWorkflow {
   }
 
   /**
-   * 组装传入 LLMFactory.createClient 的 overrides（工具白名单、流式开关等）。
-   * @param {object} resolvedConfig - resolveLLMConfig 结果
-   * @param {object} apiConfig - 原始调用参数
-   * @param {{ stream?: boolean }} options
+   * 组装 overrides（工具白名单等）；MCP tool 环走 harness，不经工厂执行。
    */
   buildCallOverrides(resolvedConfig, apiConfig = {}, { stream = false } = {}) {
     return {

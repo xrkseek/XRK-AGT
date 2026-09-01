@@ -224,6 +224,7 @@ export async function runChatAgent(plugin, e, {
   if (effective.llmProvider) {
     options.provider = effective.llmProvider;
   }
+  // Agent loop：@xrkseek/harness（callAI / /v1+MCP）；见 docs/harness-module-loop.md
   await stream.process(
     e,
     { content: text, text, persona, isGlobalTrigger, debugDumpFullPrompt: !!debugDumpFullPrompt },
@@ -252,6 +253,7 @@ export function logAiInit(config) {
   logger.mark(
     `[XRK-AI] 就绪 · 群 ${config.groups?.length || 0} · 用户 ${config.users?.length || 0}`
     + ` · 前缀[${prefixes.join(',') || '无'}] · 群覆盖 ${overrides}`
-    + ` · llm=${provider || 'ai-workflow'} · merge=[${normalizeStringArray(config?.mergeWorkflows).join(',')}]`,
+    + ` · llm=${provider || 'ai-workflow'} · merge=[${normalizeStringArray(config?.mergeWorkflows).join(',')}]`
+    + ` · loop=@xrkseek/harness`,
   );
 }

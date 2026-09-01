@@ -1,6 +1,3 @@
-import { MCPToolAdapter } from './mcp-tool-adapter.js';
-import { getAiWorkflowConfigOptional } from '../ai-workflow-config.js';
-import RuntimeUtil from '../runtime-util.js';
 import { pickFirstKey } from '#utils/coerce-pick.js';
 
 /**
@@ -19,41 +16,6 @@ export function buildOpenAICompatEndpoint(config, { defaultPath = '/chat/complet
   const pathPart = (config.path || defaultPath).replace(/^\/?/, '/');
   if (!base) throw new Error(`${label}: 未配置 baseUrl`);
   return `${base}${pathPart}`;
-}
-
-/**
- * 提取工具名称
- */
-function getToolName(tool) {
-  if (!tool) return '';
-  if (typeof tool === 'string') return tool;
-  if (typeof tool === 'number') return String(tool);
-  const name = tool?.function?.name || tool?.name || tool?.id;
-  return typeof name === 'string' ? name : (name != null ? String(name) : '');
-}
-
-/**
- * 合并工具列表
- * @param {Array} primaryTools - 优先工具列表
- * @param {Array} secondaryTools - 次要工具列表
- * @returns {Array} 合并后的工具列表
- */
-function mergeToolLists(primaryTools, secondaryTools) {
-  const map = new Map();
-
-  // 先添加优先工具
-  for (const tool of primaryTools) {
-    const name = getToolName(tool);
-    if (name) map.set(name, tool);
-  }
-
-  // 再添加次要工具（不覆盖已存在的）
-  for (const tool of secondaryTools) {
-    const name = getToolName(tool);
-    if (name && !map.has(name)) map.set(name, tool);
-  }
-
-  return Array.from(map.values());
 }
 
 function applyOptionalFields(body, overrides, config, mapping) {
@@ -141,94 +103,23 @@ export function buildOpenAIChatCompletionsBody(messages, config = {}, overrides 
   return body;
 }
 
+/**
+ * 工厂路径仅透传请求体 tools（MCP schema/执行由 harness-module-loop）。
+ */
 export function applyOpenAITools(body, config = {}, overrides = {}) {
-  const hasMcpTools = MCPToolAdapter.hasTools();
-  const enableTools = config.enableTools !== false && hasMcpTools;
+  if (!Object.prototype.hasOwnProperty.call(overrides, 'tools')) return body;
+  const requestTools = overrides.tools;
+  if (!requestTools) return body;
 
-  // 调用方是否显式传入了 tools 字段（包括 null/[]）
-  const hasRequestToolsField = Object.prototype.hasOwnProperty.call(overrides, 'tools');
-  const requestTools = hasRequestToolsField ? overrides.tools : undefined;
-
-  // 如果系统完全没有 MCP 工具，则只透传调用方的 tools
-  if (!hasMcpTools) {
-    if (hasRequestToolsField && requestTools) {
-      body.tools = requestTools;
-      if (overrides.tool_choice !== undefined) body.tool_choice = overrides.tool_choice;
-      if (overrides.parallel_tool_calls !== undefined) body.parallel_tool_calls = overrides.parallel_tool_calls;
-    }
-    return body;
+  body.tools = requestTools;
+  if (overrides.tool_choice !== undefined) body.tool_choice = overrides.tool_choice;
+  else if (config.toolChoice !== undefined || config.tool_choice !== undefined) {
+    body.tool_choice = config.toolChoice ?? config.tool_choice;
   }
-
-  if (!enableTools && !hasRequestToolsField) return body;
-
-  // 获取工作流配置
-  const workflow = overrides.workflow || config.workflow || config.streamName || null;
-  const workflows = Array.isArray(overrides.workflows) ? overrides.workflows : null;
-
-  // 获取 MCP 工具列表
-  const mcpTools = enableTools
-    ? MCPToolAdapter.convertMCPToolsToOpenAI({ workflow, workflows })
-    : [];
-
-  let finalTools;
-  let downstreamToolNames = [];
-
-  if (hasRequestToolsField) {
-    const requestToolsArray = Array.isArray(requestTools) ? requestTools : [];
-
-    RuntimeUtil.makeLog(
-      'debug',
-      `[工具合并] hasRequestToolsField=true, requestToolsArray.length=${requestToolsArray.length}, mcpTools.length=${mcpTools.length}`,
-      'openai-chat-utils'
-    );
-
-    if (!requestToolsArray.length) {
-      // 下游没有传递工具，只使用 MCP 工具
-      finalTools = mcpTools;
-    } else {
-      // 保存下游工具名称，用于工具分区
-      downstreamToolNames = requestToolsArray.map(getToolName).filter(Boolean);
-
-      // 读取工具合并策略配置
-      const aiWorkflowCfg = getAiWorkflowConfigOptional();
-      const toolMergeStrategy = aiWorkflowCfg?.mcp?.toolMergeStrategy || 'preferRequest';
-
-      // 根据策略合并工具
-      switch (toolMergeStrategy) {
-        case 'preferStream':
-          // MCP 工具优先，下游工具填充不冲突项
-          finalTools = mergeToolLists(mcpTools, requestToolsArray);
-          break;
-
-        case 'preferRequest':
-        default:
-          // 下游工具优先，MCP 工具填充不冲突项（默认策略）
-          finalTools = mergeToolLists(requestToolsArray, mcpTools);
-          break;
-      }
-    }
-  } else {
-    // 下游没有传递 tools 字段，只使用 MCP 工具
-    finalTools = mcpTools;
-  }
-
-  if (!finalTools || !finalTools.length) return body;
-
-  // 保存下游工具名称到 overrides，用于工具分区
-  // 这样在工具执行时可以正确识别哪些工具应该透传给下游
-  if (downstreamToolNames.length > 0) {
-    overrides.downstreamToolNames = downstreamToolNames;
-    RuntimeUtil.makeLog(
-      'debug',
-      `[工具合并] 保存下游工具名称: ${downstreamToolNames.slice(0, 10).join(', ')}${downstreamToolNames.length > 10 ? ` ...共${downstreamToolNames.length}个` : ''}`,
-      'openai-chat-utils'
-    );
-  }
-
-  body.tools = finalTools;
-  body.tool_choice = overrides.tool_choice ?? config.toolChoice ?? config.tool_choice ?? 'auto';
   const parallel = pick(overrides, config, ['parallelToolCalls', 'parallel_tool_calls']);
   if (parallel !== undefined) body.parallel_tool_calls = parallel;
-
+  else if (overrides.parallel_tool_calls !== undefined) {
+    body.parallel_tool_calls = overrides.parallel_tool_calls;
+  }
   return body;
 }

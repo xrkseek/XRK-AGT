@@ -7,6 +7,7 @@ cooldown: 300
 chance: 0.1
 # 各 *_llm 工厂 providers[].key；空=用 ai-workflow.llm.Provider
 llmProvider: ""
+# Agent loop：@xrkseek/harness（见 docs/harness-module-loop.md）
 mergeWorkflows:
   - memory
   - database

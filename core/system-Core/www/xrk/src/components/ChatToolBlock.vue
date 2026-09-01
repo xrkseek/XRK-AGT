@@ -12,13 +12,25 @@ const props = defineProps({
   tools: { type: Array, default: () => [] },
 });
 
+/** Explicit toggles only; unset → default open when args/result present. */
 const openMap = ref({});
 
-function isOpen(i) {
-  return Boolean(openMap.value[i]);
+function hasBody(item) {
+  const args = String(item.args || '').trim();
+  const result = String(item.result || '').trim();
+  return (args && args !== '{}') || Boolean(result) || Boolean(item.preview);
 }
+
+function isOpen(i, item) {
+  if (Object.prototype.hasOwnProperty.call(openMap.value, i)) {
+    return Boolean(openMap.value[i]);
+  }
+  return hasBody(item);
+}
+
 function toggle(i) {
-  openMap.value = { ...openMap.value, [i]: !openMap.value[i] };
+  const cur = isOpen(i, items.value[i]);
+  openMap.value = { ...openMap.value, [i]: !cur };
 }
 
 const items = computed(() =>
@@ -28,25 +40,31 @@ const items = computed(() =>
     const payload = parseToolResultPayload(tool.result ?? tool.content ?? '');
     const preview = toolResultPreview(name, payload ?? tool.result);
     const result = summarizeToolResultText(payload ?? tool.result ?? tool.content ?? '');
-    return { name, args, preview, result };
+    const running = tool.result == null && tool.content == null && !tool.isError;
+    return { name, args, preview, result, running, isError: !!tool.isError };
   }),
 );
 </script>
 
 <template>
   <div class="tool-blocks">
-    <div v-for="(item, i) in items" :key="i" class="tool-block">
+    <div
+      v-for="(item, i) in items"
+      :key="i"
+      class="tool-block"
+      :class="{ err: item.isError, run: item.running }"
+    >
       <button
         type="button"
         class="tool-head"
-        :aria-expanded="isOpen(i) ? 'true' : 'false'"
+        :aria-expanded="isOpen(i, item) ? 'true' : 'false'"
         @click="toggle(i)"
       >
-        <span class="tool-ico">🔧</span>
+        <span class="tool-ico">{{ item.isError ? '⚠' : item.running ? '…' : '✓' }}</span>
         <span class="tool-title">{{ item.name }}</span>
-        <span class="tool-toggle">{{ isOpen(i) ? '收起' : '展开' }}</span>
+        <span class="tool-toggle">{{ isOpen(i, item) ? '收起' : '展开' }}</span>
       </button>
-      <div v-show="isOpen(i)" class="tool-body">
+      <div v-show="isOpen(i, item)" class="tool-body">
         <div class="tool-sec">
           <span class="lbl">参数</span>
           <pre>{{ item.args }}</pre>
@@ -56,7 +74,7 @@ const items = computed(() =>
         </div>
         <div class="tool-sec">
           <span class="lbl">结果</span>
-          <pre>{{ item.result }}</pre>
+          <pre>{{ item.result || (item.running ? '执行中…' : '') }}</pre>
         </div>
       </div>
     </div>
@@ -75,6 +93,12 @@ const items = computed(() =>
   border-radius: 6px;
   background: color-mix(in srgb, var(--cyan) 12%, var(--card));
   overflow: hidden;
+}
+.tool-block.err {
+  background: color-mix(in srgb, var(--danger, #c44) 14%, var(--card));
+}
+.tool-block.run {
+  background: color-mix(in srgb, var(--amber, #c90) 12%, var(--card));
 }
 .tool-head {
   display: flex;

@@ -1,0 +1,55 @@
+# ============================================
+# 机器人业务（随端口）
+# ============================================
+# 路径：data/server_bots/{port}/chatbot.yaml
+# 含：主人/自动/私聊/黑白名单/频道 + 群默认与按群号覆盖
+# getGroup(id) = { ...default, ...根级群号键 }
+
+master:
+  qq: []
+
+auto:
+  friend: 1
+  quit: 50
+
+private:
+  disabled: false
+  disabledMsg: "私聊功能已禁用"
+  passKeywords: []
+
+whitelist:
+  groups: []
+  qq: []
+
+blacklist:
+  groups: []
+  qq: []
+
+guild:
+  disableMsg: true
+
+# ----------------------------------------
+# 群默认（所有群）
+# ----------------------------------------
+default:
+  groupGlobalCD: 500
+  singleCD: 500
+  onlyReplyAt: 0
+  botAlias: []
+  enable: []
+  disable: []
+  addPrivate: 1
+  addLimit: 0
+  addReply: true
+  addAt: false
+  addRecall: 0
+  bannedWords:
+    enabled: true
+    muteTime: 720
+    warnOnly: false
+    exemptRoles: []
+
+# 群单独覆盖（根级群号，控制台「群单独配置」可增删）：
+# "123456":
+#   groupGlobalCD: 0
+#   onlyReplyAt: 1
