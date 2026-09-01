@@ -9,4 +9,4 @@ if [ ! -f "$ENSURE" ]; then
   exit 1
 fi
 node "$ENSURE"
-exec node --no-warnings --no-deprecation app.js "$@"
+exec node --experimental-strip-types --no-warnings --no-deprecation app.js "$@"

@@ -17,7 +17,6 @@ class CommonConfigRegistry {
     RuntimeUtil.makeLog('info', '开始加载配置管理器...', 'CommonConfigRegistry');
 
     const allFiles = await FileLoader.getCoreSubDirFiles('commonconfig', {
-      ext: '.js',
       recursive: false
     });
 

@@ -2,21 +2,32 @@ import { pathToFileURL } from 'node:url';
 import paths from './paths.js';
 import { scanFiles } from './core-fs.js';
 import { LOADER_BATCH_SIZE } from './loader-constants.js';
+import { MODULE_EXTS, preferSourceModules } from './module-ext.ts';
 
 export class FileLoader {
   /** @param {string} absPath @returns {Promise<Record<string, unknown>>} */
   static importFresh(absPath) {
     return import(`${pathToFileURL(absPath).href}?t=${Date.now()}`);
   }
-  static readFiles(dir, options) {
-    return scanFiles(dir, options);
+
+  static async readFiles(dir, options = {}) {
+    const ext = options.ext == null ? [...MODULE_EXTS] : options.ext;
+    return preferSourceModules(await scanFiles(dir, { ...options, ext }));
   }
 
-  static async getCoreSubDirFiles(subDir, options) {
+  /**
+   * @param {string} subDir
+   * @param {{ ext?: string|string[], recursive?: boolean }} [options]
+   *   默认扫描 {@link MODULE_EXTS}；同名 .js/.ts 优先 .ts
+   */
+  static async getCoreSubDirFiles(subDir, options = {}) {
     const subDirs = await paths.getCoreSubDirs(subDir);
     if (subDirs.length === 0) return [];
-    const batches = await Promise.all(subDirs.map((dir) => scanFiles(dir, options)));
-    return batches.flat();
+    const ext = options.ext == null ? [...MODULE_EXTS] : options.ext;
+    const batches = await Promise.all(
+      subDirs.map((dir) => scanFiles(dir, { ...options, ext })),
+    );
+    return preferSourceModules(batches.flat());
   }
 
   static async mapInBatches(items, size, fn) {
@@ -31,3 +42,5 @@ export class FileLoader {
     await FileLoader.mapInBatches(items, size ?? LOADER_BATCH_SIZE, fn);
   }
 }
+
+export { MODULE_EXTS, preferSourceModules };

@@ -63,7 +63,7 @@ tmp_*.ps1
 tmp_*.mjs
 tmp_*.js
 
-# 运行期数据：见 data/.gitignore（整目录 *，仅 instruct.txt 例外）
+# 运行期数据：见 data/.gitignore（harness-sessions / runtime *.db* / 审计等；种子与 server_bots 可入库）
 
 # 子服务：构建产物与本地虚拟环境（源码 apis/* 示例保留入库）
 subserver/pyserver/.venv/

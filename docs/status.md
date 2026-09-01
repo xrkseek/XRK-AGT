@@ -10,7 +10,7 @@
 | 能力 | 状态 | 说明 |
 |------|------|------|
 | AgentRuntime Host | 能跑 | HTTP/WS/多 bot；非 LLM loop（ADR-0001） |
-| Tasker / Core 扩展点 | 能跑 | |
+| Tasker / Core 扩展点 | 能跑 | 可用 `.ts`（`--experimental-strip-types`；同名优先 `.ts`） |
 
 ## Agent
 

@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2024"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": false,
+    "verbatimModuleSyntax": true,
+    "rewriteRelativeImportExtensions": true,
+    "types": ["node"],
+    "paths": {
+      "#utils/*": ["./src/utils/*"],
+      "#infrastructure/*": ["./src/infrastructure/*"],
+      "#factory/*": ["./src/factory/*"],
+      "#modules/*": ["./src/modules/*"],
+      "#core/*": ["./core/*"],
+      "#config/*": ["./config/*"],
+      "#data/*": ["./data/*"],
+      "#renderers/*": ["./src/renderers/*"]
+    }
+  },
+  "include": [
+    "src/utils/module-ext.ts",
+    "core/**/*.ts",
+    "tests/framework/**/*.ts"
+  ],
+  "exclude": ["node_modules", "**/dist/**", "**/www/**"]
+}

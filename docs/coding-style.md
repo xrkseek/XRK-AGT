@@ -26,6 +26,7 @@
 | Core www | `www/<app>/` + skill **`xrk-www-compat`**（`web-compat.js` / 内联垫片） | 裸用 Node 26 API |
 | 热路径 I/O | `fs/promises`；`try/catch` 代替反复 `existsSync` | 请求链路里 `readFileSync` / 循环 `existsSync` |
 | 批量加载 | `FileLoader.forEachBatch` + `LOADER_BATCH_SIZE` | 全量 `Promise.all(上千 import)` |
+| 模块语言 | Core 可用 `.ts`（进程带 `--experimental-strip-types`）；同名优先 `.ts` | 无 strip-types 硬跑 `.ts`；同 stem 双文件期望都加载 |
 | Map 默认 | `map.getOrInsert(k, () => v)` | `get \|\| set` 样板（可写时） |
 | 热重载 | `HotReloadBase`（`#utils/hot-reload-base.js`） | 业务/Loader 直接 `chokidar`；仅用 basename 重载多 Core 同名文件 |
 | 挂载 | `setRuntimeGlobal`（`#utils/runtime-globals.js`） | `global.x = globalThis.x =` 双写 |

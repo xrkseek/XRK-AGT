@@ -69,7 +69,6 @@ class TaskerLoader {
 
   async getTaskerFiles() {
     const filePaths = await FileLoader.getCoreSubDirFiles('tasker', {
-      ext: '.js',
       recursive: false
     });
     return filePaths.map((filePath) => ({

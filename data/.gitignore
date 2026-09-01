@@ -1,0 +1,23 @@
+# data/ — 本地运行时为主；种子与端口配置可入库，库文件与会话缓存勿入库
+
+# Harness 持久 session（createPersistentSessionStore）
+harness-sessions/
+
+# Runtime SQLite（node:sqlite）及 WAL 旁车
+runtime/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# 配置写盘备份
+*.backup.*
+*.backup
+
+# QQBot 等按 schema 生成的本机配置
+QQBot.json
+
+# 审计 / 控制台落盘
+ai-console/audit/

@@ -12,7 +12,6 @@ class ListenerLoader {
     let eventCount = 0;
 
     const eventFiles = await FileLoader.getCoreSubDirFiles('events', {
-      ext: '.js',
       recursive: false
     });
 

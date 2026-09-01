@@ -72,7 +72,6 @@ class AiWorkflowLoader {
 
       // 获取所有 core 目录下的 workflow 目录
       const files = await FileLoader.getCoreSubDirFiles('workflow', {
-        ext: '.js',
         recursive: false
       });
       

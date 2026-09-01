@@ -23,8 +23,24 @@
 | `#utils/exec-async.js` | Promise 版 `exec` | 全项目唯一 `promisify(exec)` 封装点 |
 | `#utils/win-utf8.js` | Windows 控制台 UTF-8 | `start.js` 菜单、`log.js` 初始化前 |
 | `#utils/process-signals.js` | Ctrl+C 三击、`registerShutdownHook` | `config/loader.js`、`start.js`、渲染器清理 |
+| `--experimental-strip-types` | 直接 `import` Core / `src` 下 `.ts` | `start.bat` / `start.sh` / `pnpm start`；约定见下文 |
 
 **禁止在 Core / 基础设施中引入的旧模式**（完整清单与对照表见 skill **`xrk-node-runtime`**，此处不重复罗列）。
+
+---
+
+## 1b. TypeScript Core（渐进）
+
+| 项 | 约定 |
+|----|------|
+| 运行时 | Node ≥26 + `--experimental-strip-types`（**无单独 tsc emit**） |
+| 可写扩展名 | `plugin` / `tasker` / `events` / `http` / `workflow` / `commonconfig` / Core `index`：`.js` 与 `.ts` |
+| 同名并存 | 优先加载 `.ts`，再 `.js` |
+| 编辑器 | 根 `tsconfig.json`（`noEmit`）；`pnpm typecheck` |
+| 导入 | ESM；TS 文件内可用 `#utils/...`；跨文件扩展名写 `.js` 或 `.ts` 均可（以可解析为准） |
+| 迁移策略 | 新 Core / 改动面优先 `.ts`；旧 `.js` 不强制一次改完 |
+
+示例：`core/Example-Core/plugin/example-ts-probe.ts` · 工具：`src/utils/module-ext.ts`。
 
 ---
 
@@ -63,13 +79,13 @@ Temporal、Web Storage、`node:ffi`（实验）、Perfetto 追踪、crypto STORE
 
 ```bash
 node -v                    # 应 >= v26.0.0（推荐 v26.7.x）
-node --check src/agent-runtime.js
-node -e "import('#utils/exec-async.js').then(m=>console.log('exec',typeof m.exec))"
+node --experimental-strip-types --check src/utils/module-ext.ts
+node --experimental-strip-types -e "import('#utils/module-ext.ts').then(m=>console.log(m.MODULE_EXTS))"
 node -e "console.log('Error.isError', typeof Error.isError)"
 ```
 
-Windows + Cursor：若 `node -v` 显示 Cursor 自带的 helpers（如 22.x），请确认 PATH 优先为系统安装的 Node（如 `C:\Program Files\nodejs`），或直接用该路径下的 `node.exe` 启动本项目。
+Windows + Cursor：若 `node -v` 显示 Cursor 自带的 helpers（如 22.x），请确认 PATH 优先为系统安装的 Node，或直接用该路径下的 `node.exe` 启动本项目。
 
 ---
 
-*最后更新：2026-08-07*
+*最后更新：2026-09-01*

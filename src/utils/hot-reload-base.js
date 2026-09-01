@@ -6,7 +6,7 @@ import fs from 'node:fs/promises';
 import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { normalizeError } from '#utils/normalize-error.js';
-import { isShuttingDown } from '#utils/runtime-globals.js';
+import { isModuleSourceFile, moduleFileKey } from './module-ext.ts';
 
 const DEFAULT_AWAIT_WRITE_FINISH = {
   stabilityThreshold: 300,
@@ -50,8 +50,7 @@ export class HotReloadBase {
   }
 
   isValidFile(filePath) {
-    const fileName = path.basename(filePath);
-    return fileName.endsWith('.js') && !fileName.startsWith('.') && !fileName.startsWith('_');
+    return isModuleSourceFile(filePath);
   }
 
   async _fileContentHash(filePath) {
@@ -326,12 +325,11 @@ export class HotReloadBase {
   }
 
   getFileKey(filePath) {
-    return path.basename(filePath, '.js');
+    return moduleFileKey(filePath);
   }
 
   static moduleFileKey(nameOrPath) {
-    const base = path.basename(String(nameOrPath ?? ''));
-    return base.endsWith('.js') ? base.slice(0, -3) : base;
+    return moduleFileKey(nameOrPath);
   }
 
   static resolveWatchPath(filePath) {

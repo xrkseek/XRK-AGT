@@ -3,6 +3,7 @@ import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 
 import { SCAN_IGNORE_PREFIXES } from './loader-constants.js';
+import { moduleFileKey, resolveModuleInDir, stripModuleExt } from './module-ext.ts';
 
 export function normalizeScanOptions({
   ext = '',
@@ -21,6 +22,10 @@ async function walkDir(dir, opts, out) {
     return;
   }
 
+  const exts = opts.ext
+    ? (Array.isArray(opts.ext) ? opts.ext : [opts.ext])
+    : null;
+
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     if (opts.ignore.some((prefix) => entry.name.startsWith(prefix))) continue;
@@ -31,7 +36,7 @@ async function walkDir(dir, opts, out) {
       continue;
     }
     if (!entry.isFile()) continue;
-    if (opts.ext && !entry.name.endsWith(opts.ext)) continue;
+    if (exts && !exts.some((e) => entry.name.endsWith(e))) continue;
     out.push(fullPath);
   }
 }
@@ -266,12 +271,15 @@ export function pickFirstExistingSync(pathsList) {
 
 /** @param {string[]} subDirs @param {string} fileBaseName */
 export function findInCoreSubDirs(subDirs, fileBaseName) {
-  const idx = pickFirstExistingSync(subDirs.map((dir) => path.join(dir, `${fileBaseName}.js`)));
-  return idx >= 0 ? path.join(subDirs[idx], `${fileBaseName}.js`) : null;
+  for (const dir of subDirs) {
+    const hit = resolveModuleInDir(dir, fileBaseName, (p) => fs.existsSync(p));
+    if (hit) return hit;
+  }
+  return null;
 }
 
 /**
- * 从 core 子目录内绝对路径解析模块 key（相对该子目录，不含 .js）
+ * 从 core 子目录内绝对路径解析模块 key（相对该子目录，不含扩展名）
  * @param {string} filePath
  * @param {string[]} [coreDirs] 如 paths.getCoreSubDirs('http') 的返回值
  * @param {{ qualifyCore?: boolean, subDir?: string }} [options]
@@ -285,13 +293,13 @@ export function resolveCoreModuleKey(filePath, coreDirs = [], options = {}) {
     const normalizedCoreDir = path.resolve(coreDir);
     const rel = path.relative(normalizedCoreDir, normalizedPath);
     if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
-      const relKey = rel.replace(/\\/g, '/').replace(/\.js$/, '');
+      const relKey = stripModuleExt(rel.replace(/\\/g, '/'));
       if (!qualifyCore) return relKey;
       const label = resolveCoreExtensionLabel(normalizedPath, path.basename(normalizedCoreDir) || subDir);
       return `${label}/${relKey}`;
     }
   }
-  const base = path.basename(filePath, '.js');
+  const base = moduleFileKey(filePath);
   if (!qualifyCore) return base;
   return `${resolveCoreExtensionLabel(normalizedPath, subDir)}/${base}`;
 }

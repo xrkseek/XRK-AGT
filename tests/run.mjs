@@ -27,6 +27,7 @@ const SUITES = {
     'onebot-atbot.test.mjs',
     'agent-layout.test.mjs',
     'harness-module-loop.test.mjs',
+    'module-ext.test.mjs',
     'agt-loop-cleanup.test.mjs',
     'safe-os-network.test.mjs',
     'monitor-safety.test.mjs',
@@ -102,6 +103,7 @@ if (missing.length) {
 }
 
 const testArgs = [
+  '--experimental-strip-types',
   '--test',
   '--test-force-exit',
   ...files.map((f) => path.join('tests/framework', f)),

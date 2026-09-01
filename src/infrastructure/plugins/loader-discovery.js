@@ -1,9 +1,11 @@
 import path from 'path'
+import fs from 'node:fs'
 import paths from '#utils/paths.js'
 import PluginBase from './plugin-base.js'
 import Handler from './handler.js'
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
-import { resolvePluginCoreLabel, statFiles } from '#utils/core-fs.js'
+import { resolvePluginCoreLabel } from '#utils/core-fs.js'
+import { resolveModuleInDir } from '#utils/module-ext.ts'
 import { FileLoader } from '#utils/file-loader.js'
 import {
   classifyModuleImportError,
@@ -86,9 +88,11 @@ export const discoveryMethods = {
   /** 多 Core 限定键：`system-Core/ai`；已是 `core/name` 则原样返回 */
   _pluginQualifiedKey(filePathOrKey, coreLabel = null) {
     const s = String(filePathOrKey ?? '');
-    if (s.includes('/') && !s.endsWith('.js') && !s.includes('\\')) return s.replace(/\\/g, '/');
+    if (s.includes('/') && !/\.[cm]?[jt]s$/i.test(s) && !s.includes('\\')) {
+      return s.replace(/\\/g, '/');
+    }
     const base = this._pluginFileKey(s);
-    const label = coreLabel || (s.includes(path.sep) || s.endsWith('.js')
+    const label = coreLabel || (s.includes(path.sep) || /\.[cm]?[jt]s$/i.test(s)
       ? resolvePluginCoreLabel(s)
       : null);
     return label ? `${label}/${base}` : base;
@@ -99,7 +103,6 @@ export const discoveryMethods = {
 
     try {
       const files = await FileLoader.getCoreSubDirFiles('plugin', {
-        ext: '.js',
         recursive: false
       })
 
@@ -116,14 +119,15 @@ export const discoveryMethods = {
     }
 
     const allCoreDirs = await paths.getCoreDirs()
-    const indexPaths = allCoreDirs.map((coreDir) => path.join(coreDir, 'index.js'))
-    const indexExists = statFiles(indexPaths)
+    const indexPaths = allCoreDirs.map((coreDir) =>
+      resolveModuleInDir(coreDir, 'index', (p) => fs.existsSync(p))
+    )
 
     for (let i = 0; i < allCoreDirs.length; i++) {
-      if (!indexExists[i]) continue
+      const indexPath = indexPaths[i]
+      if (!indexPath) continue
       const coreDir = allCoreDirs[i]
       try {
-        const indexPath = indexPaths[i]
         const name = `${path.basename(coreDir)}-index`
         if (ret.some((p) => p.name === name)) continue
         ret.push({
@@ -132,7 +136,7 @@ export const discoveryMethods = {
           core: path.basename(coreDir)
         })
       } catch (error) {
-        logger.error(`加载 core 根目录 index.js 失败: ${coreDir}`, error)
+        logger.error(`加载 core 根目录 index 失败: ${coreDir}`, error)
       }
     }
 

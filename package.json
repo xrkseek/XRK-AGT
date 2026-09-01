@@ -66,13 +66,16 @@
     "yaml": "^2.7.0"
   },
   "devDependencies": {
-    "eslint": "^9.18.0"
+    "@types/node": "^24.13.3",
+    "eslint": "^9.18.0",
+    "typescript": "^5.9.3"
   },
   "scripts": {
-    "start": "node app.js",
-    "dev": "node app.js",
+    "start": "node --experimental-strip-types app.js",
+    "dev": "node --experimental-strip-types app.js",
     "build:www": "node scripts/build-www-static.mjs",
-    "debug": "node debug.js",
+    "debug": "node --experimental-strip-types debug.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "setup:browsers": "node -e \"import { installPlaywrightChromium } from '#utils/bootstrap-deps.js'; await installPlaywrightChromium();\"",
     "start:windows": "start.bat server",
     "start:unix": "./start.sh server",

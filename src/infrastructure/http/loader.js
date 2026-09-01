@@ -24,7 +24,6 @@ class HttpApiLoader {
     RuntimeUtil.makeLog('info', '开始加载API模块...', 'HttpApiLoader');
 
     const allFiles = await FileLoader.getCoreSubDirFiles('http', {
-      ext: '.js',
       recursive: true
     });
 
@@ -226,7 +225,7 @@ class HttpApiLoader {
   async _findApiFile(key) {
     const apiDirs = await paths.getCoreSubDirs('http');
     for (const apiDir of apiDirs) {
-      const files = await FileLoader.readFiles(apiDir, { ext: '.js', recursive: true });
+      const files = await FileLoader.readFiles(apiDir, { recursive: true });
       const file = files.find((f) => resolveQualifiedCoreModuleKey(f, [apiDir], 'http') === key);
       if (file) return file;
     }

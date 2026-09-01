@@ -19,5 +19,5 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-node app.js %*
+node --experimental-strip-types app.js %*
 if errorlevel 1 pause

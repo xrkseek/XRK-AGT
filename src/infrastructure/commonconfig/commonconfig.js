@@ -842,11 +842,6 @@ export default class ConfigBase {
     return result;
   }
 
-  /** @deprecated Prefer {@link buildDefaultFromSchema} */
-  getDefaultFromSchema(schema = this.schema) {
-    return this.buildDefaultFromSchema(schema);
-  }
-
   /**
    * 将 schema 默认值填入 data 中缺失的字段（不覆盖用户已配置的值）
    * @param {object} target
