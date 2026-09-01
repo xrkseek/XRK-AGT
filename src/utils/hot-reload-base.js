@@ -6,6 +6,7 @@ import fs from 'node:fs/promises';
 import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { normalizeError } from '#utils/normalize-error.js';
+import { isShuttingDown } from '#utils/runtime-globals.js';
 import { isModuleSourceFile, moduleFileKey } from './module-ext.ts';
 
 const DEFAULT_AWAIT_WRITE_FINISH = {
