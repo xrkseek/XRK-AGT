@@ -74,5 +74,3 @@ export function resetHarnessSdkCache() {
   cached = null;
   cachedError = null;
 }
-
-export default { importHarnessSdk, resetHarnessSdkCache };

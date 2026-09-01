@@ -11,6 +11,31 @@ import { trimMessagesToTokenBudget } from '../../src/utils/llm/message-token-bud
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 describe('AGT loop cleanup contracts', () => {
+  it('slimMessagesForExistingSession keeps system + latest user only', async () => {
+    const { slimMessagesForExistingSession } = await import(
+      '../../src/infrastructure/ai-workflow/harness-module-loop.js'
+    );
+    const slim = slimMessagesForExistingSession([
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'u1' },
+      { role: 'assistant', content: 'a1' },
+      { role: 'user', content: 'u2' },
+    ]);
+    assert.deepEqual(slim, [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'u2' },
+    ]);
+  });
+
+  it('resolveMaxSteps is 1 when no tools', async () => {
+    const { __resolveMaxStepsForTests } = await import(
+      '../../src/infrastructure/ai-workflow/harness-module-loop.js'
+    );
+    assert.equal(__resolveMaxStepsForTests({ maxToolRounds: 7 }, {}, 0), 1);
+    assert.equal(__resolveMaxStepsForTests({ maxToolRounds: 7 }, {}, 3), 7);
+    assert.equal(__resolveMaxStepsForTests({}, { maxToolRounds: 4 }, 2), 4);
+  });
+
   it('orphan tool-loop / compaction modules are gone', () => {
     const gone = [
       'src/utils/llm/tool-partition-utils.js',

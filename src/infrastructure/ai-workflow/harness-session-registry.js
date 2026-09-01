@@ -63,6 +63,14 @@ export function getHarnessSessionStore(harness) {
   return store;
 }
 
+/** True if conversationKey already maps to a live harness session (no create). */
+export function hasHarnessSession(harness, conversationKey) {
+  if (!conversationKey || !String(conversationKey).trim()) return false;
+  const s = getHarnessSessionStore(harness);
+  const id = sanitizeHarnessSessionId(`agt_${conversationKey}`);
+  return typeof s.has === 'function' && s.has(id);
+}
+
 /**
  * @param {object} harness
  * @param {string|null|undefined} conversationKey
@@ -139,11 +147,3 @@ export function resetHarnessSessionRegistryForTests() {
   keyToId.clear();
   keyOrder.length = 0;
 }
-
-export default {
-  sanitizeHarnessSessionId,
-  getHarnessSessionStore,
-  acquireHarnessSession,
-  attachHarnessSessionListener,
-  resetHarnessSessionRegistryForTests,
-};

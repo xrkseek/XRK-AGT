@@ -24,7 +24,9 @@ import {
 import { normalizeStringArray } from '#utils/string-array-utils.js';
 import { createUserVisibleTurnState } from '#utils/chat-user-visible-ack.js';
 import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/ai-workflow/chat-pipeline.js';
-import { runHarnessModuleLoop } from '#infrastructure/ai-workflow/harness-module-loop.js';
+import { runHarnessModuleLoop, slimMessagesForExistingSession } from '#infrastructure/ai-workflow/harness-module-loop.js';
+import { hasHarnessSession } from '#infrastructure/ai-workflow/harness-session-registry.js';
+import { importHarnessSdk } from '#infrastructure/ai-workflow/harness-resolve.js';
 
 export default class AiWorkflow {
   /** @type {Map<string, object>} MCP 工具注册表 */
@@ -388,7 +390,28 @@ export default class AiWorkflow {
       e: getWorkflowRequestContext()?.e ?? null,
     });
 
-    const outbound = await this.prepareOutboundMessages(messages, config);
+    const overrides = this.buildCallOverrides(config, apiConfig);
+    const e = getWorkflowRequestContext()?.e ?? null;
+    const sessionKey = overrides.sessionKey
+      ?? apiConfig.sessionKey
+      ?? (typeof this.constructor.getEventHistoryKey === 'function'
+        ? this.constructor.getEventHistoryKey(e)
+        : null);
+
+    let toPrepare = Array.isArray(messages) ? messages : [];
+    if (sessionKey) {
+      try {
+        const harness = await importHarnessSdk();
+        if (hasHarnessSession(harness, sessionKey)) {
+          // Prior turns already in harness session — don't trim discarded history.
+          toPrepare = slimMessagesForExistingSession(toPrepare);
+        }
+      } catch {
+        /* SDK missing: keep full messages; loop will throw clearly */
+      }
+    }
+
+    const outbound = await this.prepareOutboundMessages(toPrepare, config);
 
     const inputTokens = outbound.reduce((sum, m) => {
       const content = typeof m.content === 'string' ? m.content : (m.content?.text || '');
@@ -399,13 +422,6 @@ export default class AiWorkflow {
 
     // Provider 重试由 harness llmRetry 负责；此处只吞 empty_turn
     try {
-      const overrides = this.buildCallOverrides(config, apiConfig, { stream: false });
-      const e = getWorkflowRequestContext()?.e ?? null;
-      const sessionKey = overrides.sessionKey
-        ?? apiConfig.sessionKey
-        ?? (typeof this.constructor.getEventHistoryKey === 'function'
-          ? this.constructor.getEventHistoryKey(e)
-          : null);
       const harnessResult = await runHarnessModuleLoop({
         stream: this,
         messages: outbound,
@@ -503,11 +519,10 @@ export default class AiWorkflow {
   /**
    * 组装 overrides（工具白名单等）；MCP tool 环走 harness，不经工厂执行。
    */
-  buildCallOverrides(resolvedConfig, apiConfig = {}, { stream = false } = {}) {
+  buildCallOverrides(resolvedConfig, apiConfig = {}) {
     return {
       ...resolvedConfig,
       ...apiConfig,
-      stream,
       workflows: apiConfig.workflows ?? this._getToolWorkflowNames()
     };
   }

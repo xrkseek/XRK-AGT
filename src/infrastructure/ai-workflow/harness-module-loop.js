@@ -103,6 +103,22 @@ export async function buildHarnessUserTurn(harness, rawContent) {
 
 
 /**
+ * Session already holds prior turns — keep standing system + latest user only.
+ * Avoids re-trim / re-seed of OpenAI history on reused sessionKey.
+ */
+export function slimMessagesForExistingSession(messages) {
+  const list = Array.isArray(messages) ? messages : [];
+  const systems = [];
+  let lastUser = null;
+  for (const m of list) {
+    if (!m || typeof m !== 'object') continue;
+    if (m.role === 'system') systems.push(m);
+    else if (m.role === 'user') lastUser = m;
+  }
+  return lastUser ? [...systems, lastUser] : [...systems];
+}
+
+/**
  * Split AGT OpenAI-style messages -> system + prior turns + latest user.
  */
 export function splitOutboundMessages(messages) {
@@ -596,6 +612,127 @@ function invokeRegisterToolsHook(registry, ctx) {
   return 0;
 }
 
+function hasDynamicToolHook(apiConfig = {}, stream = null) {
+  return typeof apiConfig.registerTools === 'function'
+    || typeof stream?.registerHarnessTools === 'function';
+}
+
+function toolSurfaceFingerprint(workflows, clientTools) {
+  const w = Array.isArray(workflows) ? [...workflows].map(String).sort() : [];
+  const c = [];
+  if (Array.isArray(clientTools)) {
+    for (const t of clientTools) {
+      const n = t?.function?.name || t?.name;
+      if (n) c.push(String(n));
+    }
+    c.sort();
+  }
+  return JSON.stringify({ w, c });
+}
+
+const MAX_TOOL_SURFACES = 32;
+/** @type {Map<string, { fp: string, tools: object, pipeline: object, mcpCount: number, clientCount: number, hookCount: number }>} */
+const toolSurfaceBySession = new Map();
+const toolSurfaceOrder = [];
+
+function touchToolSurface(sessionId) {
+  const i = toolSurfaceOrder.indexOf(sessionId);
+  if (i >= 0) toolSurfaceOrder.splice(i, 1);
+  toolSurfaceOrder.push(sessionId);
+  while (toolSurfaceOrder.length > MAX_TOOL_SURFACES) {
+    const old = toolSurfaceOrder.shift();
+    if (old) toolSurfaceBySession.delete(old);
+  }
+}
+
+/** Test helper — clear tool registry/pipeline cache. */
+export function resetHarnessToolSurfaceCacheForTests() {
+  toolSurfaceBySession.clear();
+  toolSurfaceOrder.length = 0;
+}
+
+/**
+ * Reuse ToolRegistry + Pipeline per session when workflow/client tool set is unchanged.
+ * Dynamic registerTools hooks skip cache (rebuild every turn).
+ */
+function acquireToolSurface({
+  harness,
+  sessionId,
+  workflows,
+  clientTools,
+  createToolRegistry,
+  createToolPipeline,
+  config,
+  apiConfig,
+  stream,
+  hookCtx,
+}) {
+  const dynamic = hasDynamicToolHook(apiConfig, stream);
+  const fp = dynamic ? null : toolSurfaceFingerprint(workflows, clientTools);
+  if (fp) {
+    const hit = toolSurfaceBySession.get(sessionId);
+    if (hit && hit.fp === fp) {
+      touchToolSurface(sessionId);
+      return {
+        tools: hit.tools,
+        pipeline: hit.pipeline,
+        mcpCount: hit.mcpCount,
+        clientCount: hit.clientCount,
+        hookCount: hit.hookCount,
+        cached: true,
+      };
+    }
+  }
+
+  const tools = createToolRegistry();
+  const mcpCount = registerMcpTools(workflows, tools);
+  const clientCount = registerClientOpenAiTools(tools, clientTools);
+  const hookCount = invokeRegisterToolsHook(tools, hookCtx);
+  const pipeline = createToolPipeline();
+  pipeline.setApprovalHandler(async () => ({ approved: true }));
+  attachPipelinePolicy(harness, pipeline, config, apiConfig);
+
+  if (fp) {
+    toolSurfaceBySession.set(sessionId, {
+      fp,
+      tools,
+      pipeline,
+      mcpCount,
+      clientCount,
+      hookCount,
+    });
+    touchToolSurface(sessionId);
+  }
+
+  return {
+    tools,
+    pipeline,
+    mcpCount,
+    clientCount,
+    hookCount,
+    cached: false,
+  };
+}
+
+function resolveMaxSteps(config = {}, apiConfig = {}, toolCount = 0) {
+  const raw = config.maxToolRounds ?? apiConfig.maxToolRounds;
+  const n = Number(raw);
+  const configured = Number.isFinite(n) && n >= 1 ? Math.floor(n) : 7;
+  // No tools → single LLM step (avoid empty multi-step budget).
+  if (toolCount <= 0) return 1;
+  return configured;
+}
+
+/** @internal tests */
+export function __resolveMaxStepsForTests(config, apiConfig, toolCount) {
+  return resolveMaxSteps(config, apiConfig, toolCount);
+}
+
+/** @internal tests */
+export function __harnessToolSurfaceCacheSizeForTests() {
+  return toolSurfaceBySession.size;
+}
+
 function attachPipelinePolicy(harness, pipeline, config, apiConfig) {
   const denyNames = resolveDenyToolNames(config, apiConfig);
   if (denyNames?.length) {
@@ -722,18 +859,21 @@ export async function runHarnessModuleLoop({ stream, messages, config, apiConfig
     createToolPipeline,
   } = harness;
 
-  const { system, history, userText, userRawContent } = splitOutboundMessages(messages);
-  const userTurn = await buildHarnessUserTurn(harness, userRawContent ?? userText);
-  if (!String(userTurn.text || '').trim() && !userTurn.hasImage) {
-    throw Object.assign(new Error('empty LLM response'), { code: 'empty_turn' });
-  }
-
   const conversationKey = apiConfig.sessionKey
     ?? config.sessionKey
     ?? apiConfig.conversationId
     ?? config.conversationId
     ?? null;
   const { store, sessionId, reused } = acquireHarnessSession(harness, conversationKey);
+
+  // Reused session: prior turns live in store — do not re-split/seed OpenAI history.
+  const effectiveMessages = reused ? slimMessagesForExistingSession(messages) : messages;
+  const { system, history, userText, userRawContent } = splitOutboundMessages(effectiveMessages);
+  const userTurn = await buildHarnessUserTurn(harness, userRawContent ?? userText);
+  if (!String(userTurn.text || '').trim() && !userTurn.hasImage) {
+    throw Object.assign(new Error('empty LLM response'), { code: 'empty_turn' });
+  }
+
   if (!reused) {
     seedSessionFromHistory(store, sessionId, history);
   }
@@ -742,35 +882,47 @@ export async function runHarnessModuleLoop({ stream, messages, config, apiConfig
   const detachListener = attachHarnessSessionListener(store, onSessionEvent);
 
   try {
-    const tools = createToolRegistry();
     const workflows = apiConfig.workflows
       ?? config.workflows
       ?? (typeof stream._getToolWorkflowNames === 'function' ? stream._getToolWorkflowNames() : []);
-    const mcpCount = registerMcpTools(workflows, tools);
     const clientTools = apiConfig.tools ?? config.tools;
-    const clientCount = registerClientOpenAiTools(tools, clientTools);
     const hookCtx = { harness, stream, config, apiConfig, workflows, sessionId };
-    const hookCount = invokeRegisterToolsHook(tools, hookCtx);
+    const {
+      tools,
+      pipeline,
+      mcpCount,
+      clientCount,
+      hookCount,
+      cached: toolsCached,
+    } = acquireToolSurface({
+      harness,
+      sessionId,
+      workflows,
+      clientTools,
+      createToolRegistry,
+      createToolPipeline,
+      config,
+      apiConfig,
+      stream,
+      hookCtx,
+    });
     const toolCount = mcpCount + clientCount + hookCount;
 
     const llm = createLlmFromConfig(harness, config, {
       ...(userTurn.hasImage ? { inputModalities: ['text', 'image'] } : {}),
     });
-    const maxSteps = config.maxToolRounds || apiConfig.maxToolRounds || 7;
+    const maxSteps = resolveMaxSteps(config, apiConfig, toolCount);
     const compaction = resolveHarnessCompaction(config);
     const llmRetry = resolveHarnessLlmRetry(config, apiConfig);
     const toolSettle = resolveToolSettle(config, apiConfig);
     const signal = resolveAbortSignal(config, apiConfig);
     const safety = resolveHarnessSafety(config, apiConfig);
     const turnHooks = resolveTurnHooks(stream, config, apiConfig);
-    const pipeline = createToolPipeline();
-    pipeline.setApprovalHandler(async () => ({ approved: true }));
-    attachPipelinePolicy(harness, pipeline, config, apiConfig);
 
     RuntimeUtil.makeLog(
       'info',
       `[harness-loop] session=${sessionId} reused=${reused ? 1 : 0} tools=${toolCount}`
-        + ` (mcp=${mcpCount}, client=${clientCount}, hook=${hookCount})`
+        + ` (mcp=${mcpCount}, client=${clientCount}, hook=${hookCount}${toolsCached ? ', cached' : ''})`
         + ` workflows=[${(workflows || []).join(',')}]`
         + ` maxSteps=${maxSteps}`
         + (userTurn.hasImage ? ' vision=1' : '')
@@ -899,22 +1051,3 @@ export async function runHarnessModuleLoop({ stream, messages, config, apiConfig
     detachListener();
   }
 }
-
-export default {
-  splitOutboundMessages,
-  extractAssistantToolCalls,
-  seedSessionFromHistory,
-  isLikelyReadOnlyTool,
-  mapHarnessReasoningEffort,
-  withRouteReasoning,
-  resolveToolSettle,
-  createLlmFromConfig,
-  resolveHarnessCompaction,
-  resolveHarnessLlmRetry,
-  resolveHarnessSafety,
-  resolveDenyToolNames,
-  buildHarnessUserTurn,
-  foldUsageFromEvents,
-  foldMcpToolsFromEvents,
-  runHarnessModuleLoop,
-};

@@ -284,7 +284,11 @@ describe('harness SDK continueTurn smoke', () => {
     const { importHarnessSdk } = await import(
       '../../src/infrastructure/ai-workflow/harness-resolve.js'
     );
-    const { runHarnessModuleLoop } = await import(
+    const {
+      runHarnessModuleLoop,
+      resetHarnessToolSurfaceCacheForTests,
+      __harnessToolSurfaceCacheSizeForTests,
+    } = await import(
       '../../src/infrastructure/ai-workflow/harness-module-loop.js'
     );
     const { resetHarnessSessionRegistryForTests } = await import(
@@ -300,6 +304,7 @@ describe('harness SDK continueTurn smoke', () => {
       mark: () => {}, info: () => {}, warn: () => {}, error: () => {}, debug: () => {},
     };
     resetHarnessSessionRegistryForTests();
+    resetHarnessToolSurfaceCacheForTests();
     const sessionKey = `fw-reuse-${Date.now().toString(36)}`;
     const first = await runHarnessModuleLoop({
       stream: { name: 'chat', _getToolWorkflowNames: () => [] },
@@ -312,6 +317,7 @@ describe('harness SDK continueTurn smoke', () => {
     });
     assert.equal(first.reused, false);
     assert.equal(first.content, 'one');
+    assert.equal(__harnessToolSurfaceCacheSizeForTests(), 1);
 
     const second = await runHarnessModuleLoop({
       stream: { name: 'chat', _getToolWorkflowNames: () => [] },
@@ -329,14 +335,19 @@ describe('harness SDK continueTurn smoke', () => {
     assert.equal(second.reused, true);
     assert.equal(second.sessionId, first.sessionId);
     assert.equal(second.content, 'two');
+    assert.equal(__harnessToolSurfaceCacheSizeForTests(), 1);
     resetHarnessSessionRegistryForTests();
+    resetHarnessToolSurfaceCacheForTests();
   });
 
   it('onSessionEvent observes assistant message appends', async () => {
     const { importHarnessSdk } = await import(
       '../../src/infrastructure/ai-workflow/harness-resolve.js'
     );
-    const { runHarnessModuleLoop } = await import(
+    const {
+      runHarnessModuleLoop,
+      resetHarnessToolSurfaceCacheForTests,
+    } = await import(
       '../../src/infrastructure/ai-workflow/harness-module-loop.js'
     );
     const { resetHarnessSessionRegistryForTests } = await import(
@@ -352,6 +363,7 @@ describe('harness SDK continueTurn smoke', () => {
       mark: () => {}, info: () => {}, warn: () => {}, error: () => {}, debug: () => {},
     };
     resetHarnessSessionRegistryForTests();
+    resetHarnessToolSurfaceCacheForTests();
     const types = [];
     const out = await runHarnessModuleLoop({
       stream: { name: 'chat', _getToolWorkflowNames: () => [] },
@@ -372,5 +384,6 @@ describe('harness SDK continueTurn smoke', () => {
     assert.ok(types.includes('user/message'));
     assert.ok(types.includes('assistant/message') || types.includes('assistant/chunk'));
     resetHarnessSessionRegistryForTests();
+    resetHarnessToolSurfaceCacheForTests();
   });
 });

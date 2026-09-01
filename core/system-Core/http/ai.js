@@ -42,6 +42,9 @@ import {
   buildOverridesFromBody
 } from '#utils/http/ai-v3-utils.js';
 import { resolveInputTokenBudget, trimMessagesToTokenBudget } from '#utils/llm/message-token-budget.js';
+import { runHarnessModuleLoop, slimMessagesForExistingSession } from '#infrastructure/ai-workflow/harness-module-loop.js';
+import { hasHarnessSession } from '#infrastructure/ai-workflow/harness-session-registry.js';
+import { importHarnessSdk } from '#infrastructure/ai-workflow/harness-resolve.js';
 import {
   buildOpenAIModelsPayload,
   buildOpenAIModelPayload,
@@ -54,7 +57,6 @@ import {
   initResponsesSSE,
   pipeResponsesStream
 } from '../lib/ai-gateway/index.js';
-import { runHarnessModuleLoop } from '#infrastructure/ai-workflow/harness-module-loop.js';
 
 function safePreview(value, { maxLen = 500 } = {}) {
   if (value == null) return value;
@@ -393,22 +395,33 @@ async function handleChatCompletionsV3(req, res) {
     let liveId = null;
     let liveCreated = null;
     try {
-      const budget = resolveInputTokenBudget({ ...llmConfig, ...overrides });
+      const sessionKey = pickFirst(body, ['xrk_session_id', 'conversation_id', 'session_id'])
+        || (workspaceCtx.presetId ? `ws_${workspaceCtx.presetId}` : null);
+
       let harnessMessages = llmMessages;
+      if (sessionKey) {
+        try {
+          const harness = await importHarnessSdk();
+          if (hasHarnessSession(harness, sessionKey)) {
+            harnessMessages = slimMessagesForExistingSession(llmMessages);
+          }
+        } catch {
+          /* keep full messages */
+        }
+      }
+
+      const budget = resolveInputTokenBudget({ ...llmConfig, ...overrides });
       if (budget > 0) {
-        const trimmed = trimMessagesToTokenBudget(llmMessages, budget, estimateTokens);
-        if (trimmed.length < llmMessages.length) {
+        const trimmed = trimMessagesToTokenBudget(harnessMessages, budget, estimateTokens);
+        if (trimmed.length < harnessMessages.length) {
           RuntimeUtil.makeLog(
             'info',
-            `[v1] 按 contextWindow 裁剪消息 ${llmMessages.length}→${trimmed.length}（budget≈${budget}）`,
+            `[v1] 按 contextWindow 裁剪消息 ${harnessMessages.length}→${trimmed.length}（budget≈${budget}）`,
             'ai.v3.chat.completions'
           );
         }
         harnessMessages = trimmed;
       }
-
-      const sessionKey = pickFirst(body, ['xrk_session_id', 'conversation_id', 'session_id'])
-        || (workspaceCtx.presetId ? `ws_${workspaceCtx.presetId}` : null);
 
       let liveHandler = null;
       /** @type {Map<string, { name?: string, arguments?: unknown }>} */
@@ -607,7 +620,6 @@ async function handleChatCompletionsV3(req, res) {
         () => client.chat(llmMessages, overrides)
       );
       const text = typeof chatResult === 'string' ? chatResult : (chatResult?.content || '');
-      const executedToolNames = Array.isArray(chatResult?.executedToolNames) ? chatResult.executedToolNames : [];
       const toolCalls = Array.isArray(chatResult?.tool_calls) ? chatResult.tool_calls : [];
 
       const promptText = extractMessageText(messages);
@@ -628,8 +640,6 @@ async function handleChatCompletionsV3(req, res) {
           message,
           finish_reason: toolCalls.length ? 'tool_calls' : 'stop'
         }],
-        // Web 工具卡片只读此字段（与 SSE metadata.mcp_tools 同形态），与 QQ 气泡文案无关
-        ...(executedToolNames.length > 0 ? { mcp_tools: executedToolNames.map((name) => ({ name })) } : {}),
         usage: {
           prompt_tokens: promptTokens,
           completion_tokens: completionTokens,

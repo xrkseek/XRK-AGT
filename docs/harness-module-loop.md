@@ -53,7 +53,7 @@ POST /v1/* 无 workflows 但有 body.tools
 
 出站：`prepareOutboundMessages` 先按 `contextWindow` 裁剪；harness 再按 `CompactionOptions`（soft budget + 自动摘要）管理 session。群聊笔录：`context.chatHistory`。
 
-跨 turn：`sessionKey`（`callAI` 用会话键；`/v1` 用 `xrk_session_id` / `conversation_id` / workspace）→ `createPersistentSessionStore`（`data/harness-sessions`）。同键复用 session，**不再**整段 seed 客户端 history。
+跨 turn：`sessionKey`（`callAI` 用会话键；`/v1` 用 `xrk_session_id` / `conversation_id` / workspace）→ `createPersistentSessionStore`（`data/harness-sessions`）。同键复用 session，**不再**整段 seed 客户端 history；同 session + 同 workflows 复用 ToolRegistry/Pipeline（有 `registerTools` 钩子则每轮重建）。
 
 `/v1` + OpenAI `stream=true`：订阅 `assistant/chunk` / `tool/call` / `tool/result` 写 live SSE（`mcp_tools` 含 arguments + result），turn 结束后 finish + `[DONE]`。Anthropic / Responses 仍整段 JSON。
 
@@ -102,7 +102,7 @@ POST /v1/* 无 workflows 但有 body.tools
 
 | 字段 | 用途 |
 |------|------|
-| Provider `maxToolRounds` | harness `maxSteps` |
+| Provider `maxToolRounds` | harness `maxSteps`；**无工具时强制 `maxSteps=1`** |
 | Provider `contextWindow` | 出站 trim + harness soft compact |
 | Provider `reasoningEffort` / `thinkingType` | DeepSeek thinking wire + loop `reasoningEffort` |
 | `parallel_tool_calls` / `maxParallelToolCalls` | harness `toolSettle` / 并发上限 |
