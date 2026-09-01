@@ -1,4 +1,4 @@
-﻿---
+---
 name: xrk-mcp
 description: 当你需要理解或扩展 MCP 工具（注册/分组/远程连接）、执行门禁与 LLM tool calling 关系时使用。
 ---

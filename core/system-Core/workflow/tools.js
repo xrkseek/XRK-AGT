@@ -1,4 +1,4 @@
-﻿import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
+import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import path from 'path';
 import { BaseTools } from '#utils/base-tools.js';

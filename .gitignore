@@ -57,7 +57,10 @@ tmp/
 
 # Agent / 浏览器自动化工具本地产物（勿入库）
 .playwright-mcp/
-.xrk/
+# .xrk 运行时本地态；产品技能种子 `.xrk/skills/` 须入库（见 agents/README · tests/framework/agent-layout）
+.xrk/*
+!.xrk/skills/
+!.xrk/skills/**
 .tmp-*
 tmp_*.ps1
 tmp_*.mjs
