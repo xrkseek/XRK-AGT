@@ -34,7 +34,7 @@ export class Help extends PluginBase {
         {
           name: '更新',
           items: [
-            { cmd: '#强制更新', desc: '单仓 reset --hard · 主人' },
+            { cmd: '#强制更新', desc: '单仓 fetch + reset --hard @{upstream} · 主人' },
             { cmd: '#全部更新', desc: 'core/* + 根仓 · 主人' },
             { cmd: '#全部强制更新', desc: '冲突才强制 · 主人' },
             { cmd: '#静默全部更新', desc: '有变更才回汇总 · 主人' },

@@ -1,7 +1,7 @@
 /**
  * 更新 — 对齐 Yunzai/TRSS「全部更新」习惯：
- * - #强制更新[ Core]：始终 reset --hard
- * - #全部(强制)更新：先普通 pull；仅冲突时再强制（已最新不强制）
+ * - #强制更新[ Core]：fetch --all → reset --hard @{upstream} → pull --ff-only
+ * - #全部(强制)更新：先 fetch + 普通 pull；仅冲突时再强制（已最新不强制）
  * - 静默 / 定时：跳过「开始」「已是最新」；有更新或失败才说话（群/主人）
  */
 import fs from 'node:fs';
@@ -113,8 +113,40 @@ export class update extends PluginBase {
     return CONFLICT_RE.test(blob);
   }
 
-  _isLatest(stdout) {
-    return /Already up|已经是最新/i.test(stdout || '');
+  async _resolveUpstreamRef(cwd) {
+    const upstream = await this._git(
+      'git rev-parse --abbrev-ref --symbolic-full-name @{u}',
+      cwd
+    );
+    if (upstream.ok) {
+      const ref = lodash.trim(upstream.stdout);
+      if (ref && ref !== '@{u}') return ref;
+    }
+    const head = await this._git('git rev-parse --abbrev-ref HEAD', cwd);
+    const branch = head.ok ? lodash.trim(head.stdout) : '';
+    if (branch && branch !== 'HEAD') return `origin/${branch}`;
+    return 'origin/main';
+  }
+
+  async _fetchAll(cwd) {
+    return this._git('git fetch --all --prune', cwd);
+  }
+
+  /** 强制：fetch → reset --hard @{upstream} → ff-only pull */
+  async _hardSync(cwd) {
+    const fetchRet = await this._fetchAll(cwd);
+    if (!fetchRet.ok) return fetchRet;
+    const upstream = await this._resolveUpstreamRef(cwd);
+    const resetRet = await this._git(`git reset --hard ${upstream}`, cwd);
+    if (!resetRet.ok) return resetRet;
+    return this._git('git pull --ff-only', cwd);
+  }
+
+  /** 普通：先 fetch 再 pull */
+  async _softPull(cwd) {
+    const fetchRet = await this._fetchAll(cwd);
+    if (!fetchRet.ok) return fetchRet;
+    return this._git('git pull --no-rebase', cwd);
   }
 
   async update() {
@@ -172,9 +204,6 @@ export class update extends PluginBase {
       if (this.reply) await this.reply(msg);
     };
 
-    const softCmd = 'git pull --no-rebase';
-    const hardCmd =
-      'git reset --hard && git pull --rebase --allow-unrelated-histories';
     const oldCommitId = await this.getCommitId(targetPath);
 
     if (forceMode === 'hard') {
@@ -183,7 +212,7 @@ export class update extends PluginBase {
         logger.mark(
           `${this.e?.logFnc || '[更新]'} 强制更新：${targetDisplayName}`
         );
-      const ret = await this._git(hardCmd, targetPath);
+      const ret = await this._hardSync(targetPath);
       return this._finishUpdate(ret, {
         targetPath,
         targetDisplayName,
@@ -198,7 +227,7 @@ export class update extends PluginBase {
     if (!opts.muteStart) await reply(`开始更新 ${targetDisplayName}`);
     if (!opts.quiet)
       logger.mark(`${this.e?.logFnc || '[更新]'} 更新：${targetDisplayName}`);
-    let ret = await this._git(softCmd, targetPath);
+    let ret = await this._softPull(targetPath);
 
     if (!ret.ok && forceMode === 'onConflict' && this._isConflict(ret)) {
       await reply(`${targetDisplayName} 拉取冲突，改为强制更新…`);
@@ -206,7 +235,7 @@ export class update extends PluginBase {
         logger.mark(
           `${this.e?.logFnc || '[更新]'} 冲突后强制：${targetDisplayName}`
         );
-      ret = await this._git(hardCmd, targetPath);
+      ret = await this._hardSync(targetPath);
       return this._finishUpdate(ret, {
         targetPath,
         targetDisplayName,
@@ -257,9 +286,9 @@ export class update extends PluginBase {
       return { updated: false, status: 'failed', lines };
     }
 
+    const newCommitId = await this.getCommitId(targetPath);
     const time = await this.getTime(targetPath);
-    if (this._isLatest(ret.stdout)) {
-      // 定时任务不收集「已是最新」
+    if (oldCommitId === newCommitId) {
       if (!quiet)
         await reply(`${targetDisplayName} 已是最新\n最后更新时间：${time}`);
       else lines.push(`${targetDisplayName} 已是最新`);
