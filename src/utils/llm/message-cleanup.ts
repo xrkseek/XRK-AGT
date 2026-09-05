@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 消息序列标准化工具
  */
@@ -8,7 +7,7 @@ import RuntimeUtil from '#utils/runtime-util.js';
 /**
  * 标准化消息序列
  */
-export function cleanupMessages(messages, options = {}) {
+export function cleanupMessages(messages: any, options: any = {}) {
   if (!Array.isArray(messages) || messages.length === 0) return [];
 
   let cleaned = [...messages];
@@ -41,8 +40,8 @@ export function cleanupMessages(messages, options = {}) {
 /**
  * 移除无效消息
  */
-function removeInvalidMessages(messages) {
-  return messages.filter(msg => {
+function removeInvalidMessages(messages: any) {
+  return messages.filter((msg: any) => {
     if (!msg?.role) return false;
     if (msg.role === 'system') return true;
 
@@ -58,7 +57,7 @@ function removeInvalidMessages(messages) {
   });
 }
 
-function hasValidContent(content) {
+function hasValidContent(content: any) {
   if (!content) return false;
   if (typeof content === 'string') return content.trim().length > 0;
   if (Array.isArray(content)) return content.length > 0;
@@ -68,8 +67,8 @@ function hasValidContent(content) {
 /**
  * 标准化消息内容
  */
-function normalizeMessageContent(messages) {
-  return messages.map(msg => {
+function normalizeMessageContent(messages: any) {
+  return messages.map((msg: any) => {
     const normalized = { ...msg };
 
     if (normalized.content === null || normalized.content === undefined) {
@@ -91,7 +90,7 @@ function normalizeMessageContent(messages) {
 /**
  * 合并连续的相同角色消息
  */
-function mergeConsecutiveMessages(messages) {
+function mergeConsecutiveMessages(messages: any) {
   if (messages.length <= 1) return messages;
 
   const merged = [];
@@ -117,7 +116,7 @@ function mergeConsecutiveMessages(messages) {
   return merged;
 }
 
-function mergeContent(content1, content2) {
+function mergeContent(content1: any, content2: any) {
   if (typeof content1 === 'string' && typeof content2 === 'string') {
     return content1 + '\n' + content2;
   }
@@ -130,7 +129,7 @@ function mergeContent(content1, content2) {
 /**
  * 确保第一条非 system 消息是 user
  */
-function ensureFirstUserMessage(messages) {
+function ensureFirstUserMessage(messages: any) {
   const systemMessages = [];
   const otherMessages = [];
 
@@ -155,7 +154,7 @@ function ensureFirstUserMessage(messages) {
  * 修复工具调用序列
  * Gemini 规则：assistant(with tool_calls) 必须紧跟在 user 或 tool 后面
  */
-function fixToolCallSequence(messages) {
+function fixToolCallSequence(messages: any) {
   const fixed = [];
   let expectingToolResponse = false;
   let toolCallsCount = 0;

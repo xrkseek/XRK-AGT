@@ -1,14 +1,13 @@
-// @ts-nocheck
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import { estimateTokensRough } from '#utils/token-estimate.js';
 import { normalizeStringArray } from '#utils/string-array-utils.js';
 import { pickFirstKey } from '#utils/coerce-pick.js';
 
-export function pickFirst(obj, keys) {
+export function pickFirst(obj: any, keys: any) {
   return pickFirstKey(obj, keys);
 }
 
-export function parseOptionalJson(raw) {
+export function parseOptionalJson(raw: any) {
   if (raw == null) return null;
   if (typeof raw === 'object') return raw;
   try {
@@ -18,13 +17,13 @@ export function parseOptionalJson(raw) {
   }
 }
 
-export function toNum(v) {
+export function toNum(v: any) {
   if (v == null || v === '') return;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
 }
 
-export function toBool(v) {
+export function toBool(v: any) {
   if (v == null || v === '') return;
   if (typeof v === 'boolean') return v;
   const s = String(v).trim().toLowerCase();
@@ -33,13 +32,13 @@ export function toBool(v) {
   return;
 }
 
-export const trimLower = (v) => (v || '').toString().trim().toLowerCase();
+export const trimLower = (v: any) => (v || '').toString().trim().toLowerCase();
 
-export function getDefaultProvider() {
+export function getDefaultProvider(): any {
   return LLMFactory.resolveProvider({}) ?? '';
 }
 
-export function resolveProviderFromRequest(body = {}) {
+export function resolveProviderFromRequest(body: any = {}) {
   return LLMFactory.resolveProvider({
     model: trimLower(pickFirst(body, ['model'])),
     provider: trimLower(pickFirst(body, ['provider', 'llm', 'profile'])),
@@ -49,8 +48,8 @@ export function resolveProviderFromRequest(body = {}) {
   });
 }
 
-export function extractMessageText(messages) {
-  return messages.map((m) => {
+export function extractMessageText(messages: any) {
+  return messages.map((m: any) => {
     const content = m.content;
     return typeof content === 'string' ? content : (content?.text || '');
   }).join('');
@@ -58,10 +57,10 @@ export function extractMessageText(messages) {
 
 export const estimateTokens = estimateTokensRough;
 
-export function resolveWorkflowStreams(body = {}) {
-  const workflowConfig = pickFirst(body, ['workflow']);
+export function resolveWorkflowStreams(body: any = {}) {
+  const workflowConfig: any = pickFirst(body, ['workflow']);
   if (!workflowConfig || typeof workflowConfig !== 'object') return null;
-  const names = [];
+  const names: any[] = [];
   if (Array.isArray(workflowConfig.workflows)) names.push(...workflowConfig.workflows);
   if (typeof workflowConfig.workflow === 'string') names.push(workflowConfig.workflow);
   const normalized = normalizeStringArray(names);
@@ -77,30 +76,30 @@ export function resolveWorkflowStreams(body = {}) {
  * @param {string[]|null|undefined} effectiveStreams
  * @returns {boolean}
  */
-export function shouldUseHarnessModuleLoop(body = {}, effectiveStreams = null) {
+export function shouldUseHarnessModuleLoop(body: any = {}, effectiveStreams: any = null) {
   if (Array.isArray(effectiveStreams) && effectiveStreams.length > 0) return true;
   const tools = pickFirst(body, ['tools']);
   if (Array.isArray(tools) && tools.length > 0) return false;
   return true;
 }
 
-export function buildOverridesFromBody(body = {}) {
-  const overrides = {};
-  const addNum = (key, ...aliases) => {
+export function buildOverridesFromBody(body: any = {}) {
+  const overrides: any = {};
+  const addNum = (key: any, ...aliases: any[]) => {
     const v = toNum(pickFirst(body, [key, ...aliases]));
     if (v !== undefined) {
       overrides[key] = v;
       if (aliases.length) overrides[aliases[0]] = v;
     }
   };
-  const addVal = (key, ...aliases) => {
+  const addVal = (key: any, ...aliases: any[]) => {
     const v = pickFirst(body, [key, ...aliases]);
     if (v !== undefined) {
       overrides[key] = v;
       if (aliases.length) overrides[aliases[0]] = v;
     }
   };
-  const addBool = (key, ...aliases) => {
+  const addBool = (key: any, ...aliases: any[]) => {
     const v = toBool(pickFirst(body, [key, ...aliases]));
     if (v !== undefined) {
       overrides[key] = v;

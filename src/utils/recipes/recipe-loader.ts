@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * goose Recipe 可移植核：YAML/JSON 配方（instructions + prompt + parameters）。
  * 目录：`agents/recipes/`、工作区 recipes/、~/.xrk/recipes/
@@ -23,7 +22,7 @@ import { getProjectRoot, projectAgentsAbs, resolveAgentWorkspaceAbs } from '#uti
  * }} Recipe
  */
 
-function parseRecipeFile(absPath) {
+function parseRecipeFile(absPath: any) {
   let raw;
   try {
     raw = fs.readFileSync(absPath, 'utf8');
@@ -53,8 +52,8 @@ function parseRecipeFile(absPath) {
   };
 }
 
-function listRecipeFiles(dir, max = 80) {
-  const out = [];
+function listRecipeFiles(dir: any, max = 80) {
+  const out: any[] = [];
   if (!dir || !fs.existsSync(dir)) return out;
   let entries;
   try {
@@ -72,7 +71,7 @@ function listRecipeFiles(dir, max = 80) {
 }
 
 /** @returns {Recipe[]} */
-export function listRecipes() {
+export function listRecipes(): any[] {
   const roots = [
     projectAgentsAbs(getProjectRoot(), 'recipes'),
     path.join(resolveAgentWorkspaceAbs(), 'recipes'),
@@ -91,7 +90,7 @@ export function listRecipes() {
 }
 
 /** @param {string} id */
-export function getRecipe(id) {
+export function getRecipe(id: any) {
   const key = String(id || '').trim().toLowerCase();
   if (!key) return null;
   return listRecipes().find((r) => r.id.toLowerCase() === key) || null;
@@ -101,7 +100,7 @@ export function getRecipe(id) {
  * @param {string} template
  * @param {Record<string, string>} params
  */
-export function renderRecipeTemplate(template, params = {}) {
+export function renderRecipeTemplate(template: any, params: any = {}) {
   let s = String(template || '');
   for (const [k, v] of Object.entries(params)) {
     const re = new RegExp(`\\{\\{\\s*${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}\\}`, 'g');
@@ -116,7 +115,7 @@ export function renderRecipeTemplate(template, params = {}) {
  * @param {Record<string, string>} [params]
  * @returns {{ systemExtra: string, userPrompt: string }}
  */
-export function materializeRecipe(recipe, params = {}) {
+export function materializeRecipe(recipe: any, params: any = {}) {
   const merged = { ...params };
   for (const p of recipe.parameters || []) {
     const name = String(p.name || '').trim();

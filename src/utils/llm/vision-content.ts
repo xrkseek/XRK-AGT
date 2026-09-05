@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 跨通道视觉内容标准层（QQ / HTTP / Device / Desktop / 任意入口共用）
  *
@@ -26,7 +25,7 @@
 export const DEFAULT_VISION_MAX_IMAGES = 10;
 
 /** 解码日志/CQ/表单里常见的 HTML 实体，避免 `&amp;` 导致 fetch 失败（幂等，可解多层编码） */
-export function decodeHtmlEntitiesInUrl(url) {
+export function decodeHtmlEntitiesInUrl(url: any) {
   let s = String(url ?? '').trim();
   if (!s) return '';
   for (let i = 0; i < 5; i++) {
@@ -56,7 +55,7 @@ export function decodeHtmlEntitiesInUrl(url) {
  * @param {{ role?: 'current'|'reply', mime?: string, caption?: string }} [defaults]
  * @returns {{ ref: string, role?: string, mime?: string, caption?: string }|null}
  */
-export function normalizeVisionRef(input, defaults = {}) {
+export function normalizeVisionRef(input: any, defaults: any = {}) {
   if (input == null) return null;
   if (typeof input === 'string') {
     const ref = decodeHtmlEntitiesInUrl(input);
@@ -93,7 +92,7 @@ export function normalizeVisionRef(input, defaults = {}) {
  * @param {{ role?: 'current'|'reply' }} [defaults]
  * @returns {Array<{ ref: string, role?: string, mime?: string, caption?: string }>}
  */
-export function coerceVisionRefList(list, defaults = {}) {
+export function coerceVisionRefList(list: any, defaults: any = {}) {
   if (!Array.isArray(list)) return [];
   const out = [];
   const seen = new Set();
@@ -107,7 +106,7 @@ export function coerceVisionRefList(list, defaults = {}) {
 }
 
 /** @param {VisionRef|ReturnType<typeof normalizeVisionRef>} ref */
-export function visionRefToLocator(ref) {
+export function visionRefToLocator(ref: any) {
   const n = normalizeVisionRef(ref);
   return n?.ref || '';
 }
@@ -122,14 +121,14 @@ export function visionRefToLocator(ref) {
  * }} [opts]
  * @returns {{ images: ReturnType<typeof normalizeVisionRef>[], replyImages: ReturnType<typeof normalizeVisionRef>[] }}
  */
-export function extractVisionFromSegments(segments, opts = {}) {
-  const images = [];
-  const replyImages = [];
+export function extractVisionFromSegments(segments: any, opts: any = {}) {
+  const images: any[] = [];
+  const replyImages: any[] = [];
   const skipStickers = opts.skipStickers !== false;
   const imageTypes = new Set(opts.imageTypes || ['image', 'mface']);
   const replyTypes = new Set(opts.replyTypes || ['reply']);
 
-  const push = (bucket, seg, role) => {
+  const push = (bucket: any, seg: any, role: any) => {
     const data = seg?.data && typeof seg.data === 'object' ? seg.data : {};
     const candidates = [
       seg?.file,
@@ -144,7 +143,7 @@ export function extractVisionFromSegments(segments, opts = {}) {
     for (const c of candidates) {
       const n = normalizeVisionRef(c, { role });
       if (!n) continue;
-      if (bucket.some((x) => x.ref === n.ref)) return;
+      if (bucket.some((x: any) => x.ref === n.ref)) return;
       bucket.push(n);
       return;
     }
@@ -188,14 +187,14 @@ export function extractVisionFromSegments(segments, opts = {}) {
  * @param {object|null|undefined} e
  * @param {object} [opts]
  */
-export async function extractVisionFromEvent(e, opts = {}) {
+export async function extractVisionFromEvent(e: any, opts: any = {}) {
   const fromSeg = extractVisionFromSegments(e?.message, opts);
   const images = [...fromSeg.images];
   const replyImages = [...fromSeg.replyImages];
 
-  const mergeList = (bucket, list, role) => {
+  const mergeList = (bucket: any, list: any, role: any) => {
     for (const item of coerceVisionRefList(list, { role })) {
-      if (!bucket.some((x) => x.ref === item.ref)) bucket.push(item);
+      if (!bucket.some((x: any) => x.ref === item.ref)) bucket.push(item);
     }
   };
 
@@ -212,8 +211,8 @@ export async function extractVisionFromEvent(e, opts = {}) {
           // 被引用消息内的图一律算 replyImages
         });
         // 引用目标消息里的图：无论是否带 reply 段，都并入 replyImages
-        mergeList(replyImages, fromReply.images.map((x) => x.ref), 'reply');
-        mergeList(replyImages, fromReply.replyImages.map((x) => x.ref), 'reply');
+        mergeList(replyImages, fromReply.images.map((x: any) => x.ref), 'reply');
+        mergeList(replyImages, fromReply.replyImages.map((x: any) => x.ref), 'reply');
       }
     } catch {
       /* 通道未实现 getReply 时忽略 */
@@ -233,7 +232,7 @@ export async function extractVisionFromEvent(e, opts = {}) {
  * }} input
  * @returns {string | { text: string, images: string[], replyImages: string[], [k: string]: unknown }}
  */
-export function buildAgtUserContent(input = {}) {
+export function buildAgtUserContent(input: any = {}) {
   const text = input.text != null ? String(input.text) : '';
   const images = coerceVisionRefList(input.images, { role: 'current' });
   const replyImages = coerceVisionRefList(input.replyImages, { role: 'reply' });
@@ -246,8 +245,8 @@ export function buildAgtUserContent(input = {}) {
 
   return {
     text,
-    images: images.map((x) => x.ref),
-    replyImages: replyImages.map((x) => x.ref),
+    images: images.map((x: any) => x.ref),
+    replyImages: replyImages.map((x: any) => x.ref),
     ...extra
   };
 }
@@ -258,13 +257,13 @@ export function buildAgtUserContent(input = {}) {
  * @param {string[]} uploadedLocators
  * @param {{ roles?: Array<'current'|'reply'|string> }} [opts]
  */
-export function mergeUploadedImagesIntoMessages(messages, uploadedLocators, opts = {}) {
+export function mergeUploadedImagesIntoMessages(messages: any, uploadedLocators: any, opts: any = {}) {
   if (!Array.isArray(messages) || !uploadedLocators?.length) return messages;
   const roles = Array.isArray(opts.roles) ? opts.roles : [];
 
-  const current = [];
-  const reply = [];
-  uploadedLocators.forEach((loc, i) => {
+  const current: any[] = [];
+  const reply: any[] = [];
+  uploadedLocators.forEach((loc: any, i: any) => {
     const role = roles[i] === 'reply' ? 'reply' : 'current';
     const n = normalizeVisionRef(loc, { role });
     if (!n) return;
@@ -300,8 +299,8 @@ export function mergeUploadedImagesIntoMessages(messages, uploadedLocators, opts
     } else if (last.content && typeof last.content === 'object') {
       const c = last.content;
       c.text = (c.text || c.content || '').toString();
-      c.images = [...coerceVisionRefList(c.images).map((x) => x.ref), ...current];
-      c.replyImages = [...coerceVisionRefList(c.replyImages).map((x) => x.ref), ...reply];
+      c.images = [...coerceVisionRefList(c.images).map((x: any) => x.ref), ...current];
+      c.replyImages = [...coerceVisionRefList(c.replyImages).map((x: any) => x.ref), ...reply];
       last.content = c;
     } else {
       last.content = imageParts;
@@ -318,7 +317,7 @@ export function mergeUploadedImagesIntoMessages(messages, uploadedLocators, opts
   return messages;
 }
 
-function isProbablyBareBase64(str) {
+function isProbablyBareBase64(str: any) {
   if (!str || typeof str !== 'string') return false;
   if (str.startsWith('data:')) return true;
   if (str.includes('://')) return false;
@@ -327,7 +326,7 @@ function isProbablyBareBase64(str) {
   return /^[A-Za-z0-9+/=\r\n]+$/.test(s);
 }
 
-function wrapLocatorAsDataUrlIfNeeded(locator, { allowBase64, defaultMime }) {
+function wrapLocatorAsDataUrlIfNeeded(locator: any, { allowBase64, defaultMime }: any) {
   let url = decodeHtmlEntitiesInUrl(locator);
   if (!url) return '';
   if (allowBase64 && isProbablyBareBase64(url) && !url.startsWith('data:')) {
@@ -347,7 +346,7 @@ function wrapLocatorAsDataUrlIfNeeded(locator, { allowBase64, defaultMime }) {
  * }} [options]
  * @returns {Array<{type:string, text?:string, image_url?:{url:string}}>}
  */
-export function buildOpenAIVisionParts(content = {}, config = {}, options = {}) {
+export function buildOpenAIVisionParts(content: any = {}, config: any = {}, options: any = {}) {
   const text = content.text != null ? String(content.text) : String(content.content || '');
   const allowBase64 = options.allowBase64 !== false;
   const defaultMime = config.visionImageMimeType || 'image/png';
@@ -368,7 +367,7 @@ export function buildOpenAIVisionParts(content = {}, config = {}, options = {}) 
   if (text) parts.push({ type: 'text', text });
 
   let remain = maxImages;
-  const appendGroup = (list, roleTag) => {
+  const appendGroup = (list: any, roleTag: any) => {
     const slice = list.slice(0, remain);
     const n = slice.length;
     for (let i = 0; i < n; i++) {
@@ -404,7 +403,7 @@ export function buildOpenAIVisionParts(content = {}, config = {}, options = {}) 
  * 统计 user 消息中的附图数量（三种形态）
  * @param {unknown} content
  */
-export function countVisionInContent(content) {
+export function countVisionInContent(content: any) {
   if (content == null) return 0;
   if (typeof content === 'string') return 0;
   if (Array.isArray(content)) {

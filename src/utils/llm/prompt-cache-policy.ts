@@ -1,4 +1,3 @@
-// @ts-nocheck
 import RuntimeUtil from '#utils/runtime-util.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { pickTrimmed } from '#utils/coerce-pick.js';
@@ -8,10 +7,16 @@ import { pickTrimmed } from '#utils/coerce-pick.js';
  * 静态前缀在前、动态后缀在后；与 stream-cache（整轮结果 LRU）无关。
  */
 
-/**
- * @param {{ keyPrefix?: string, streamName?: string, model?: string, selfId?: string|number, scopeId?: string|number, scopeInKey?: boolean }} parts
- */
-export function buildPromptCacheKey(parts = {}) {
+export function buildPromptCacheKey(
+  parts: {
+    keyPrefix?: string;
+    streamName?: string;
+    model?: string;
+    selfId?: string | number;
+    scopeId?: string | number;
+    scopeInKey?: boolean;
+  } = {},
+): string {
   const segments = [
     pickTrimmed(parts.keyPrefix, 'xrk'),
     pickTrimmed(parts.streamName, 'stream'),
@@ -26,20 +31,16 @@ export function buildPromptCacheKey(parts = {}) {
   return segments.filter(Boolean).join(':');
 }
 
-function getGlobalPromptCacheCfg() {
+function getGlobalPromptCacheCfg(): any {
   return getAiWorkflowConfigOptional().llm?.promptCache ?? {};
 }
 
-export function isPromptCacheEnabled(resolvedConfig = {}) {
+export function isPromptCacheEnabled(resolvedConfig: any = {}): boolean {
   const pc = resolvedConfig.promptCache ?? getGlobalPromptCacheCfg();
   return pc.enabled === true;
 }
 
-/**
- * @param {object} resolvedConfig
- * @param {{ stream?: object, e?: object|null }} ctx
- */
-export function applyPromptCachePolicy(resolvedConfig = {}, ctx = {}) {
+export function applyPromptCachePolicy(resolvedConfig: any = {}, ctx: any = {}): any {
   if (!isPromptCacheEnabled(resolvedConfig)) return resolvedConfig;
 
   const pc = resolvedConfig.promptCache ?? getGlobalPromptCacheCfg();
@@ -73,13 +74,13 @@ export function applyPromptCachePolicy(resolvedConfig = {}, ctx = {}) {
   return out;
 }
 
-export function logPromptCacheUsage(usage, label = 'LLM') {
+export function logPromptCacheUsage(usage: any, label = 'LLM'): void {
   if (!usage || typeof usage !== 'object') return;
 
   const cached =
-    usage.prompt_tokens_details?.cached_tokens
-    ?? usage.input_token_details?.cache_read_input_tokens
-    ?? usage.cache_read_input_tokens;
+    usage.prompt_tokens_details?.cached_tokens ??
+    usage.input_token_details?.cache_read_input_tokens ??
+    usage.cache_read_input_tokens;
 
   if (cached == null || Number(cached) <= 0) return;
 
@@ -87,14 +88,14 @@ export function logPromptCacheUsage(usage, label = 'LLM') {
   RuntimeUtil.makeLog(
     'debug',
     `[PromptCache] ${label} cached_tokens=${cached} prompt_tokens=${promptTokens}`,
-    'PromptCache'
+    'PromptCache',
   );
 }
 
 /** 从 LLM 配置提取应传入 client.chat 的 cache 覆盖项 */
-export function pickPromptCacheOverrides(resolvedConfig = {}, ctx = {}) {
+export function pickPromptCacheOverrides(resolvedConfig: any = {}, ctx: any = {}): any {
   const merged = applyPromptCachePolicy(resolvedConfig, ctx);
-  const out = {};
+  const out: Record<string, unknown> = {};
   if (merged.prompt_cache_key) out.prompt_cache_key = merged.prompt_cache_key;
   if (merged.prompt_cache_retention) out.prompt_cache_retention = merged.prompt_cache_retention;
   if (merged.anthropic_prompt_cache) out.anthropic_prompt_cache = merged.anthropic_prompt_cache;

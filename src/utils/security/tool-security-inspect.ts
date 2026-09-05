@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 工具调用安全检查（goose ToolInspection + SecurityManager 可移植核）。
  * 调用点：`MCPServer.handleToolCall`（统一覆盖 LLM / HTTP / WS / JSON-RPC）。
@@ -11,7 +10,7 @@ import { maxRisk, scanTextForThreats } from '#utils/security/tool-threat-pattern
 import { requestToolApproval } from '#utils/security/tool-approval.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 
-function getSecurityCfg() {
+function getSecurityCfg(): any {
   const raw = getAiWorkflowConfigOptional()?.security?.toolScan ?? {};
   const approval = getAiWorkflowConfigOptional()?.security?.approval ?? {};
   return {
@@ -28,12 +27,12 @@ function getSecurityCfg() {
   };
 }
 
-function isMasterRequester() {
-  const e = getWorkflowRequestContext()?.e;
+function isMasterRequester(): boolean {
+  const e: any = getWorkflowRequestContext()?.e;
   return e?.isMaster === true;
 }
 
-function collectScanText(args) {
+function collectScanText(args: any) {
   if (args == null) return '';
   if (typeof args === 'string') return args;
   const cfg = getSecurityCfg();
@@ -52,7 +51,7 @@ function collectScanText(args) {
   return parts.join('\n');
 }
 
-function actionForRisk(risk, cfg) {
+function actionForRisk(risk: any, cfg: any) {
   if (risk === 'critical') return cfg.onCritical === 'ask' ? 'ask' : 'deny';
   if (risk === 'high') return cfg.onHigh;
   if (risk === 'medium') return cfg.onMedium;
@@ -66,7 +65,7 @@ function actionForRisk(risk, cfg) {
  * @param {string} summary
  * @param {object[]} [findings]
  */
-async function resolveAskOrDeny(action, toolName, args, summary, findings) {
+async function resolveAskOrDeny(action: any, toolName: any, args: any, summary: any, findings: any) {
   if (action === 'ask' && getSecurityCfg().masterBypassAsk && isMasterRequester()) {
     RuntimeUtil.makeLog('warn', `[tool-security] 主人放行: ${toolName}: ${summary}`, 'ToolSecurity');
     return { ok: true, warnings: [summary] };
@@ -93,7 +92,7 @@ async function resolveAskOrDeny(action, toolName, args, summary, findings) {
  * @param {string} toolName
  * @param {object} args
  */
-export async function inspectToolCallSecurity(toolName, args = {}) {
+export async function inspectToolCallSecurity(toolName: any, args: any = {}) {
   const policy = checkToolCallAllowed(toolName);
   if (!policy.ok) {
     if (policy.error?.includes('ask')) {
@@ -109,7 +108,7 @@ export async function inspectToolCallSecurity(toolName, args = {}) {
   const findings = scanTextForThreats(text);
   if (!findings.length) return { ok: true };
 
-  let worst = 'low';
+  let worst: any = 'low';
   for (const f of findings) worst = maxRisk(worst, f.risk);
   const action = actionForRisk(worst, cfg);
   const summary = findings

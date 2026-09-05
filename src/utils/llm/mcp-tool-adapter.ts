@@ -1,4 +1,3 @@
-// @ts-nocheck
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { filterToolsByPolicy } from '#utils/runtime-policy.js';
@@ -18,7 +17,7 @@ export class MCPToolAdapter {
    * 获取 MCP 服务器实例
    * @returns {*}
    */
-  static getMCPServer() {
+  static getMCPServer(): any {
     return AiWorkflowLoader.mcpServer;
   }
 
@@ -35,7 +34,7 @@ export class MCPToolAdapter {
    * @param {Array<string>} [options.workflows] - 白名单工作流列表；优先级高于 workflow
    * @returns {Array} OpenAI tools
    */
-  static listMcpTools(options = {}) {
+  static listMcpTools(options: any = {}) {
     const { workflow = null, workflows = null } = options || {};
 
     const mcpServer = this.getMCPServer();
@@ -56,9 +55,9 @@ export class MCPToolAdapter {
     return [];
   }
 
-  static convertMCPToolsToOpenAI(options = {}) {
+  static convertMCPToolsToOpenAI(options: any = {}) {
     const tools = filterToolsByPolicy(
-      this.listMcpTools(options).map((tool) => ({
+      this.listMcpTools(options).map((tool: any) => ({
         type: 'function',
         function: {
           name: tool.name,
@@ -75,19 +74,19 @@ export class MCPToolAdapter {
    * @param {Object} schema - JSON Schema
    * @returns {Object} OpenAI schema
    */
-  static convertSchemaToOpenAI(schema) {
+  static convertSchemaToOpenAI(schema: any) {
     if (!schema || typeof schema !== 'object') {
       return { type: 'object', properties: {}, required: [] };
     }
 
-    const result = {
+    const result: any = {
       type: schema.type || 'object',
       properties: {},
       required: schema.required || []
     };
 
     if (schema.properties) {
-      for (const [key, prop] of Object.entries(schema.properties)) {
+      for (const [key, prop] of Object.entries(schema.properties) as [string, any][]) {
         result.properties[key] = {
           type: prop.type || 'string',
           description: prop.description || ''
@@ -126,7 +125,7 @@ export class MCPToolAdapter {
    * @param {Array<string>} options.workflows - 允许的工作流列表（用于计算 MCP 白名单）
    * @returns {Promise<Array>} tool role messages
    */
-  static async handleToolCalls(toolCalls, options = {}) {
+  static async handleToolCalls(toolCalls: any, options: any = {}) {
     if (!Array.isArray(toolCalls) || toolCalls.length === 0) return [];
 
     const mcpServer = this.getMCPServer();
@@ -147,13 +146,13 @@ export class MCPToolAdapter {
       allowedToolNames = new Set(options.allowedTools);
     } else if (options.workflows && Array.isArray(options.workflows)) {
       const allowedTools = this.convertMCPToolsToOpenAI({ workflows: options.workflows });
-      allowedToolNames = new Set(allowedTools.map(t => t.function.name));
+      allowedToolNames = new Set(allowedTools.map((t: any) => t.function?.name));
     }
 
     const parallel = options.parallel_tool_calls ?? options.parallelToolCalls;
     const sequential = parallel === false || options.sequentialToolCalls === true;
 
-    const runOne = async (toolCall, index) => {
+    const runOne = async (toolCall: any, index: any) => {
       try {
         const functionName = toolCall.function?.name;
 
@@ -217,7 +216,7 @@ export class MCPToolAdapter {
           name: functionName,
           content: JSON.stringify({
             success: false,
-            error: error.message || String(error)
+            error: (error as any).message || String(error)
           })
         };
       }
@@ -238,7 +237,7 @@ export class MCPToolAdapter {
    * 是否有可用 MCP 工具
    * @returns {boolean}
    */
-  static hasTools() {
+  static hasTools(): boolean {
     const mcpServer = this.getMCPServer();
     return Boolean(mcpServer && mcpServer.tools && mcpServer.tools.size > 0);
   }

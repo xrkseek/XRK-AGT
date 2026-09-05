@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 工具审批队列（goose RequireApproval 通道适配）。
  * 默认关闭（security.approval.enabled=false）：ask 直接拒绝。
@@ -13,7 +12,7 @@ import MonitorService from '#infrastructure/ai-workflow/monitor-service.js';
 /** @type {Map<string, { resolve: Function, meta: object, timer: any }>} */
 const pending = new Map();
 
-function cfg() {
+function cfg(): any {
   const raw = getAiWorkflowConfigOptional()?.security?.approval ?? {};
   return {
     enabled: raw.enabled === true,
@@ -22,13 +21,13 @@ function cfg() {
 }
 
 /** 是否开启交互审批（默认关） */
-export function isToolApprovalEnabled() {
+export function isToolApprovalEnabled(): boolean {
   return cfg().enabled;
 }
 
-async function notifyMasters(text) {
+async function notifyMasters(text: any) {
   const masters = (runtimeConfig.masterQQ || []).map(String).filter(Boolean);
-  const botIds = (Array.isArray(globalThis.AgentRuntime?.uin) ? [...globalThis.AgentRuntime.uin] : [])
+  const botIds = (Array.isArray((globalThis as any).AgentRuntime?.uin) ? [...(globalThis as any).AgentRuntime.uin] : [])
     .map(String)
     .filter((id) => id && id !== 'stdin');
   if (!masters.length || !botIds.length) return false;
@@ -36,12 +35,12 @@ async function notifyMasters(text) {
   for (const botId of botIds) {
     for (const qq of masters) {
       try {
-        await globalThis.AgentRuntime.sendFriendMsg(botId, qq, text);
+        await (globalThis as any).AgentRuntime.sendFriendMsg(botId, qq, text);
         sent = true;
       } catch (err) {
         RuntimeUtil.makeLog(
           'warn',
-          `[tool-approval] 通知主人失败 ${botId}/${qq}: ${err?.message || err}`,
+          `[tool-approval] 通知主人失败 ${botId}/${qq}: ${(err as any)?.message || err}`,
           'ToolApproval'
         );
       }
@@ -56,7 +55,7 @@ async function notifyMasters(text) {
  * @param {'allow'|'deny'} decision
  * @returns {{ decision: 'allow'|'deny', id: string } | null}
  */
-export function parseApprovalCommand(msg, decision) {
+export function parseApprovalCommand(msg: any, decision: any) {
   const s = String(msg || '').trim();
   const allowRe = /^#(批准|approve)\s*([A-Za-z0-9_-]*)\s*$/i;
   const denyRe = /^#(拒绝|deny)\s*([A-Za-z0-9_-]*)\s*$/i;
@@ -69,7 +68,7 @@ export function parseApprovalCommand(msg, decision) {
  * @param {{ toolName: string, args: object, reason: string, findings?: object[] }} meta
  * @returns {Promise<'allow'|'deny'>}
  */
-export async function requestToolApproval(meta) {
+export async function requestToolApproval(meta: any) {
   const { enabled, timeoutMs } = cfg();
   if (!enabled) return 'deny';
 
@@ -110,7 +109,7 @@ export async function requestToolApproval(meta) {
       resolve('deny');
     }, timeoutMs);
     pending.set(id, {
-      resolve: (decision) => {
+      resolve: (decision: any) => {
         clearTimeout(timer);
         pending.delete(id);
         MonitorService.emit('tool:approval_resolved', { id, decision });
@@ -127,7 +126,7 @@ export async function requestToolApproval(meta) {
  * @param {'allow'|'deny'} decision
  * @returns {{ ok: boolean, id?: string, error?: string }}
  */
-export function resolveToolApproval(id, decision) {
+export function resolveToolApproval(id: any, decision: any) {
   const key = String(id || '').trim();
   let entry;
   let resolvedId = key;
@@ -154,6 +153,6 @@ export function resolveToolApproval(id, decision) {
 }
 
 /** @returns {Array<object>} */
-export function listPendingApprovals() {
+export function listPendingApprovals(): any[] {
   return [...pending.values()].map((p) => p.meta);
 }

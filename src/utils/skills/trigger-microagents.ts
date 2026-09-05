@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 触发式知识注入（对齐 OpenHands microagents / skills triggers）。
  * 扫描工作区与项目根下带 frontmatter triggers 的 Markdown，
@@ -16,7 +15,7 @@ const REL_ROOTS = [PROJECT_MICROAGENTS_DIR_REL, PROJECT_SKILLS_STANDARD_REL];
  * @param {string} raw
  * @returns {{ meta: object, body: string } | null}
  */
-export function parseMarkdownFrontmatter(raw) {
+export function parseMarkdownFrontmatter(raw: any) {
   if (typeof raw !== 'string') return null;
   const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!m) return null;
@@ -33,7 +32,7 @@ export function parseMarkdownFrontmatter(raw) {
  * @param {unknown} triggers
  * @returns {string[]}
  */
-function normalizeTriggers(triggers) {
+function normalizeTriggers(triggers: any) {
   if (Array.isArray(triggers)) {
     return triggers.map((t) => String(t || '').trim()).filter(Boolean);
   }
@@ -45,7 +44,7 @@ function normalizeTriggers(triggers) {
  * @param {string} userText
  * @param {string} trigger
  */
-function triggerMatches(userText, trigger) {
+function triggerMatches(userText: any, trigger: any) {
   const t = String(trigger || '').trim();
   if (!t) return false;
   const text = String(userText || '');
@@ -59,9 +58,9 @@ function triggerMatches(userText, trigger) {
   return text.toLowerCase().includes(t.toLowerCase());
 }
 
-function listMdFiles(dir, maxFiles = 80) {
-  const out = [];
-  const walk = (d, depth) => {
+function listMdFiles(dir: any, maxFiles = 80) {
+  const out: any[] = [];
+  const walk = (d: any, depth: any) => {
     if (out.length >= maxFiles || depth > 4) return;
     let entries;
     try {
@@ -90,9 +89,9 @@ function listMdFiles(dir, maxFiles = 80) {
  * @param {string} root
  * @param {number} max
  */
-function listSkillMdWithTriggersHint(root, max = 120) {
-  const out = [];
-  const walk = (d, depth) => {
+function listSkillMdWithTriggersHint(root: any, max = 120) {
+  const out: any[] = [];
+  const walk = (d: any, depth: any) => {
     if (out.length >= max || depth > 5) return;
     let entries;
     try {
@@ -120,7 +119,7 @@ function listSkillMdWithTriggersHint(root, max = 120) {
  * @param {string} absFile
  * @param {string} rootReal
  */
-function loadAgentDoc(absFile, rootReal) {
+function loadAgentDoc(absFile: any, rootReal: any) {
   const real = realpathSyncOrResolve(absFile);
   if (!isPathInside(rootReal, real)) return null;
   let raw;
@@ -145,7 +144,7 @@ function loadAgentDoc(absFile, rootReal) {
  * @param {{ userText?: string, maxAgents?: number, maxChars?: number, extraRoots?: string[] }} [opts]
  * @returns {{ section: string, activated: string[] }}
  */
-export function buildTriggeredMicroagentsSection(opts = {}) {
+export function buildTriggeredMicroagentsSection(opts: any = {}) {
   const userText = String(opts.userText || '');
   if (!userText.trim()) return { section: '', activated: [] };
 
@@ -169,7 +168,7 @@ export function buildTriggeredMicroagentsSection(opts = {}) {
 
   /** @type {Map<string, { name: string, triggers: string[], body: string, path: string }>} */
   const catalog = new Map();
-  for (const root of roots) {
+  for (const root of roots as Set<string>) {
     if (!fs.existsSync(root)) continue;
     let rootReal;
     try {
@@ -194,7 +193,7 @@ export function buildTriggeredMicroagentsSection(opts = {}) {
   let used = 0;
   for (const doc of catalog.values()) {
     if (activated.length >= maxAgents) break;
-    const hit = doc.triggers.some((t) => triggerMatches(userText, t));
+    const hit = doc.triggers.some((t: any) => triggerMatches(userText, t));
     if (!hit) continue;
     const block = `### ${doc.name}\n\n${doc.body}\n`;
     if (used + block.length > maxChars && activated.length > 0) break;
@@ -215,7 +214,7 @@ export function buildTriggeredMicroagentsSection(opts = {}) {
  * 从 messages 取最后一条用户文本。
  * @param {Array<object>} messages
  */
-export function extractLastUserText(messages) {
+export function extractLastUserText(messages: any) {
   if (!Array.isArray(messages)) return '';
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];

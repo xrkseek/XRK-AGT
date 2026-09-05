@@ -1,4 +1,3 @@
-// @ts-nocheck
 import RuntimeUtil from '#utils/runtime-util.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
@@ -18,7 +17,7 @@ function defaultProvider() {
   return LLMFactory.resolveProvider({}) ?? LLMFactory.listProviders()[0] ?? null;
 }
 
-function assignDefined(target, fields) {
+function assignDefined(target: any, fields: any) {
   for (const [key, value] of Object.entries(fields)) {
     if (value !== undefined) target[key] = value;
   }
@@ -28,7 +27,7 @@ function assignDefined(target, fields) {
  * @param {object} stream - AiWorkflow 实例
  * @param {object} [apiConfig={}]
  */
-export function resolveStreamLLMConfig(stream, apiConfig = {}) {
+export function resolveStreamLLMConfig(stream: any, apiConfig: any = {}) {
   const ai = getAiWorkflowConfigOptional();
   const llm = ai.llm || {};
   const pick = pickFirstDefined;

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 消息转换工具：
  * - 统一处理 AGT 形态 `{ text, images, replyImages }`（见 vision-content.js）
@@ -26,7 +25,7 @@ import {
  * @param {number} [options.maxImages]
  * @returns {Promise<Array>}
  */
-export async function transformMessagesWithVision(messages, config = {}, options = {}) {
+export async function transformMessagesWithVision(messages: any, config: any = {}, options: any = {}) {
   if (!Array.isArray(messages)) return messages;
 
   const mode = options.mode === 'openai' ? 'openai' : 'text_only';
@@ -95,7 +94,7 @@ export async function transformMessagesWithVision(messages, config = {}, options
   return transformed;
 }
 
-function truncateOpenAIImageParts(parts, maxImages) {
+function truncateOpenAIImageParts(parts: any, maxImages: any) {
   let imageCount = 0;
   const out = [];
   let truncated = false;
@@ -120,7 +119,7 @@ function truncateOpenAIImageParts(parts, maxImages) {
   return out;
 }
 
-function openAIPartsToTextOnly(parts) {
+function openAIPartsToTextOnly(parts: any) {
   const texts = [];
   let imgIdx = 0;
   for (const p of parts) {
@@ -134,7 +133,7 @@ function openAIPartsToTextOnly(parts) {
   return texts.join(' ').trim();
 }
 
-function agtContentToTextOnly(text, images, replyImages, maxImages) {
+function agtContentToTextOnly(text: any, images: any, replyImages: any, maxImages: any) {
   let content = text || '';
   const replyList = coerceVisionRefList(replyImages, { role: 'reply' });
   const currentList = coerceVisionRefList(images, { role: 'current' });
@@ -154,6 +153,6 @@ function agtContentToTextOnly(text, images, replyImages, maxImages) {
 }
 
 /** OpenAI Chat Completions 多模态别名（HTTP v3 / 兼容工厂共用） */
-export function transformOpenAIStyleVisionMessages(messages, config = {}, options = {}) {
+export function transformOpenAIStyleVisionMessages(messages: any, config: any = {}, options: any = {}) {
   return transformMessagesWithVision(messages, config, { mode: 'openai', ...options });
 }

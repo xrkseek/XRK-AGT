@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * aider editblock 可移植核：解析并应用 SEARCH/REPLACE 围栏。
  * 供 `tools.apply_edit` 使用；路径相对工作区根解析。
@@ -23,7 +22,7 @@ const BLOCK_RE =
  * @param {string} patchText
  * @returns {Array<{ filePath: string, oldText: string, newText: string }>}
  */
-export function parseSearchReplaceBlocks(patchText) {
+export function parseSearchReplaceBlocks(patchText: any) {
   const text = String(patchText || '');
   const out = [];
   BLOCK_RE.lastIndex = 0;
@@ -45,7 +44,7 @@ export function parseSearchReplaceBlocks(patchText) {
  * @param {string} oldText
  * @param {string} newText
  */
-function replaceOnce(content, oldText, newText) {
+function replaceOnce(content: any, oldText: any, newText: any) {
   if (oldText === '') {
     // 空 SEARCH = 新建/整文件写入（调用方处理不存在文件）
     return { ok: true, content: newText, mode: 'whole' };
@@ -79,7 +78,7 @@ function replaceOnce(content, oldText, newText) {
  * @param {string} patchText
  * @param {{ dryRun?: boolean }} [opts]
  */
-export async function applyEditBlocks(workspace, patchText, opts = {}) {
+export async function applyEditBlocks(workspace: any, patchText: any, opts: any = {}) {
   const root = path.resolve(workspace || process.cwd());
   const blocks = parseSearchReplaceBlocks(patchText);
   if (!blocks.length) {

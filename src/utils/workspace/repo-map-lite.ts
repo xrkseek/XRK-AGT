@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from 'fs/promises';
 import path from 'path';
 import { estimateTokensMixed } from '#utils/token-estimate.js';
@@ -35,12 +34,12 @@ const IMPORT_RES = [
  * @param {string} root
  * @param {{ maxFiles?: number, maxDepth?: number }} [opts]
  */
-async function walkFiles(root, opts = {}) {
+async function walkFiles(root: any, opts: any = {}) {
   const maxFiles = opts.maxFiles ?? 400;
   const maxDepth = opts.maxDepth ?? 4;
-  const out = [];
+  const out: any[] = [];
 
-  async function walk(dir, depth) {
+  async function walk(dir: any, depth: any) {
     if (out.length >= maxFiles || depth > maxDepth) return;
     let entries;
     try {
@@ -73,7 +72,7 @@ async function walkFiles(root, opts = {}) {
  * @param {Set<string>} absSet
  * @param {string} root
  */
-function resolveImportTarget(fromAbs, spec, absSet, root) {
+function resolveImportTarget(fromAbs: any, spec: any, absSet: any, root: any) {
   const base = path.resolve(path.dirname(fromAbs), spec);
   const candidates = [
     base,
@@ -104,11 +103,11 @@ function resolveImportTarget(fromAbs, spec, absSet, root) {
  * @param {string[]} nodes
  * @param {Map<string, number>} [personalization]
  */
-function pageRank(edges, nodes, personalization = new Map()) {
+function pageRank(edges: any, nodes: any, personalization: any = new Map()) {
   const n = nodes.length;
   if (!n) return new Map();
   const damp = 0.85;
-  const idx = new Map(nodes.map((id, i) => [id, i]));
+  const idx = new Map(nodes.map((id: any, i: any) => [id, i]));
   let rank = new Float64Array(n).fill(1 / n);
   const pers = new Float64Array(n);
   let persSum = 0;
@@ -142,8 +141,8 @@ function pageRank(edges, nodes, personalization = new Map()) {
       }
       const share = damp * rank[i] / outs.size;
       for (const to of outs) {
-        const j = idx.get(to);
-        if (j != null) next[j] += share;
+        const j = idx.get(String(to));
+        if (typeof j === 'number') next[j] += share;
       }
     }
     rank = next;
@@ -159,7 +158,7 @@ function pageRank(edges, nodes, personalization = new Map()) {
  * @param {{ query?: string, focusPaths?: string[], maxTokens?: number, maxFiles?: number }} [opts]
  * @returns {Promise<{ text: string, files: Array<{ path: string, score: number, symbols: string[], rank?: number }> }>}
  */
-export async function buildRepoMapLite(workspace, opts = {}) {
+export async function buildRepoMapLite(workspace: any, opts: any = {}) {
   const root = path.resolve(workspace || process.cwd());
   const maxTokens = opts.maxTokens ?? 1200;
   const queryTerms = String(opts.query || '')
@@ -167,7 +166,7 @@ export async function buildRepoMapLite(workspace, opts = {}) {
     .split(/[^\p{L}\p{N}_]+/u)
     .filter((t) => t.length >= 2);
   const focus = new Set(
-    (opts.focusPaths || []).map((p) => path.resolve(String(p)))
+    (opts.focusPaths || []).map((p: any) => path.resolve(String(p)))
   );
 
   const files = await walkFiles(root, { maxFiles: opts.maxFiles ?? 400 });
@@ -222,7 +221,7 @@ export async function buildRepoMapLite(workspace, opts = {}) {
     const lower = `${rel}\n${contentHead}`.toLowerCase();
     for (const t of queryTerms) {
       if (lower.includes(t)) p += basePers * 0.35;
-      if (symbols.some((s) => s.toLowerCase() === t)) p += basePers * 0.5;
+      if (symbols.some((s: any) => s.toLowerCase() === t)) p += basePers * 0.5;
     }
     const base = path.basename(abs, path.extname(abs)).toLowerCase();
     if (base.length >= 3 && queryTerms.includes(base)) p += basePers * 0.4;
@@ -246,7 +245,7 @@ export async function buildRepoMapLite(workspace, opts = {}) {
     const lower = `${rel}\n${contentHead}`.toLowerCase();
     for (const t of queryTerms) {
       if (lower.includes(t)) score += 8;
-      if (symbols.some((s) => s.toLowerCase() === t)) score += 15;
+      if (symbols.some((s: any) => s.toLowerCase() === t)) score += 15;
     }
     scored.push({
       path: rel,
