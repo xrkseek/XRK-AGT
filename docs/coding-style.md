@@ -26,9 +26,9 @@
 | Core www | `www/<app>/` + skill **`xrk-www-compat`**（`web-compat.js` / 内联垫片） | 裸用 Node 26 API |
 | 热路径 I/O | `fs/promises`；`try/catch` 代替反复 `existsSync` | 请求链路里 `readFileSync` / 循环 `existsSync` |
 | 批量加载 | `FileLoader.forEachBatch` + `LOADER_BATCH_SIZE` | 全量 `Promise.all(上千 import)` |
-| 模块语言 | Core 可用 `.ts`（进程带 `--experimental-strip-types`）；同名优先 `.ts` | 无 strip-types 硬跑 `.ts`；同 stem 双文件期望都加载 |
+| 模块语言 | 迁移期可用 `.ts`；目标为 `tsc` → `dist/`（见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md)） | 生产主路径依赖 strip-types 直跑源码 |
 | Map 默认 | `map.getOrInsert(k, () => v)` | `get \|\| set` 样板（可写时） |
-| 热重载 | `HotReloadBase`（`#utils/hot-reload-base.js`） | 业务/Loader 直接 `chokidar`；仅用 basename 重载多 Core 同名文件 |
+| 配置/代码变更 | **重启进程**生效；无业务热重载 | 引入 chokidar / 自建文件监视 |
 | 挂载 | `setRuntimeGlobal`（`#utils/runtime-globals.js`） | `global.x = globalThis.x =` 双写 |
 
 Node 26 API 明细与审查清单见 [node-26-runtime.md](node-26-runtime.md)、skill **`xrk-node-runtime`**。  
@@ -91,11 +91,11 @@ import runtimeConfig from '#infrastructure/config/config.js';
 
 ---
 
-## 3. 类、状态、热重载
+## 3. 类与状态
 
 ```javascript
 export default class Demo extends PluginBase {
-  // ✅ 类字段：热重载安全
+  // ✅ 类字段：实例状态放字段
   cooldown = new Map();
 
   constructor() {
@@ -197,10 +197,10 @@ export default {
 
 完整模式见 [infrastructure-shared.md](infrastructure-shared.md)：
 
-1. 类字段存 watcher / Map  
+1. 类字段存 Map / 缓存  
 2. `FileLoader.getCoreSubDirFiles(subDir)` 扫描  
 3. `importFresh` + `forEachBatch`  
-4. `HotReloadBase` 监听；`stop()` 随 shutdown。内容 hash 去重、unlink 延迟确认见 [infrastructure-shared.md](infrastructure-shared.md)
+4. **无文件热重载**；改插件/配置/模板后重启。见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md) · [infrastructure-shared.md](infrastructure-shared.md)
 
 挂载面见 [runtime-surface.md](runtime-surface.md)。
 

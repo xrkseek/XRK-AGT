@@ -95,7 +95,6 @@ constructor(data = {})
 - `this.render` - 渲染入口函数引用
 - `this.dir` - 临时 HTML 目录（默认 `./trash/html`）
 - `this.html` - 模板内容缓存 `{ tplFile: string }`
-- `this.watcher` - 文件监听器缓存 `{ tplFile: FSWatcher }`
 
 ---
 
@@ -132,19 +131,18 @@ flowchart TB
 
 **流程**：
 1. 计算输出路径：`./trash/html/${name}/${saveId}.html`
-2. 若模板未缓存，读取并缓存模板内容，监听文件变动
+2. 若模板未缓存，读取并缓存模板内容
 3. 设置 `data.resPath = ./resources/`（便于模板引用静态资源）
 4. 使用 `art-template` 渲染模板
 5. 写入 HTML 文件并返回路径
 
 **返回值**：`string` - HTML 文件路径
 
-### `createDir(dirname)` / `watch(tplFile)`
+### `createDir(dirname)`
 
 - `createDir` - 递归创建目录（类似 `mkdir -p`）
-- `watch` - 监听模板文件变动，自动清理缓存（使用 `chokidar`）
 
-> 当模板文件被修改后，下一次调用 `dealTpl` 会重新从磁盘读取最新模板并渲染，无需重启服务。
+> 模板缓存进程内有效；改模板文件后需 **重启** 才重新读盘（[ADR-0004](adr/0004-typescript-dist-no-hot-reload.md)）。
 
 ---
 

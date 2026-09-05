@@ -8,7 +8,7 @@
 
 - API 实例化与优先级排序
 - 将路由与 WebSocket 处理器注册到 Express 与 AgentRuntime
-- 监控 API 文件变更，实现热加载
+- **启动时加载一次**（无文件热重载；改 API 后重启）。见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md)
 
 ![Loader 标准模式导读](../resources/mdimg/docs/loader-hot-reload.png)
 
@@ -19,7 +19,6 @@
 - [加载流程](#加载流程)
 - [注册流程](#注册流程)
 - [单个 API 重载](#单个-api-重载)
-- [文件监视与热加载](#文件监视与热加载)
 - [API 信息获取](#api-信息获取)
 - [使用建议](#使用建议)
 - [相关文档](#相关文档)
@@ -30,9 +29,9 @@
 
 - ✅ **自动发现**：自动扫描所有 `core/*/http/` 目录（支持递归）
 - ✅ **灵活导出**：支持类导出和对象导出两种方式
-- ✅ **热重载**：支持文件监听和自动重载
 - ✅ **错误隔离**：单个API加载失败不影响其他API
 - ✅ **优先级排序**：支持按优先级排序
+- ❌ **无热重载**：改文件后需重启（[ADR-0004](adr/0004-typescript-dist-no-hot-reload.md)）
 
 > 💡 **实际示例**：system-Core 提供了 **11 个** HTTP API 模块的实际实现，展示了如何使用 HttpApiLoader 自动加载和管理 API。详见 [system-Core 特性文档](system-core.md#http-api-模块)。
 
@@ -42,7 +41,6 @@
 
 - `apis: Map<string, apiInstance>`：以 **`resolveQualifiedCoreModuleKey`** 生成的 key 存储实例——形如 `system-Core/ai-workspace`（`Core名/相对 http/ 路径`，不含 `.js`）。**不含** `http/` 前缀。
 - `priority: apiInstance[]`：按优先级排序后的 API 列表。
-- `_hotReload: HotReloadBase | null`：统一文件监视（见 [infrastructure-shared.md](infrastructure-shared.md)）。
 - `loaded: boolean`：是否已经完成初次加载。
 - `app`：当前 Express 实例。
 - `bot`：当前 AgentRuntime 实例。
@@ -167,8 +165,8 @@ flowchart TB
 5. **记录日志**：输出重载完成日志
 
 **使用场景**：
-- 文件变化触发（热重载）
-- 手动重载单个 API（调试时）
+- 手动重载单个 API（调试工具调用 `changeApi`）
+- 改源码后推荐 **重启进程**
 
 **注意事项**：
 - 旧路由不会自动卸载，通常需要配合 `AgentRuntime` 重启或明确设计幂等初始化逻辑
@@ -177,55 +175,9 @@ flowchart TB
 
 ---
 
-## 文件监视与热加载：`watch(enable = true)`
+## 文件监视
 
-**热加载流程**:
-
-```mermaid
-flowchart TB
-    A["watch启用"] --> B{"enable参数"}
-    B -->|false| C["关闭所有watcher"]
-    B -->|true| D["监视core/*/http"]
-    D --> E["监听文件事件"]
-    E --> F{"事件类型"}
-    F -->|add| G["加载新API"]
-    F -->|change| H["热重载"]
-    F -->|unlink| I["卸载API"]
-    G --> J["重新排序"]
-    H --> J
-    I --> J
-    J --> K{"已注册?"}
-    K -->|是| L["重新注册"]
-    K -->|否| M["等待注册"]
-    L --> N["热加载完成"]
-    M --> N
-    
-    style A fill:#E3F2FD,stroke:#1976D2,stroke-width:2px
-    style E fill:#FFF3E0,stroke:#F57C00,stroke-width:2px
-    style N fill:#E8F5E9,stroke:#388E3C,stroke-width:2px
-```
-
-**事件处理**：
-
-- **`add`** - 新增文件时：
-  - 调用 `loadApi` 加载新API
-  - 调用 `sortByPriority` 重新排序
-  - 若已初始化（有 `app` 和 `bot`），调用 `init` 即时挂载
-  
-- **`change`** - 文件修改时：
-  - `HotReloadBase` 内容 hash 未变则跳过
-  - 调用 `changeApi(key)`（实例内 `filePath` 或 `_findApiFile`）
-  - 自动重新注册路由和 WebSocket
-  
-- **`unlink`** - 文件删除时：
-  - 延迟确认后调用 `unloadApi`
-  - 调用 `sortByPriority` 重新排序
-
-**注意事项**：
-- 热重载语义（hash / unlink 延迟）见 [infrastructure-shared.md](infrastructure-shared.md)
-- 热重载时确保 `init` 方法是幂等的
-- 全局中间件需要确保不会重复挂载
-- 复杂API建议重启进程以获得更清晰的状态
+**已移除。** 无 `watch()` / chokidar；改 `core/*/http` 后重启。见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md)。
 
 ---
 

@@ -23,24 +23,21 @@
 | `#utils/exec-async.js` | Promise 版 `exec` | 全项目唯一 `promisify(exec)` 封装点 |
 | `#utils/win-utf8.js` | Windows 控制台 UTF-8 | `start.js` 菜单、`log.js` 初始化前 |
 | `#utils/process-signals.js` | Ctrl+C 三击、`registerShutdownHook` | `config/loader.js`、`start.js`、渲染器清理 |
-| `--experimental-strip-types` | 直接 `import` Core / `src` 下 `.ts` | `start.bat` / `start.sh` / `pnpm start`；约定见下文 |
 
 **禁止在 Core / 基础设施中引入的旧模式**（完整清单与对照表见 skill **`xrk-node-runtime`**，此处不重复罗列）。
 
 ---
 
-## 1b. TypeScript Core（渐进）
+## 1b. TypeScript（迁移中 → dist）
 
 | 项 | 约定 |
 |----|------|
-| 运行时 | Node ≥26 + `--experimental-strip-types`（**无单独 tsc emit**） |
-| 可写扩展名 | `plugin` / `tasker` / `events` / `http` / `workflow` / `commonconfig` / Core `index`：`.js` 与 `.ts` |
-| 同名并存 | 优先加载 `.ts`，再 `.js` |
+| 目标运行时 | `pnpm build`（`tsc` emit）→ `node dist/app.js`；见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md) |
+| 迁移期 | 仍可能短暂保留 strip-types / 源码直跑，直至 build 链路落地 |
 | 编辑器 | 根 `tsconfig.json`（`noEmit`）；`pnpm typecheck` |
-| 导入 | ESM；TS 文件内可用 `#utils/...`；跨文件扩展名写 `.js` 或 `.ts` 均可（以可解析为准） |
-| 迁移策略 | 新 Core / 改动面优先 `.ts`；旧 `.js` 不强制一次改完 |
+| 热重载 | **已移除**（模块 / YAML / 模板）；改配置或代码后 **重启** |
 
-示例：`core/Example-Core/plugin/example-ts-probe.ts` · 工具：`src/utils/module-ext.ts`。
+设计与任务：[2026-09-05-typescript-dist-design.md](superpowers/specs/2026-09-05-typescript-dist-design.md) · [计划](superpowers/plans/2026-09-05-typescript-dist.md)。
 
 ---
 
@@ -56,7 +53,7 @@ Node 26 捆绑 V8 14.6 与 Undici 8：JSON 密集路径、原生 `fetch`、LLM �
 |----------|------|
 | `NODE_COMPILE_CACHE=<dir>` | 磁盘缓存已编译 ESM/CJS，缩短冷启动 |
 
-- **开发**：热重载以 chokidar 为主，缓存收益有限。  
+- **开发**：改源码后重启进程（无业务文件热重载）。  
 - **生产 / Docker**：可在 entrypoint 设置可写缓存目录；**仓库未默认开启**。
 
 ### 2.3 未深度使用的 Node 26 内置能力
@@ -79,13 +76,14 @@ Temporal、Web Storage、`node:ffi`（实验）、Perfetto 追踪、crypto STORE
 
 ```bash
 node -v                    # 应 >= v26.0.0（推荐 v26.7.x）
-node --experimental-strip-types --check src/utils/module-ext.ts
-node --experimental-strip-types -e "import('#utils/module-ext.ts').then(m=>console.log(m.MODULE_EXTS))"
 node -e "console.log('Error.isError', typeof Error.isError)"
+# build 链路落地后：
+# pnpm build && node dist/app.js
+# 迁移期若仍有源码 .ts：node --experimental-strip-types --check src/utils/module-ext.ts
 ```
 
 Windows + Cursor：若 `node -v` 显示 Cursor 自带的 helpers（如 22.x），请确认 PATH 优先为系统安装的 Node，或直接用该路径下的 `node.exe` 启动本项目。
 
 ---
 
-*最后更新：2026-09-01*
+*最后更新：2026-09-05*

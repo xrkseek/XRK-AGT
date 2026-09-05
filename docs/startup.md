@@ -33,6 +33,8 @@ flowchart TD
 
 引导日志：`logs/bootstrap.log`（`src/utils/simple-logger.js`）。
 
+**配置与代码变更**：YAML、插件、工作流、模板均无热重载；修改后需 **重启进程**。见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md)。
+
 ---
 
 ## Bootstrap 步骤
@@ -100,4 +102,4 @@ Puppeteer 为可选渲染器；引导阶段不会自动下载浏览器。
 
 ---
 
-*最后更新：2026-06-14*
+*最后更新：2026-09-05*
