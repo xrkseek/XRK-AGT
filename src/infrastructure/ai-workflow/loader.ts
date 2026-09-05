@@ -1,4 +1,3 @@
-// @ts-nocheck
 import path from 'node:path';
 import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
@@ -283,7 +282,7 @@ class AiWorkflowLoader {
   }
 
   getEnabledWorkflows() {
-    return this.getAllWorkflows().filter(s => s.config?.enabled !== false);
+    return this.getAllWorkflows().filter((s: any) => s.config?.enabled !== false);
   }
 
   getWorkflowsByPriority() {
@@ -338,7 +337,7 @@ class AiWorkflowLoader {
     }
 
     const secondaryStreams = secondary
-      .map(n => this.getWorkflow(n))
+      .map((n: any) => this.getWorkflow(n))
       .filter(Boolean);
 
     if (secondaryStreams.length === 0) {
@@ -357,11 +356,11 @@ class AiWorkflowLoader {
     merged.name = mergedName;
     merged.description = description || `${mainStream.description || main} + ${secondary.join(',')}`;
     merged.primaryStream = mainStream.name;
-    merged.secondaryStreams = secondaryStreams.map(s => s.name);
+    merged.secondaryStreams = secondaryStreams.map((s: any) => s.name);
     merged._mergedStreams = [mainStream, ...secondaryStreams];
     merged.mcpTools = new Map();
 
-    const adoptMCPTools = (source, isPrimary) => {
+    const adoptMCPTools = (source: any, isPrimary: any) => {
       if (!source.mcpTools) return;
       for (const [tname, tconfig] of source.mcpTools.entries()) {
         const newName = (!isPrimary && prefixSecondary) ? `${source.name}.${tname}` : tname;
@@ -449,7 +448,7 @@ class AiWorkflowLoader {
     mcpServer.registerTool(fullToolName, {
       description: tool.description || `执行${toolName}操作`,
       inputSchema: tool.inputSchema || {},
-      handler: async (args) => {
+      handler: async (args: any) => {
         const context = {
           get e() {
             return getWorkflowRequestContext()?.e ?? args.e ?? null;

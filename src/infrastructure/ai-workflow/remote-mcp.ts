@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { spawn } from 'node:child_process';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { resolveCommandSpawn } from '#utils/command-spawn.js';
@@ -54,11 +53,9 @@ export class RemoteMcpController {
     return id;
   }
 
-  _createDeferred() {
-    /** @type {(value:any)=>void} */
-    let resolve;
-    /** @type {(reason:any)=>void} */
-    let reject;
+  _createDeferred(): { promise: Promise<any>; resolve: (v?: any) => void; reject: (e?: any) => void } {
+    let resolve!: (v?: any) => void;
+    let reject!: (e?: any) => void;
     const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
     return { promise, resolve, reject };
   }
@@ -101,22 +98,22 @@ export class RemoteMcpController {
     if (entry._stdioClient) return entry._stdioClient;
 
     const child = entry.process;
-    const client = {
+    const client: any = {
       buffer: '',
       stderr: '',
       pending: new Map(),
-      onData: null,
+      onData: null as any,
       closed: false
     };
 
-    const flushPending = (errMsg) => {
+    const flushPending = (errMsg: any) => {
       for (const [_id, p] of client.pending.entries()) {
         try { p.reject(new Error(errMsg)); } catch {}
       }
       client.pending.clear();
     };
 
-    client.onData = (data) => {
+    client.onData = (data: any) => {
       if (client.closed) return;
       client.buffer += data?.toString?.() || '';
       const lines = client.buffer.split('\n');
@@ -142,11 +139,11 @@ export class RemoteMcpController {
     };
 
     child.stdout?.on('data', client.onData);
-    child.stderr?.on('data', (chunk) => {
+    child.stderr?.on('data', (chunk: any) => {
       const text = chunk?.toString?.() || '';
       client.stderr = (client.stderr + text).slice(-2000);
     });
-    child.on('exit', (code, signal) => {
+    child.on('exit', (code: any, signal: any) => {
       client.closed = true;
       try { child.stdout?.removeListener('data', client.onData); } catch {}
       const detail = client.stderr.trim().replace(/\s+/g, ' ').slice(0, 400);
@@ -158,7 +155,7 @@ export class RemoteMcpController {
       ].filter(Boolean).join(' | ');
       flushPending(why);
     });
-    child.on('error', (err) => {
+    child.on('error', (err: any) => {
       client.closed = true;
       try { child.stdout?.removeListener('data', client.onData); } catch {}
       flushPending(err?.message || '远程MCP进程错误');
@@ -196,8 +193,8 @@ export class RemoteMcpController {
     const blocks = Array.isArray(remoteConfig.mcpServers) ? remoteConfig.mcpServers : [];
     if (!blocks.length) return null;
 
-    const merged = {};
-    const mergeServers = (obj) => {
+    const merged: any = {};
+    const mergeServers = (obj: any) => {
       if (!obj || typeof obj !== 'object') return;
       const map = obj.mcpServers && typeof obj.mcpServers === 'object' && !Array.isArray(obj.mcpServers)
         ? obj.mcpServers
@@ -220,7 +217,7 @@ export class RemoteMcpController {
 
     const servers = Object.entries(merged)
       .map(([name, runtimeConfig]) => ({ name, runtimeConfig }))
-      .filter(item => item.name && item.runtimeConfig && typeof item.runtimeConfig === 'object');
+      .filter((item: any) => item.name && item.runtimeConfig && typeof item.runtimeConfig === 'object');
 
     return servers.length ? { servers } : null;
   }
@@ -308,7 +305,7 @@ export class RemoteMcpController {
       const cwd = typeof runtimeConfig.cwd === 'string' && runtimeConfig.cwd.trim()
         ? runtimeConfig.cwd.trim()
         : process.cwd();
-      const args = (Array.isArray(runtimeConfig.args) ? runtimeConfig.args : []).map((a) => String(a));
+      const args = (Array.isArray(runtimeConfig.args) ? runtimeConfig.args : []).map((a: any) => String(a));
       const spawnSpec = resolveCommandSpawn(String(runtimeConfig.command), args, cwd);
       const shell = typeof runtimeConfig.shell === 'boolean'
         ? runtimeConfig.shell
@@ -339,8 +336,8 @@ export class RemoteMcpController {
           : 15000;
         await this._stdioRequest(serverName, entry, 'initialize', initParams, { timeoutMs: initTimeoutMs });
         const listResult = await this._stdioRequest(serverName, entry, 'tools/list', {}, { timeoutMs: 30000 });
-        if (listResult?.tools) {
-          this._registerRemoteTools(serverName, listResult.tools);
+        if ((listResult as any)?.tools) {
+          this._registerRemoteTools(serverName, (listResult as any).tools);
         }
       } catch (error: any) {
         this._makeLog('error', `远程MCP服务器 ${serverName} 初始化失败: ${error.message}`);
@@ -379,7 +376,7 @@ export class RemoteMcpController {
       const def = {
         description: tool.description || '',
         inputSchema: tool.inputSchema || {},
-        handler: (args) => this._callRemoteTool(serverName, tool.name, args)
+        handler: (args: any) => this._callRemoteTool(serverName, tool.name, args)
       };
       if (this._registerToolCallback) {
         this._registerToolCallback(toolName, def);
@@ -452,7 +449,7 @@ export class RemoteMcpController {
           body: JSON.stringify(request),
           timeoutMs: 30_000,
         });
-        const data = await response.json();
+        const data: any = await response.json();
         return this._normalizeRemoteMCPResult(data.result);
       } catch (error: any) {
         return { success: false, error: error.message };
@@ -460,10 +457,11 @@ export class RemoteMcpController {
     } else if (server.type === 'ws') {
       // 简单 WebSocket JSON-RPC 客户端：每次调用按需建立连接
       try {
+        // @ts-expect-error no @types/ws in this package
         const { default: WebSocket } = await import('ws');
         const requestId = this._makeRemoteRequestId();
         const request = { jsonrpc: '2.0', id: requestId, method: 'tools/call', params: { name: toolName, arguments: args } };
-        return await new Promise((resolve) => {
+        return await new Promise<any>((resolve) => {
           const ws = new WebSocket(server.url, { headers: server.headers || {} });
           const timeout = setTimeout(() => {
             try { ws.close(); } catch {}
@@ -474,7 +472,7 @@ export class RemoteMcpController {
             ws.send(JSON.stringify(request));
           });
 
-          ws.on('message', (data) => {
+          ws.on('message', (data: any) => {
             try {
               const msg = JSON.parse(data.toString());
               if (msg.id !== requestId) return;
@@ -487,7 +485,7 @@ export class RemoteMcpController {
             }
           });
 
-          ws.on('error', (err) => {
+          ws.on('error', (err: any) => {
             clearTimeout(timeout);
             resolve({ success: false, error: err?.message || String(err) });
           });
@@ -518,7 +516,7 @@ export class RemoteMcpController {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} ${response.statusText || ''}`.trim());
       }
-      const data = await response.json();
+      const data: any = await response.json();
       if (data.result?.tools) {
         this._registerRemoteTools(serverName, data.result.tools);
       } else if (data.error) {
@@ -534,10 +532,11 @@ export class RemoteMcpController {
    */
   async _fetchRemoteToolsViaWebSocket(serverName: any, config: any) {
     try {
+      // @ts-expect-error no @types/ws in this package
       const { default: WebSocket } = await import('ws');
       const request = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
 
-      await new Promise((resolve) => {
+      await new Promise<void>((resolve) => {
         const ws = new WebSocket(config.url, { headers: config.headers || {} });
         const timeout = setTimeout(() => {
           try { ws.close(); } catch {}
@@ -548,7 +547,7 @@ export class RemoteMcpController {
           ws.send(JSON.stringify(request));
         });
 
-        ws.on('message', (data) => {
+        ws.on('message', (data: any) => {
           try {
             const msg = JSON.parse(data.toString());
             if (msg.id !== 1) return;
