@@ -7,10 +7,10 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 
-let cached = null;
-let cachedError = null;
+let cached: Record<string, unknown> | null = null;
+let cachedError: Error | null = null;
 
-function resolveOverrideEntry() {
+function resolveOverrideEntry(): string | null {
   const override = process.env.XRK_HARNESS_SDK;
   if (!override || !String(override).trim()) return null;
   return path.resolve(String(override).trim());
@@ -20,7 +20,7 @@ function resolveOverrideEntry() {
  * When loading a built SDK entry outside node_modules, prepend nearby
  * node_modules that contain @xrkseek so leaf packages resolve.
  */
-function preferNearbyXrkseekNodeModules(entryFile) {
+function preferNearbyXrkseekNodeModules(entryFile: string): void {
   let dir = path.dirname(entryFile);
   for (let i = 0; i < 8; i += 1) {
     const nm = path.join(dir, 'node_modules');
@@ -32,7 +32,9 @@ function preferNearbyXrkseekNodeModules(entryFile) {
       }
       try {
         createRequire(path.join(dir, 'package.json'));
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       return;
     }
     const parent = path.dirname(dir);
@@ -42,9 +44,9 @@ function preferNearbyXrkseekNodeModules(entryFile) {
 }
 
 /**
- * @returns {Promise<object>} harness SDK namespace
+ * @returns harness SDK namespace
  */
-export async function importHarnessSdk() {
+export async function importHarnessSdk(): Promise<Record<string, unknown>> {
   if (cached) return cached;
   if (cachedError) throw cachedError;
 
@@ -52,25 +54,25 @@ export async function importHarnessSdk() {
   try {
     if (override) {
       preferNearbyXrkseekNodeModules(override);
-      cached = await import(pathToFileURL(override).href);
+      cached = (await import(pathToFileURL(override).href)) as Record<string, unknown>;
       return cached;
     }
-    cached = await import('@xrkseek/harness');
+    cached = (await import('@xrkseek/harness')) as Record<string, unknown>;
     return cached;
   } catch (err) {
     const hint = override
       ? `XRK_HARNESS_SDK=${override}`
       : 'pnpm add @xrkseek/harness（或 Release tarball；开发未发布构建可设 XRK_HARNESS_SDK=绝对路径/入口）';
     const wrapped = new Error(
-      `@xrkseek/harness 不可用（${hint}）。${err?.message || err}`,
+      `@xrkseek/harness 不可用（${hint}）。${(err as Error)?.message || err}`,
     );
-    wrapped.cause = err;
+    (wrapped as Error & { cause?: unknown }).cause = err;
     cachedError = wrapped;
     throw wrapped;
   }
 }
 
-export function resetHarnessSdkCache() {
+export function resetHarnessSdkCache(): void {
   cached = null;
   cachedError = null;
 }

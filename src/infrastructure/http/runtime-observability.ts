@@ -10,14 +10,35 @@ import {
 } from '#utils/observability.js';
 import { getHttpRequestMetricsSummary } from '#utils/http-request-metrics.js';
 
-/**
- * @param {object} runtime AgentRuntime
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- */
-export function handleLiveness(runtime, req, res) {
+type ExpressLikeReq = {
+  requestId?: string | null;
+  query?: Record<string, unknown>;
+  headers?: Record<string, string | string[] | undefined>;
+};
+
+type ExpressLikeRes = {
+  setHeader: (name: string, value: string) => unknown;
+  status: (code: number) => { send: (body: string) => unknown };
+};
+
+type RuntimeLike = {
+  _checkHeadersSent: (res: ExpressLikeRes) => boolean;
+  httpPort?: number;
+  httpsPort?: number;
+  actualPort?: number;
+  actualHttpsPort?: number;
+  proxyEnabled?: boolean;
+  domainConfigs?: { keys: () => IterableIterator<string> };
+  getWebSocketStats: () => unknown;
+};
+
+export function handleLiveness(
+  runtime: RuntimeLike,
+  req: ExpressLikeReq,
+  res: ExpressLikeRes,
+): unknown {
   if (runtime._checkHeadersSent(res)) return;
-  return HttpResponse.json(res, {
+  return HttpResponse.json(res as any, {
     status: '健康',
     uptime: process.uptime(),
     timestamp: Date.now(),
@@ -25,12 +46,11 @@ export function handleLiveness(runtime, req, res) {
   });
 }
 
-/**
- * @param {object} runtime AgentRuntime
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- */
-export function handleStatus(runtime, req, res) {
+export function handleStatus(
+  runtime: RuntimeLike,
+  _req: ExpressLikeReq,
+  res: ExpressLikeRes,
+): unknown {
   if (runtime._checkHeadersSent(res)) return;
 
   const status = {
@@ -46,30 +66,29 @@ export function handleStatus(runtime, req, res) {
       httpsPort: runtime.httpsPort,
       actualPort: runtime.actualPort,
       actualHttpsPort: runtime.actualHttpsPort,
-      https: runtimeConfig.server?.https?.enabled || false,
+      https: (runtimeConfig as any).server?.https?.enabled || false,
       proxy: runtime.proxyEnabled,
-      domains: runtime.proxyEnabled ? Array.from(runtime.domainConfigs.keys()) : [],
+      domains: runtime.proxyEnabled ? Array.from(runtime.domainConfigs?.keys() ?? []) : [],
     },
     auth: {
-      apiKeyEnabled: runtimeConfig.server?.auth?.apiKey?.enabled !== false,
-      loopbackExempt: runtimeConfig.server?.auth?.loopbackExempt === true,
+      apiKeyEnabled: (runtimeConfig as any).server?.auth?.apiKey?.enabled !== false,
+      loopbackExempt: (runtimeConfig as any).server?.auth?.loopbackExempt === true,
     },
   };
 
-  return HttpResponse.json(res, status);
+  return HttpResponse.json(res as any, status);
 }
 
-/**
- * @param {object} runtime AgentRuntime
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- */
-export function handleMetrics(runtime, req, res) {
+export function handleMetrics(
+  runtime: RuntimeLike,
+  req: ExpressLikeReq,
+  res: ExpressLikeRes,
+): unknown {
   if (runtime._checkHeadersSent(res)) return;
 
   const metrics = buildProcessMetrics({
     getWebSocketStats: () => runtime.getWebSocketStats(),
-    getTraceSummary: () => MonitorService.getTraceSummary(),
+    getTraceSummary: () => (MonitorService as any).getTraceSummary(),
     httpPort: runtime.httpPort,
     httpsPort: runtime.httpsPort,
     actualPort: runtime.actualPort,
@@ -88,5 +107,5 @@ export function handleMetrics(runtime, req, res) {
     return;
   }
 
-  return HttpResponse.json(res, metrics);
+  return HttpResponse.json(res as any, metrics);
 }

@@ -36,15 +36,14 @@ export {
 };
 
 class DatabaseManager {
-  redis = null;
-  sqlite = null;
+  redis: any = null;
+  sqlite: any = null;
   initialized = false;
 
   /**
    * 启动期初始化（fail-fast）
-   * @returns {Promise<{ redis: boolean, sqlite: boolean }>}
    */
-  async init() {
+  async init(): Promise<{ redis: boolean; sqlite: boolean }> {
     if (this.initialized) {
       return { redis: !!this.redis, sqlite: !!this.sqlite };
     }
@@ -54,18 +53,15 @@ class DatabaseManager {
     return { redis: !!this.redis, sqlite: !!this.sqlite };
   }
 
-  /** @returns {import('redis').RedisClientType|null} */
-  getRedis() {
+  getRedis(): any {
     return this.redis;
   }
 
-  /** @returns {import('node:sqlite').DatabaseSync|null} */
-  getSqlite() {
+  getSqlite(): any {
     return this.sqlite;
   }
 
-  /** @returns {Promise<boolean>} */
-  async checkRedis() {
+  async checkRedis(): Promise<boolean> {
     const redis = this.redis;
     if (!redis?.isOpen) return false;
     try {
@@ -76,12 +72,11 @@ class DatabaseManager {
     }
   }
 
-  /** @returns {boolean} */
-  checkSqlite() {
+  checkSqlite(): boolean {
     return checkSqlite();
   }
 
-  async close() {
+  async close(): Promise<void> {
     await closeRedis().catch(() => {});
     closeSqlite();
     this.redis = null;
@@ -90,33 +85,28 @@ class DatabaseManager {
   }
 }
 
-/** @type {DatabaseManager|null} */
-let instance = null;
+let instance: DatabaseManager | null = null;
 
-/** @returns {DatabaseManager} */
-export function getDatabaseManager() {
+export function getDatabaseManager(): DatabaseManager {
   if (!instance) instance = new DatabaseManager();
   return instance;
 }
 
-/** @returns {Promise<DatabaseManager>} */
-export async function initDatabases() {
+export async function initDatabases(): Promise<DatabaseManager> {
   const manager = getDatabaseManager();
   await manager.init();
   return manager;
 }
 
-export async function closeDatabases() {
+export async function closeDatabases(): Promise<void> {
   await getDatabaseManager().close();
 }
 
-/** @returns {import('redis').RedisClientType|null} */
-export function getRedis() {
+export function getRedis(): any {
   return getDatabaseManager().getRedis();
 }
 
-/** @returns {import('node:sqlite').DatabaseSync|null} */
-export function getSqlite() {
+export function getSqlite(): any {
   return getDatabaseManager().getSqlite() ?? getSqliteClient();
 }
 
