@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 各 LLM 工厂共用的 providers[] 条目字段（与官方 API + 客户端实现对齐）。
  * YAML 默认仅 providers: []；可编辑项由 commonconfig schema 提供。
@@ -69,7 +68,7 @@ const OPENAI_CHAT_COMPAT = [
   ...RUNTIME_FIELDS
 ];
 
-function protocolField(enumValues, defaultValue) {
+function protocolField(enumValues: any, defaultValue: any) {
   return {
     type: 'string',
     label: '协议类型',
@@ -80,7 +79,7 @@ function protocolField(enumValues, defaultValue) {
 }
 
 /** 所有 provider 条目的字段池（按官方 API 命名，客户端在 openai-chat-utils / 各 Client 中消费） */
-function baseProviderEntryFields(options = {}) {
+function baseProviderEntryFields(options: any = {}) {
   const { fixedProtocol = null, extraFields = {} } = options;
 
   return {
@@ -403,7 +402,7 @@ function baseProviderEntryFields(options = {}) {
   };
 }
 
-export function buildLlmProvidersField(options = {}) {
+export function buildLlmProvidersField(options: any = {}) {
   const {
     itemLabel = '模型端点',
     listLabel = '模型端点列表',
@@ -415,7 +414,7 @@ export function buildLlmProvidersField(options = {}) {
 
   const allFields = baseProviderEntryFields({ fixedProtocol, extraFields });
   const fields = include
-    ? Object.fromEntries(include.filter((k) => k in allFields).map((k) => [k, allFields[k]]))
+    ? Object.fromEntries(include.filter((k: any) => k in allFields).map((k: any) => [k, allFields[k]]))
     : allFields;
 
   return {
@@ -843,8 +842,8 @@ export const LLM_PROVIDER_PRESETS = {
   }
 };
 
-export function buildLlmProvidersFromPreset(presetKey, overrides = {}) {
-  const preset = LLM_PROVIDER_PRESETS[presetKey];
+export function buildLlmProvidersFromPreset(presetKey: any, overrides: any = {}) {
+  const preset = (LLM_PROVIDER_PRESETS as any)[presetKey];
   if (!preset) throw new Error(`未知 LLM provider 预设: ${presetKey}`);
   return buildLlmProvidersField({ ...preset, ...overrides });
 }
