@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 脱敏（对齐 agent-zero compact：摘要/备份不落明文密钥）。
  */
@@ -13,14 +12,10 @@ const SECRET_PATTERNS = [
   /\b(AIza[0-9A-Za-z_-]{20,})\b/g,
   /(?:"|')?(?:api[_-]?key|access[_-]?token|secret[_-]?key|password|private[_-]?key)(?:"|')?\s*[:=]\s*(?:"|')?([^\s"',]{8,})(?:"|')?/gi,
   /Bearer\s+[A-Za-z0-9._\-+/=]{12,}/gi,
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gi
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gi,
 ];
 
-/**
- * @param {unknown} text
- * @returns {string}
- */
-export function redactSecrets(text) {
+export function redactSecrets(text: unknown): string {
   let s = String(text ?? '');
   if (!s) return '';
   for (const re of SECRET_PATTERNS) {

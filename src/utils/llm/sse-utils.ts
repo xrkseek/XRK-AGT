@@ -1,4 +1,3 @@
-// @ts-nocheck
 import RuntimeUtil from '../runtime-util.js';
 
 /**
@@ -21,7 +20,19 @@ import RuntimeUtil from '../runtime-util.js';
  * - ai-workflow 子服务器调用（src/infrastructure/ai-workflow/ai-workflow.js）
  * - 其他需要稳健解析 SSE 的场景
  */
-export async function* iterateSSE(resp, options = {}) {
+type SseResponse = {
+  body?: { getReader?: () => ReadableStreamDefaultReader<Uint8Array> };
+  url?: string;
+};
+
+type SseOptions = {
+  stopOnDone?: boolean;
+};
+
+export async function* iterateSSE(
+  resp: SseResponse,
+  options: SseOptions = {},
+): AsyncGenerator<{ event: string | null; data: string; rawEvent: string }> {
   const { stopOnDone = true } = options || {};
   if (!resp?.body?.getReader) {
     RuntimeUtil.makeLog('warn', '[SSE] 无效响应：resp.body 不可读', 'LLMStream');
@@ -38,7 +49,7 @@ export async function* iterateSSE(resp, options = {}) {
   RuntimeUtil.makeLog(
     'info',
     `[SSE] 开始读取流式响应，stopOnDone=${stopOnDone}, url=${resp.url || 'unknown'}`,
-    'LLMStream'
+    'LLMStream',
   );
 
   while (true) {
@@ -47,7 +58,7 @@ export async function* iterateSSE(resp, options = {}) {
       RuntimeUtil.makeLog(
         'info',
         `[SSE] 读取结束：chunks=${chunkCount}, totalBytes=${totalBytes}, remainingBufferLength=${buffer.length}`,
-        'LLMStream'
+        'LLMStream',
       );
       break;
     }
@@ -67,21 +78,21 @@ export async function* iterateSSE(resp, options = {}) {
       RuntimeUtil.makeLog(
         'debug',
         `[SSE] 收到 chunk#${chunkCount} bytes=${byteLength}, preview="${preview}"`,
-        'LLMStream'
+        'LLMStream',
       );
     }
 
     // 统一 CRLF -> LF，避免分隔符匹配失败
     buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
 
-    let sep;
+    let sep: number;
     while ((sep = buffer.indexOf('\n\n')) >= 0) {
       const rawEvent = buffer.slice(0, sep);
       buffer = buffer.slice(sep + 2);
 
       const lines = rawEvent.split('\n');
-      let event = null;
-      const dataParts = [];
+      let event: string | null = null;
+      const dataParts: string[] = [];
 
       for (const line of lines) {
         if (!line) continue;
@@ -109,7 +120,7 @@ export async function* iterateSSE(resp, options = {}) {
         RuntimeUtil.makeLog(
           'debug',
           `[SSE] 解析到 event#${eventCount}, event="${event || ''}", dataLen=${data.length}, preview="${data.slice(0, 200).replace(/\s+/g, ' ')}"`,
-          'LLMStream'
+          'LLMStream',
         );
       }
 
@@ -120,7 +131,6 @@ export async function* iterateSSE(resp, options = {}) {
   RuntimeUtil.makeLog(
     'info',
     `[SSE] 迭代结束，总事件数=${eventCount}, 最终缓冲区长度=${buffer.length}`,
-    'LLMStream'
+    'LLMStream',
   );
 }
-

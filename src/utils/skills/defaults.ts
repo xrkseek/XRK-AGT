@@ -1,4 +1,3 @@
-// @ts-nocheck
 export const DEFAULT_SKILL_LIMITS = Object.freeze({
   maxCandidatesPerRoot: 300,
   maxSkillsLoadedPerSource: 200,
