@@ -1,16 +1,17 @@
-// @ts-nocheck
 import {
   resolveToolApproval,
   listPendingApprovals,
   parseApprovalCommand,
   isToolApprovalEnabled
 } from '#utils/security/tool-approval.js'
+import PluginBase from '#infrastructure/plugins/plugin-base.js';
 
 /**
  * 主人审批危险工具。默认关闭（security.approval.enabled=false）。
  * 命令：#批准 / #批准id / #批准 id（空格可选）；拒绝同理。
  */
 export class ToolApproval extends PluginBase {
+  [key: string]: any;
   constructor() {
     super({
       name: '工具审批',
@@ -35,7 +36,7 @@ export class ToolApproval extends PluginBase {
     return false
   }
 
-  async #resolve(action, okVerb, failVerb) {
+  async #resolve(action: any, okVerb: any, failVerb: any) {
     if (!(await this.#requireEnabled())) return true
     const parsed = parseApprovalCommand(this.e.msg, action)
     const result = resolveToolApproval(parsed?.id || '', action)

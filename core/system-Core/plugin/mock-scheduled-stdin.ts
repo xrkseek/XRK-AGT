@@ -1,12 +1,16 @@
-// @ts-nocheck
 import PluginLoader from '#infrastructure/plugins/loader.js'
 import { EventNormalizer } from '#utils/event-normalizer.js'
+import PluginBase from '#infrastructure/plugins/plugin-base.js';
+
+const gLogger = (): any => (globalThis as any).logger;
+const gAgentRuntime = (): any => (globalThis as any).AgentRuntime;
 
 /**
  * 模拟定时输入插件
  * 用于定时模拟用户输入消息
  */
 export class DailySignIn extends PluginBase {
+  [key: string]: any;
   constructor() {
     super({
       name: '每日定时消息模拟',
@@ -23,7 +27,7 @@ export class DailySignIn extends PluginBase {
       cron: '0 0 12 * * *',
       fnc: () => this.sendDailyMessages(),
       log: false
-    }
+    } as any
   }
 
   /**
@@ -42,11 +46,11 @@ export class DailySignIn extends PluginBase {
    * @param {string} inputMsg - 输入消息
    * @returns {Object} 事件对象
    */
-  createMessageEvent(inputMsg) {
+  createMessageEvent(inputMsg: any) {
     const user_id = 12345678
     const name = "模拟用户"
     const time = Math.floor(Date.now() / 1000)
-    const self_id = AgentRuntime.uin.toString()
+    const self_id = gAgentRuntime().uin.toString()
 
     const event = {
       tasker: "stdin",
@@ -61,15 +65,15 @@ export class DailySignIn extends PluginBase {
       raw_message: inputMsg,
       isMaster: true,
       isStdin: true,
-      bot: AgentRuntime.stdin || AgentRuntime[AgentRuntime.uin.toString()],
+      bot: gAgentRuntime().stdin || gAgentRuntime()[gAgentRuntime().uin.toString()],
       sender: {
         card: name,
         nickname: name,
         role: "master",
         user_id
       },
-      reply: async (replyMsg) => {
-        logger.info(`模拟回复：${JSON.stringify(replyMsg)}`)
+      reply: async (replyMsg: any) => {
+        gLogger()?.info(`模拟回复：${JSON.stringify(replyMsg)}`)
         return { message_id: `test_${Date.now()}`, time }
       }
     }

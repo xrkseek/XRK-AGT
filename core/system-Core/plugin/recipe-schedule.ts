@@ -1,7 +1,7 @@
-// @ts-nocheck
 import { listRecipes, materializeRecipe } from '#utils/recipes/recipe-loader.js'
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js'
 import RuntimeUtil from '#utils/runtime-util.js'
+import PluginBase from '#infrastructure/plugins/plugin-base.js';
 
 /**
  * goose scheduler 轻量融合：agents/recipes 中带 cron 的配方按插件定时任务注册。
@@ -9,6 +9,7 @@ import RuntimeUtil from '#utils/runtime-util.js'
  * 真正自动执行可后续接 chat.process；当前默认只打日志 + 可选推主人。
  */
 export class RecipeSchedule extends PluginBase {
+  [key: string]: any;
   constructor() {
     super({
       name: '配方定时',

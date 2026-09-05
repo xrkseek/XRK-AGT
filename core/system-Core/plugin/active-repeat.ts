@@ -1,9 +1,10 @@
-// @ts-nocheck
+import PluginBase from '#infrastructure/plugins/plugin-base.js';
 /**
  * 主动复读插件
  * 复读用户发送的内容，然后撤回
  */
 export class example2 extends PluginBase {
+  [key: string]: any;
   constructor() {
     super({
       name: '复读',

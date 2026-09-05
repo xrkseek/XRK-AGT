@@ -1,4 +1,3 @@
-// @ts-nocheck
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
@@ -25,7 +24,7 @@ export function buildOpenAIModelsPayload() {
   };
 }
 
-export function buildOpenAIModelPayload(modelId) {
+export function buildOpenAIModelPayload(modelId: any) {
   const id = String(modelId || '').trim();
   if (!id) return null;
   const known = listProviderModelIds();
@@ -57,7 +56,7 @@ export function buildConsoleLlmCatalog() {
     }));
 
   const remoteServers = AiWorkflowLoader.listRemoteMCPServers?.() || [];
-  const remoteWorkflows = remoteServers.map((name) => ({
+  const remoteWorkflows = remoteServers.map((name: any) => ({
     key: `remote-mcp.${name}`,
     label: `远程 MCP：${name}`,
     description: `远程 MCP 服务器 ${name}`,

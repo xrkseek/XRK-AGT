@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { AsyncLocalStorage } from 'node:async_hooks';
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
@@ -8,7 +7,7 @@ import { normalizePresetId } from './ai-workspace-runtime.js';
 const consoleContext = new AsyncLocalStorage();
 let mcpAuditHookInstalled = false;
 
-function normalizeWorkspaceId(id) {
+function normalizeWorkspaceId(id: any) {
   return normalizePresetId(id);
 }
 
@@ -17,9 +16,9 @@ function isAuditEnabled() {
   return runtimeConfig?.workspace?.audit?.enabled !== false;
 }
 
-async function recordToolAudit(toolName, { ok = true, detail = '' } = {}) {
+async function recordToolAudit(toolName: any, { ok = true, detail = '' }: any = {}) {
   if (!isAuditEnabled()) return;
-  const ctx = getAiConsoleContext();
+  const ctx = getAiConsoleContext() as any;
   const workspaceId = ctx.workspaceId;
   if (!workspaceId || !toolName) return;
 
@@ -40,7 +39,7 @@ export function installMcpAuditHook() {
   if (!server || typeof server.handleToolCall !== 'function') return false;
 
   const original = server.handleToolCall.bind(server);
-  server.handleToolCall = async (request) => {
+  server.handleToolCall = async (request: any) => {
     const toolName = request?.name;
     try {
       const result = await original(request);
@@ -50,7 +49,7 @@ export function installMcpAuditHook() {
         await recordToolAudit(toolName, { ok, detail });
       }
       return result;
-    } catch (err) {
+    } catch (err: any) {
       if (toolName) {
         await recordToolAudit(toolName, { ok: false, detail: err?.message || String(err) });
       }
@@ -62,7 +61,7 @@ export function installMcpAuditHook() {
   return true;
 }
 
-export function runWithAiConsoleContext(ctx = {}, fn) {
+export function runWithAiConsoleContext(ctx: any = {}, fn: any) {
   const parent = consoleContext.getStore() || {};
   const next = { ...parent, ...ctx };
   return consoleContext.run(next, fn);

@@ -1,5 +1,7 @@
-// @ts-nocheck
+import PluginBase from '#infrastructure/plugins/plugin-base.js';
+const gLogger = (): any => (globalThis as any).logger;
 export class Help extends PluginBase {
+  [key: string]: any;
   constructor() {
     super({
       name: '帮助',
@@ -86,8 +88,8 @@ export class Help extends PluginBase {
     try {
       const result = await this.e.runtime.render('帮助', 'help', data, { retType: 'base64' })
       await this.reply(result || '帮助页生成失败')
-    } catch (err) {
-      logger.error(`[帮助] 渲染失败: ${err.message}`)
+    } catch (err: any) {
+      gLogger()?.error(`[帮助] 渲染失败: ${err.message}`)
       await this.reply(`帮助页失败: ${err.message}`)
     }
     return true

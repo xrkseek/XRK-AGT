@@ -1,12 +1,13 @@
-// @ts-nocheck
 import {
   syncManagedSkills,
   listProjectManagedSkillRels
 } from '#utils/agent-managed-skills.js'
 import { resolveAgentWorkspaceAbs } from '#utils/agent-workspace-paths.js'
+import PluginBase from '#infrastructure/plugins/plugin-base.js';
 
 /** 同步项目托管技能到工作区：#skills更新（托管按种子覆盖；自建不动） */
 export class SkillsUpdate extends PluginBase {
+  [key: string]: any;
   constructor() {
     super({
       name: '技能更新',

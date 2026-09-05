@@ -1,4 +1,3 @@
-// @ts-nocheck
 import PluginLoader from '#infrastructure/plugins/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
 import RuntimeUtil from '#utils/runtime-util.js';
@@ -22,7 +21,7 @@ function collectPluginEntries() {
         rule: instance.rule?.length || 0,
         task: instance.task ? 1 : 0
       });
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `[Plugin API] 初始化插件失败: ${entry.key}`, 'Plugin', error);
     }
   }
@@ -30,7 +29,7 @@ function collectPluginEntries() {
   return plugins;
 }
 
-function buildPluginStats(plugins = []) {
+function buildPluginStats(plugins: any = []) {
   const stats = PluginLoader.pluginLoadStats || {};
   const taskList = PluginLoader.task || [];
   return {
@@ -39,8 +38,8 @@ function buildPluginStats(plugins = []) {
     startTime: stats.startTime || 0,
     taskCount: taskList.length,
     extendedCount: (PluginLoader.extended || []).length,
-    withRules: plugins.filter(p => (p.rule || 0) > 0).length,
-    withTasks: plugins.filter(p => p.task > 0).length,
+    withRules: plugins.filter((p: any) => (p.rule || 0) > 0).length,
+    withTasks: plugins.filter((p: any) => p.task > 0).length,
     plugins: stats.plugins || []
   };
 }
@@ -63,7 +62,7 @@ export default {
     {
       method: 'GET',
       path: '/api/plugins',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const plugins = collectPluginEntries();
         HttpResponse.success(res, { plugins });
       }, 'plugin.list')
@@ -72,7 +71,7 @@ export default {
     {
       method: 'GET',
       path: '/api/plugins/summary',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { plugins, summary } = getPluginsWithSummary();
         HttpResponse.success(res, { summary, plugins });
       }, 'plugin.summary')
@@ -81,7 +80,7 @@ export default {
     {
       method: 'POST',
       path: '/api/plugin/:key/reload',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { key } = req.params;
         if (!key) {
           return HttpResponse.validationError(res, '缺少插件key参数');
@@ -95,9 +94,9 @@ export default {
     {
       method: 'GET',
       path: '/api/plugins/tasks',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const taskList = PluginLoader.task || [];
-        const tasks = taskList.map(t => ({
+        const tasks = taskList.map((t: any) => ({
           name: t.name,
           cron: t.cron,
           nextRun: t.job?.nextInvocation ? t.job.nextInvocation() : null
@@ -110,7 +109,7 @@ export default {
     {
       method: 'GET',
       path: '/api/plugins/stats',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { summary } = getPluginsWithSummary();
         HttpResponse.success(res, { stats: summary });
       }, 'plugin.stats')

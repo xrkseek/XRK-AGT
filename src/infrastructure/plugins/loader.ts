@@ -9,6 +9,7 @@ import { neuralMethods } from './loader-neural.js'
 const gLogger = (): any => (globalThis as any).logger
 
 class PluginLoader {
+  [key: string]: any;
   priority: any[] = []
   extended: any[] = []
   task: any[] = []

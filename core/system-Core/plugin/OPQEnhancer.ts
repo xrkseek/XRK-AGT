@@ -1,10 +1,10 @@
-// @ts-nocheck
 import EnhancerBase from '#infrastructure/plugins/enhancer-base.js'
 
 /**
  * OPQBot 事件增强
  */
 export default class OPQEnhancer extends EnhancerBase {
+  [key: string]: any;
   constructor() {
     super({
       name: 'OPQBot',
@@ -15,7 +15,7 @@ export default class OPQEnhancer extends EnhancerBase {
     })
   }
 
-  enhanceEvent(e) {
+  enhanceEvent(e: any) {
     super.enhanceEvent(e)
     this.bindBotEntities(e)
   }

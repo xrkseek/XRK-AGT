@@ -1,5 +1,8 @@
-// @ts-nocheck
 import { fetchWithPolicy } from '#utils/fetch-with-retry.js'
+import PluginBase from '#infrastructure/plugins/plugin-base.js';
+import { msgSegment } from '#utils/msg-segment.js';
+
+const gLogger = (): any => (globalThis as any).logger;
 
 const SEARCH_API = 'https://music.163.com/api/search/get'
 const SONG_URL_API = 'https://music.163.com/song/media/outer/url'
@@ -7,6 +10,7 @@ const LIMIT = 5
 const HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': 'https://music.163.com/' }
 
 export class MusicPlugin extends PluginBase {
+  [key: string]: any;
   constructor() {
     super({
       name: '点歌插件',
@@ -27,26 +31,26 @@ export class MusicPlugin extends PluginBase {
     try {
       const url = `${SEARCH_API}?s=${encodeURIComponent(keyword)}&type=1&limit=${LIMIT}`
       const res = await fetchWithPolicy(url, { headers: HEADERS, timeoutMs: 8000, retries: 1 })
-      const data = await res.json()
+      const data: any = await res.json()
       const songs = data.result?.songs
       if (!songs?.length) {
         await this.reply('未找到相关歌曲，换关键词试试')
         return false
       }
 
-      const lines = songs.map((s, i) => `${i + 1}. ${s.name} - ${s.artists.map(a => a.name).join('、')}`)
+      const lines = songs.map((s: any, i: any) => `${i + 1}. ${s.name} - ${s.artists.map((a: any) => a.name).join('、')}`)
       this.e._musicSearchResults = songs
       this.setContext('musicChooseContext', false, 60, '选择超时已取消')
       await this.reply(['搜索结果：', ...lines, '回复数字选择'].join('\n'))
       return true
-    } catch (err) {
-      logger.error(`点歌搜索失败: ${err.message}`)
+    } catch (err: any) {
+      gLogger()?.error(`点歌搜索失败: ${err.message}`)
       await this.reply('点歌失败，请稍后再试')
       return false
     }
   }
 
-  async musicChooseContext(stored) {
+  async musicChooseContext(stored: any) {
     const list = stored?._musicSearchResults
     if (!list?.length) return false
 
@@ -58,7 +62,7 @@ export class MusicPlugin extends PluginBase {
     }
 
     const song = list[num - 1]
-    const artist = song.artists.map(a => a.name).join('、')
+    const artist = song.artists.map((a: any) => a.name).join('、')
     const songUrl = `${SONG_URL_API}?id=${song.id}.mp3`
     await this.reply([`🎵 ${song.name} - ${artist}`, msgSegment.record(songUrl, song.name)])
     this.finish('musicChooseContext')

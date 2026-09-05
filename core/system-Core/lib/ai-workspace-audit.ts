@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import paths from '#utils/paths.js';
@@ -19,12 +18,12 @@ function getAuditMaxEntries() {
 }
 const AUDIT_DIR = path.join(paths.data, 'ai-console', 'audit');
 
-function auditFileForWorkspace(workspaceId) {
+function auditFileForWorkspace(workspaceId: any) {
   const safe = String(workspaceId || 'default').replace(/[^\w.-]/g, '_').slice(0, 64);
   return path.join(AUDIT_DIR, `${safe}.jsonl`);
 }
 
-export function formatAuditDetail(detail) {
+export function formatAuditDetail(detail: any) {
   const s = String(detail || '').trim();
   if (!s) return '';
   if (/pandoc:\s*not found/i.test(s)) return 'pandoc 未安装';
@@ -36,7 +35,7 @@ export function formatAuditDetail(detail) {
   return s.length > 200 ? `${s.slice(0, 200)}…` : s;
 }
 
-export async function auditToolUse(workspaceId, tool, { ok = true, detail = '' } = {}) {
+export async function auditToolUse(workspaceId: any, tool: any, { ok = true, detail = '' }: any = {}) {
   if (!isAuditEnabled() || !workspaceId || !tool) return;
   const file = auditFileForWorkspace(workspaceId);
   const line = `${JSON.stringify({
@@ -57,7 +56,7 @@ export async function auditToolUse(workspaceId, tool, { ok = true, detail = '' }
   } catch { /* 审计失败不阻断 */ }
 }
 
-export async function readAuditTail(workspaceId, limit = 50) {
+export async function readAuditTail(workspaceId: any, limit: any = 50) {
   const file = auditFileForWorkspace(workspaceId);
   const cap = Math.min(200, Math.max(1, limit));
   try {

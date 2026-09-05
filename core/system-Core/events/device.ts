@@ -1,19 +1,21 @@
-// @ts-nocheck
 import ListenerBase from '#infrastructure/listener/base.js'
 
+const gAgentRuntime = (): any => (globalThis as any).AgentRuntime;
+
 export default class DeviceEvent extends ListenerBase {
+  [key: string]: any;
   constructor() {
     super('device')
   }
 
   async init() {
-    const bot = this.bot || AgentRuntime
+    const bot = this.bot || gAgentRuntime()
     for (const t of ['message', 'notice', 'request']) {
-      bot.on(`device.${t}`, (e) => this.handleEvent(e))
+      bot.on(`device.${t}`, (e: any) => this.handleEvent(e))
     }
   }
 
-  async handleEvent(e) {
+  async handleEvent(e: any) {
     if (!e) return
     this.ensureEventId(e)
     if (!this.markProcessed(e)) return

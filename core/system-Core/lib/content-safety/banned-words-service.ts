@@ -1,4 +1,3 @@
-// @ts-nocheck
 import runtimeConfig from '#infrastructure/config/config.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -12,11 +11,11 @@ function resolvePaths() {
   return { bannedWordsPath, bannedImagesPath, bannedConfigPath };
 }
 
-function normalizeStr(s) {
+function normalizeStr(s: any) {
   return String(s ?? '').trim();
 }
 
-async function readJsonIfExists(filePath) {
+async function readJsonIfExists(filePath: any) {
   try {
     const raw = await fs.readFile(filePath, 'utf8');
     return JSON.parse(raw);
@@ -32,7 +31,8 @@ async function readJsonIfExists(filePath) {
  * - images: md5 => info
  */
 export class BannedWordsService {
-  #cache = null;
+  [key: string]: any;
+  #cache: any = null;
   #lastLoadTs = 0;
 
   async #loadGlobalIfNeeded() {
@@ -53,7 +53,7 @@ export class BannedWordsService {
     return this.#cache;
   }
 
-  async checkText(text) {
+  async checkText(text: any) {
     const t = normalizeStr(text);
     if (!t) return null;
     const { exact, fuzzy } = await this.#loadGlobalIfNeeded();
@@ -67,7 +67,7 @@ export class BannedWordsService {
     return null;
   }
 
-  async checkImageMd5(md5) {
+  async checkImageMd5(md5: any) {
     const h = normalizeStr(md5).toLowerCase();
     if (!h) return null;
     const { images } = await this.#loadGlobalIfNeeded();

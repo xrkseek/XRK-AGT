@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * HTTP 网关协议适配入口（OpenAI Chat / Models / Anthropic Messages / OpenAI Responses）
  */

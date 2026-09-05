@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * XRK AI 助手 — 对齐 XRK-Yunzai plugin/ai.js
  *
@@ -21,8 +20,13 @@ import {
   shouldTriggerAI,
   isInAiWhitelist,
 } from '../lib/ai-assistant-runtime.js';
+import PluginBase from '#infrastructure/plugins/plugin-base.js';
+import { msgSegment } from '#utils/msg-segment.js';
+
+const gLogger = (): any => (globalThis as any).logger;
 
 export class XRKAIAssistant extends PluginBase {
+  [key: string]: any;
   constructor() {
     super({
       name: 'XRK-AI助手',
@@ -72,7 +76,7 @@ export class XRKAIAssistant extends PluginBase {
 
       const stream = resolveChatStream(this);
       if (!stream) {
-        logger.error('[XRK-AI] chat 工作流未加载');
+        gLogger()?.error('[XRK-AI] chat 工作流未加载');
         return false;
       }
 
@@ -94,10 +98,10 @@ export class XRKAIAssistant extends PluginBase {
         config: this.config,
         isGlobalTrigger,
         debugDumpFullPrompt,
-      });
+      } as any);
       return true;
-    } catch (err) {
-      logger.error(`[XRK-AI] handleMessage: ${err.message}`);
+    } catch (err: any) {
+      gLogger()?.error(`[XRK-AI] handleMessage: ${err.message}`);
       return false;
     }
   }
