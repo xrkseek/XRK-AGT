@@ -39,3 +39,13 @@ export function buildFetchOptionsWithProxy(config = {}, baseOptions = {}) {
 
   return options;
 }
+
+/**
+ * 按 provider.proxy 生成带 ProxyAgent 的 fetch（供 harness 等裸 fetch 入口）
+ * @returns {typeof fetch | undefined}
+ */
+export function createFetchWithProxy(config = {}) {
+  const { dispatcher } = buildFetchOptionsWithProxy(config, {});
+  if (!dispatcher) return undefined;
+  return (url, init = {}) => fetch(url, { ...init, dispatcher });
+}

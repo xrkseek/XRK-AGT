@@ -6,6 +6,7 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import { MCPToolAdapter } from '#utils/llm/mcp-tool-adapter.js';
 import { resolveInputTokenBudget } from '#utils/llm/message-token-budget.js';
 import { parseToolCallArguments } from '#utils/llm/parse-tool-arguments.js';
+import { createFetchWithProxy } from '#utils/llm/proxy-utils.js';
 import { importHarnessSdk } from './harness-resolve.js';
 import {
   acquireHarnessSession,
@@ -394,6 +395,7 @@ export function createLlmFromConfig(harness, config, options = {}) {
     throw new Error('harness loop needs config.baseUrl and config.model (from AGT provider)');
   }
 
+  const fetchWithProxy = createFetchWithProxy(config);
   const common = {
     id: `agt:${config.provider || 'llm'}`,
     baseUrl,
@@ -404,6 +406,8 @@ export function createLlmFromConfig(harness, config, options = {}) {
     timeoutMs: config.timeout ?? config.timeoutMs,
     headers: config.headers,
     ...(options.inputModalities ? { inputModalities: options.inputModalities } : {}),
+    // 与 *LLMClient 共用 providers[].proxy，不读系统 HTTP(S)_PROXY
+    ...(fetchWithProxy ? { fetch: fetchWithProxy } : {}),
   };
 
   const provider = String(config.provider || config.factoryType || '').toLowerCase();
