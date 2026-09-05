@@ -150,7 +150,7 @@ class ProcessManager {
 
   async cleanup() {
     await runShutdownHooks()
-    SystemMonitor.getInstance().stop()
+    SystemMonitor.getInstance()?.stop()
     await closeDatabases().catch(() => {})
   }
 }
@@ -172,15 +172,18 @@ class InitManager {
     const monitorConfig = (runtimeConfig as any).monitor
     if (!monitorConfig.enabled) return
 
+    const monitor = this.systemMonitor
+    if (!monitor) return
+
     setTimeout(() => {
-      this.systemMonitor.start(monitorConfig).catch((error: Error) => {
+      monitor.start(monitorConfig).catch((error: Error) => {
         gLogger()?.error?.(`系统监控启动失败: ${error.message}`)
       })
     }, 100)
 
-    this.systemMonitor.on('critical', ({ type }: { type: string }) => {
+    monitor.on('critical', ({ type }: { type: string }) => {
       gLogger()?.error?.(`系统资源严重不足: ${type}`)
-      if ((this.systemMonitor as any).config?.optimize?.autoRestart === true) {
+      if ((monitor as any).config?.optimize?.autoRestart === true) {
         gLogger()?.error?.('将在5秒后重启...')
         setTimeout(() => this.processManager.restart(), 5000)
       }
