@@ -1,20 +1,60 @@
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
+import util from "node:util";
 import crypto from 'node:crypto';
 import { glob as globLib } from 'glob';
 import { ulid } from "ulid";
 import { fileTypeFromBuffer } from "file-type";
+// @ts-expect-error no DefinitelyTyped package for md5
 import md5 from "md5";
 import moment from "moment";
 import chalk from "chalk";
 
 import runtimeConfig from "#infrastructure/config/config.js";
-import common from './common.js';
+import common from '#utils/common.js';
 import paths from '#utils/paths.js';
-import { exec, execFile } from './exec-async.js';
-import { normalizeError } from './normalize-error.js';
-import { inlineBinaryFromRef, isPathLike } from './media-ref.js';
+import { exec, execFile } from '#utils/exec-async.js';
+import { normalizeError } from '#utils/normalize-error.js';
+import { inlineBinaryFromRef, isPathLike } from '#utils/media-ref.js';
+
+
+type MapWithGetOrInsert<K, V> = Map<K, V> & {
+  getOrInsertComputed(key: K, callbackfn: () => V): V;
+};
+
+type ExtendedMap = Map<any, any> & {
+  _metadata: Map<any, any>;
+  _options: any;
+  _cleanInterval?: ReturnType<typeof setInterval>;
+  setMany: (entries: Iterable<[any, any]>) => ExtendedMap;
+  getMany: (keys: Iterable<any>) => Map<any, any>;
+  cleanExpired: () => number;
+  destroy: () => void;
+};
+
+type MemoryCacheEntry = {
+  value: any;
+  ttl: number;
+  expireAt: number;
+  createdAt: number;
+};
+
+type BufferWithExtras = Buffer & { toBase64(): string; toHex(): string };
+type Uint8ArrayCtorWithBase64 = Uint8ArrayConstructor & {
+  fromBase64(data: string): Uint8Array;
+};
+type ErrorCtorWithIsError = ErrorConstructor & {
+  isError?: (value: unknown) => value is Error;
+};
+
+const ErrorIsError = (Error as ErrorCtorWithIsError).isError?.bind(Error)
+  ?? ((v: unknown): v is Error => v instanceof Error);
+const bufToBase64 = (buf: Buffer): string => (buf as BufferWithExtras).toBase64();
+const bufToHex = (buf: Buffer): string => (buf as BufferWithExtras).toHex();
+const u8FromBase64 = (data: string): Uint8Array =>
+  (Uint8Array as Uint8ArrayCtorWithBase64).fromBase64(data);
+const gLogger = (): any => (globalThis as any).logger;
 
 /**
  * AgentRuntime 实用工具类
@@ -48,7 +88,7 @@ export default class RuntimeUtil {
    * @private
    * @type {string}
    */
-  static apiKey = '';
+  static apiKey: string = '';
 
   /**
    * 正则表达式缓存，用于性能优化
@@ -56,7 +96,7 @@ export default class RuntimeUtil {
    * @private
    * @type {Object<string, RegExp>}
    */
-  static regexCache = {
+  static regexCache: Record<string, RegExp> = {
     url: /^https?:\/\//,
     base64: /^base64:\/\//,
     controlChars: /\u001b\[\d+(;\d+)*m/g,
@@ -73,7 +113,7 @@ export default class RuntimeUtil {
    * @private
    * @type {Map<string, string>}
    */
-  static mimeToExtMap = new Map([
+  static mimeToExtMap: Map<string, string> = new Map([
     ['image/jpeg', '.jpg'],
     ['image/png', '.png'],
     ['image/gif', '.gif'],
@@ -98,7 +138,7 @@ export default class RuntimeUtil {
    * @private
    * @type {Map<string, Map>}
    */
-  static #globalMaps = new Map();
+  static #globalMaps: Map<string, ExtendedMap> = new Map();
 
   /**
    * 内存缓存存储
@@ -106,7 +146,7 @@ export default class RuntimeUtil {
    * @private
    * @type {Map<string, Object>}
    */
-  static #memoryCache = new Map();
+  static #memoryCache: Map<string, MemoryCacheEntry> = new Map();
 
 
   /**
@@ -114,7 +154,7 @@ export default class RuntimeUtil {
    * @static
    * @type {Object<string, Array<string>>}
    */
-  static idColorSchemes = {
+  static idColorSchemes: Record<string, string[]> = {
     default: ['#00D9FF', '#00C9E6', '#00B8CC', '#00A6B3', '#009599'],
     scheme1: ['#FF00FF', '#E91E63', '#C2185B', '#AD1457', '#880E4F'],
     scheme2: ['#FF9800', '#FB8C00', '#F57C00', '#EF6C00', '#E65100'],
@@ -152,8 +192,8 @@ export default class RuntimeUtil {
    * @param {number} [options.cleanInterval=60000] - 清理间隔（毫秒）
    * @returns {Map} 具有额外方法的扩展 Map 对象
    */
-  static getMap(name = 'default', options = {}) {
-    return RuntimeUtil.#globalMaps.getOrInsertComputed(name, () => RuntimeUtil.#createExtendedMap(options));
+  static getMap(name: string = 'default', options: any = {}): ExtendedMap {
+    return (RuntimeUtil.#globalMaps as MapWithGetOrInsert<string, ExtendedMap>).getOrInsertComputed(name, () => RuntimeUtil.#createExtendedMap(options));
   }
 
   /**
@@ -162,7 +202,7 @@ export default class RuntimeUtil {
    * @param {Object} options - 配置选项
    * @returns {Map} 扩展 Map 对象
    */
-  static #createExtendedMap(options) {
+  static #createExtendedMap(options: any): ExtendedMap {
     const {
       maxSize = Infinity,
       ttl = 0,
@@ -171,12 +211,12 @@ export default class RuntimeUtil {
       cleanInterval = 60000
     } = options;
 
-    const map = new Map();
+    const map = new Map() as ExtendedMap;
     map._metadata = new Map();
     map._options = { maxSize, ttl, onEvict, autoClean, cleanInterval };
 
     const originalSet = map.set.bind(map);
-    map.set = function (key, value) {
+    map.set = function (this: ExtendedMap, key: any, value: any) {
       if (this.size >= maxSize && !this.has(key)) {
         const firstKey = this.keys().next().value;
         if (onEvict) onEvict(firstKey, this.get(firstKey));
@@ -197,7 +237,7 @@ export default class RuntimeUtil {
     };
 
     const originalGet = map.get.bind(map);
-    map.get = function (key) {
+    map.get = function (this: ExtendedMap, key: any) {
       if (ttl > 0 && this._metadata.has(key)) {
         const metadata = this._metadata.get(key);
         if (Date.now() - metadata.createdAt > metadata.ttl) {
@@ -210,14 +250,14 @@ export default class RuntimeUtil {
       return originalGet(key);
     };
 
-    map.setMany = function (entries) {
+    map.setMany = function (this: ExtendedMap, entries: any) {
       for (const [key, value] of entries) {
         this.set(key, value);
       }
       return this;
     };
 
-    map.getMany = function (keys) {
+    map.getMany = function (this: ExtendedMap, keys: any) {
       const result = new Map();
       for (const key of keys) {
         const value = this.get(key);
@@ -226,7 +266,7 @@ export default class RuntimeUtil {
       return result;
     };
 
-    map.cleanExpired = function () {
+    map.cleanExpired = function (this: ExtendedMap) {
       if (ttl <= 0) return 0;
       let cleaned = 0;
       const now = Date.now();
@@ -241,7 +281,7 @@ export default class RuntimeUtil {
       return cleaned;
     };
 
-    map.destroy = function () {
+    map.destroy = function (this: ExtendedMap) {
       if (this._cleanInterval) {
         clearInterval(this._cleanInterval);
       }
@@ -264,7 +304,7 @@ export default class RuntimeUtil {
    * @param {string} name - Map 标识符
    * @returns {boolean} 删除是否成功
    */
-  static deleteMap(name) {
+  static deleteMap(name: string): boolean {
     const map = RuntimeUtil.#globalMaps.get(name);
     if (map) {
       if (typeof map.destroy === 'function') map.destroy();
@@ -282,7 +322,7 @@ export default class RuntimeUtil {
    * @param {number} [ttl=0] - 生存时间（毫秒）（0 = 不过期）
    * @returns {*} 缓存的值或 undefined
    */
-  static cache(key, value, ttl = 0) {
+  static cache(key: any, value?: any, ttl: number = 0): any {
     if (value === undefined) {
       const cached = RuntimeUtil.#memoryCache.get(key);
       if (cached) {
@@ -309,7 +349,7 @@ export default class RuntimeUtil {
    * @param {string|RegExp} [pattern] - 要匹配的键或正则表达式模式
    * @returns {number} 删除的条目数
    */
-  static clearCache(pattern) {
+  static clearCache(pattern?: any): number {
     if (!pattern) {
       const size = RuntimeUtil.#memoryCache.size;
       RuntimeUtil.#memoryCache.clear();
@@ -336,7 +376,7 @@ export default class RuntimeUtil {
    * @param {string} [version='v4'] - UUID 版本（'v4' 或 'ulid'）
    * @returns {string} 生成的唯一标识符
    */
-  static uuid(version = 'v4') {
+  static uuid(version: string = 'v4'): string {
     if (version === 'ulid') return ulid();
 
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -347,8 +387,8 @@ export default class RuntimeUtil {
   }
 
   /** 短随机 id（事件去重、requestId 等） */
-  static shortId() {
-    return crypto.randomBytes(6).toHex();
+  static shortId(): string {
+    return bufToHex(crypto.randomBytes(6));
   }
 
   /**
@@ -357,7 +397,7 @@ export default class RuntimeUtil {
    * @param {string} [chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'] - 字符集
    * @returns {string} 随机字符串
    */
-  static randomString(length = 10, chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') {
+  static randomString(length: number = 10, chars: string = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'): string {
     let result = '';
     const charsLength = chars.length;
     for (let i = 0; i < length; i++) {
@@ -372,7 +412,7 @@ export default class RuntimeUtil {
    * @param {string} [algorithm='md5'] - 哈希算法
    * @returns {string} 十六进制哈希字符串
    */
-  static hash(data, algorithm = 'md5') {
+  static hash(data: any, algorithm: string = 'md5'): string {
     if (algorithm === 'md5') return md5(data);
     return crypto.createHash(algorithm).update(data).digest('hex');
   }
@@ -382,7 +422,7 @@ export default class RuntimeUtil {
    * @param {*} data - 要转换的数据
    * @returns {string} 字符串表示
    */
-  static String(data) {
+  static String(data: any): string {
     if (data == null) return String(data);
 
     switch (typeof data) {
@@ -391,14 +431,14 @@ export default class RuntimeUtil {
       case "function":
         return `[Function: ${data.name || "anonymous"}]`;
       case "object":
-        if (Error.isError(data)) {
+        if (ErrorIsError(data)) {
           return data.stack || data.message || String(data);
         }
         if (Buffer.isBuffer(data)) {
           if (data.length > 1024) {
             return `[Binary data, length: ${data.length}]`;
           }
-          return `base64://${data.toBase64()}`;
+          return `base64://${bufToBase64(data)}`;
         }
         try {
           return JSON.stringify(data);
@@ -416,12 +456,12 @@ export default class RuntimeUtil {
    * @param {boolean} [base64=false] - 对二进制使用 base64 编码
    * @returns {string|Buffer} 转换结果
    */
-  static StringOrBuffer(data, base64) {
+  static StringOrBuffer(data: any, base64?: any): string | Buffer {
     if (!Buffer.isBuffer(data)) return String(data);
 
     const string = data.toString();
     if (string.includes("\ufffd") || /[\uD800-\uDFFF]/.test(string)) {
-      return base64 ? `base64://${data.toBase64()}` : data;
+      return base64 ? `base64://${bufToBase64(data)}` : data;
     }
     return string;
   }
@@ -434,7 +474,7 @@ export default class RuntimeUtil {
    * @param {string} str - 要测量的字符串
    * @returns {number} 显示宽度
    */
-  static #getDisplayWidth(str) {
+  static #getDisplayWidth(str: any): number {
     if (typeof str !== 'string') str = String(str);
     let width = 0;
     for (const char of str) {
@@ -466,7 +506,7 @@ export default class RuntimeUtil {
    * @param {number} amount - 变亮程度（0-1）
    * @returns {string} 变亮后的十六进制颜色
    */
-  static #lightenColor(hex, amount) {
+  static #lightenColor(hex: string, amount: number): string {
     const color = hex.replace('#', '');
     const num = parseInt(color, 16);
     const r = Math.min(255, Math.floor((num >> 16) + (255 - (num >> 16)) * amount));
@@ -480,7 +520,7 @@ export default class RuntimeUtil {
    * @param {string|*} id - 日志 ID
    * @returns {string} 格式化的日志 ID
    */
-  static makeLogID(id) {
+  static makeLogID(id: any): string {
     const logCfg = runtimeConfig.agt?.logging || {};
     const cacheKey = `logid_${id}_${logCfg.color || 'default'}_${logCfg.idFiller || '·'}`;
     const cached = RuntimeUtil.cache(cacheKey);
@@ -489,7 +529,7 @@ export default class RuntimeUtil {
     const targetLength = logCfg.idLength || 16;
     const filler = logCfg.idFiller || '·';
     const currentTheme = logCfg.color || 'default';
-    const chalkInstance = chalk || globalThis.logger?.chalk;
+    const chalkInstance = chalk || gLogger()?.chalk;
 
     if (!id && !logCfg.align) {
       return RuntimeUtil.cache(cacheKey, "", 60000);
@@ -580,12 +620,12 @@ export default class RuntimeUtil {
    * @param {boolean} [lightMode=false] - 使用变亮的颜色
    * @returns {string} 着色后的字符串
    */
-  static #applyGradientToString(text, colors, chalkInstance, lightMode = false) {
+  static #applyGradientToString(text: any, colors: any, chalkInstance: any, lightMode: boolean = false): string {
     if (!text || !colors?.length || !chalkInstance) return text;
 
     const chars = Array.from(text);
     const colorsToUse = lightMode ?
-      colors.map(c => RuntimeUtil.#lightenColor(c, 0.6)) :
+      colors.map((c: string) => RuntimeUtil.#lightenColor(c, 0.6)) :
       colors;
 
     if (chars.length === 1) {
@@ -627,12 +667,12 @@ export default class RuntimeUtil {
    * - debug: 技术细节、内部实现、开发调试信息（如：函数调用、变量值、解析过程）
    * - info: 业务逻辑、用户操作、系统状态（如：工作流启动、任务完成、API调用）
    */
-  static makeLog(level = "info", msg, id, trace = false) {
+  static makeLog(level: string = "info", msg: any, id?: any, trace: boolean = false): string {
     const validLevels = ["trace", "debug", "info", "warn", "error", "fatal", "mark", "success", "tip"];
     level = validLevels.includes(level) ? level : "info";
 
     const configLogLevel = runtimeConfig.agt?.logging?.level || "info";
-    const levelPriorities = {
+    const levelPriorities: Record<string, number> = {
       "trace": 0,
       "debug": 1,
       "info": 2,
@@ -712,12 +752,12 @@ export default class RuntimeUtil {
       logMessage = `${logMessage.slice(0, preview)}... [截断 ${logMessage.length} 字符] ...${logMessage.slice(-suffix)}`;
     }
 
-    const logger = globalThis.logger;
+    const logger = gLogger();
     try {
       if (logger && typeof logger[level] === 'function') {
         logger[level](logMessage);
         if (trace && typeof logger.trace === 'function') {
-          const stack = new Error().stack.split("\n").slice(2).join("\n");
+          const stack = (new Error().stack || "").split("\n").slice(2).join("\n");
           logger.trace(`堆栈跟踪:\n${stack}`);
         }
       } else {
@@ -734,10 +774,10 @@ export default class RuntimeUtil {
    * 获取 JSON.stringify 的循环引用替换器
    * @returns {Function} 替换器函数
    */
-  static getCircularReplacer() {
+  static getCircularReplacer(): (key: any, value: any) => any {
     const seen = new WeakSet();
 
-    return (key, value) => {
+    return (key: any, value: any) => {
       if (value == null) return value;
 
       switch (typeof value) {
@@ -749,7 +789,7 @@ export default class RuntimeUtil {
           if (seen.has(value)) return "[循环引用]";
           seen.add(value);
 
-          if (Error.isError(value)) {
+          if (ErrorIsError(value)) {
             return {
               name: value.name,
               message: value.message,
@@ -785,16 +825,16 @@ export default class RuntimeUtil {
    * @param {string} filePath - 文件路径
    * @returns {Promise<fs.Stats|false>} 文件统计信息或 false（如果不存在）
    */
-  static async fsStat(filePath) {
+  static async fsStat(filePath: any): Promise<any> {
     if (!filePath || !isPathLike(filePath)) return false;
 
     try {
       return await fs.stat(filePath);
-    } catch (err) {
-      if (err.code !== 'ENOENT' && globalThis.logger?.trace) {
+    } catch (err: any) {
+      if (err.code !== 'ENOENT' && gLogger()?.trace) {
         const s = String(filePath);
         const hint = s.length <= 120 ? s : `${s.slice(0, 48)}…[+${s.length - 48} chars]`;
-        globalThis.logger.trace(["获取", hint, "统计信息错误", err.code || err.message]);
+        gLogger().trace(["获取", hint, "统计信息错误", err.code || err.message]);
       }
       return false;
     }
@@ -806,16 +846,16 @@ export default class RuntimeUtil {
    * @param {Object} [opts={recursive: true}] - 选项
    * @returns {Promise<boolean>} 成功状态
    */
-  static async mkdir(dir, opts = { recursive: true }) {
+  static async mkdir(dir: any, opts: any = { recursive: true }): Promise<boolean> {
     if (!dir) return false;
 
     try {
       await fs.mkdir(dir, opts);
       return true;
-    } catch (err) {
+    } catch (err: any) {
       if (err.code === "EEXIST") return true;
-      if (globalThis.logger?.error) {
-        globalThis.logger.error(["创建", dir, "错误", err.message]);
+      if (gLogger()?.error) {
+        gLogger().error(["创建", dir, "错误", err.message]);
       }
       return false;
     }
@@ -826,16 +866,16 @@ export default class RuntimeUtil {
    * @param {string} file - 要删除的路径
    * @returns {Promise<boolean>} 成功状态
    */
-  static async rm(file) {
+  static async rm(file: any): Promise<boolean> {
     if (!file) return false;
 
     try {
       await fs.rm(file, { force: true, recursive: true });
       return true;
-    } catch (err) {
+    } catch (err: any) {
       if (err.code === "ENOENT") return true;
-      if (globalThis.logger?.error) {
-        globalThis.logger.error(["删除", file, "错误", err.message]);
+      if (gLogger()?.error) {
+        gLogger().error(["删除", file, "错误", err.message]);
       }
       return false;
     }
@@ -848,7 +888,7 @@ export default class RuntimeUtil {
    * @returns {Promise<string|Buffer>} 文件内容
    * @throws {Error} 如果文件路径为空
    */
-  static async readFile(filePath, encoding = "utf8") {
+  static async readFile(filePath: any, encoding: any = "utf8"): Promise<any> {
     if (!filePath) throw new Error("文件路径为空");
     return fs.readFile(filePath, encoding);
   }
@@ -861,7 +901,7 @@ export default class RuntimeUtil {
    * @returns {Promise<void>}
    * @throws {Error} 如果文件路径为空
    */
-  static async writeFile(filePath, data, opts = {}) {
+  static async writeFile(filePath: any, data: any, opts: any = {}): Promise<void> {
     if (!filePath) throw new Error("文件路径为空");
     await RuntimeUtil.mkdir(path.dirname(filePath));
     return fs.writeFile(filePath, data, opts);
@@ -872,7 +912,7 @@ export default class RuntimeUtil {
    * @param {string} filePath - 文件路径
    * @returns {Promise<boolean>} 存在状态
    */
-  static async fileExists(filePath) {
+  static async fileExists(filePath: any): Promise<boolean> {
     if (!filePath || !isPathLike(filePath)) return false;
 
     try {
@@ -896,7 +936,7 @@ export default class RuntimeUtil {
    * @param {boolean} [opts.onlyFiles=true] - 仅匹配文件
    * @returns {Promise<Array<string>>} 匹配的文件路径
    */
-  static async glob(pattern, opts = {}) {
+  static async glob(pattern: any, opts: any = {}): Promise<string[]> {
     if (!pattern) return [];
 
     if (!opts.force && !RuntimeUtil.regexCache.globPattern.test(pattern)) {
@@ -916,9 +956,9 @@ export default class RuntimeUtil {
 
       const files = await globLib(pattern, globOptions);
       return Array.isArray(files) ? files : Array.from(files);
-    } catch (err) {
-      if (globalThis.logger?.error) {
-        globalThis.logger.error(["匹配", pattern, "错误", err.message]);
+    } catch (err: any) {
+      if (gLogger()?.error) {
+        gLogger().error(["匹配", pattern, "错误", err.message]);
       }
       return [];
     }
@@ -937,7 +977,7 @@ export default class RuntimeUtil {
    * @param {Object} [opts.fetchOptions] - 额外的 fetch 选项
    * @returns {Promise<Buffer|string>} 缓冲区或文件/数据 URL
    */
-  static async Buffer(data, opts = {}) {
+  static async Buffer(data: any, opts: any = {}): Promise<Buffer | string> {
     if (Buffer.isBuffer(data)) {
       return opts.size && data.length > opts.size ?
         await RuntimeUtil.#saveBufferToTempFile(data) : data;
@@ -948,7 +988,7 @@ export default class RuntimeUtil {
     // 处理 base64
     if (dataStr.startsWith("base64://")) {
       try {
-        const buffer = Buffer.from(Uint8Array.fromBase64(dataStr.slice(9)));
+        const buffer = Buffer.from(u8FromBase64(dataStr.slice(9)));
         return opts.size && buffer.length > opts.size ?
           await RuntimeUtil.#saveBufferToTempFile(buffer) : buffer;
       } catch {
@@ -973,9 +1013,9 @@ export default class RuntimeUtil {
         const buffer = Buffer.from(await response.arrayBuffer());
         return opts.size && buffer.length > opts.size ?
           await RuntimeUtil.#saveBufferToTempFile(buffer) : buffer;
-      } catch (err) {
-        if (globalThis.logger?.error) {
-          globalThis.logger.error(["获取 URL 内容错误", dataStr, err.message]);
+      } catch (err: any) {
+        if (gLogger()?.error) {
+          gLogger().error(["获取 URL 内容错误", dataStr, err.message]);
         }
         return Buffer.alloc(0);
       }
@@ -1013,7 +1053,7 @@ export default class RuntimeUtil {
    * @param {Buffer} buffer - 要保存的缓冲区
    * @returns {Promise<string>} 文件 URL 或数据 URL
    */
-  static async #saveBufferToTempFile(buffer) {
+  static async #saveBufferToTempFile(buffer: Buffer): Promise<string> {
     const tempDir = paths.trash;
 
     try {
@@ -1026,7 +1066,7 @@ export default class RuntimeUtil {
 
       return `file://${path.resolve(filePath)}`;
     } catch {
-      return `data:application/octet-stream;base64,${buffer.toBase64()}`;
+      return `data:application/octet-stream;base64,${bufToBase64(buffer)}`;
     }
   }
 
@@ -1039,7 +1079,7 @@ export default class RuntimeUtil {
    * @param {number} [opts.size] - 最大大小限制
    * @returns {Promise<Object>} 文件类型信息
    */
-  static async fileType(data, opts = {}) {
+  static async fileType(data: any, opts: any = {}): Promise<any> {
     if (!data) return {
       name: "未知",
       type: { ext: "未知" },
@@ -1048,10 +1088,10 @@ export default class RuntimeUtil {
       buffer: null
     };
 
-    const file = {
+    const file: any = {
       name: data.name || "",
       url: "",
-      buffer: null,
+      buffer: null as Buffer | null,
       type: { ext: "未知" },
       md5: ""
     };
@@ -1081,9 +1121,9 @@ export default class RuntimeUtil {
           file.buffer = await RuntimeUtil.Buffer(data.file, opts);
         }
       }
-    } catch (err) {
-      if (globalThis.logger?.error) {
-        globalThis.logger.error(["文件类型检测错误", err.message]);
+    } catch (err: any) {
+      if (gLogger()?.error) {
+        gLogger().error(["文件类型检测错误", err.message]);
       }
     }
 
@@ -1102,7 +1142,7 @@ export default class RuntimeUtil {
    * @returns {Promise<string|Object>} URL 或带路径的 URL
    * @throws {Error} 如果转换失败
    */
-  static async fileToUrl(file, opts = {}) {
+  static async fileToUrl(file: any, opts: any = {}): Promise<any> {
     const options = {
       name: opts.name || null,
       time: ((runtimeConfig.agt?.files?.urlTime || 60) * 60000),
@@ -1123,7 +1163,7 @@ export default class RuntimeUtil {
         fileBuffer = file;
       } else if (typeof file === "string") {
         if (file.startsWith("base64://")) {
-          fileBuffer = Buffer.from(Uint8Array.fromBase64(file.slice(9)));
+          fileBuffer = Buffer.from(u8FromBase64(file.slice(9)));
         } else if (RuntimeUtil.regexCache.url.test(file)) {
           const response = await fetch(file, {
             signal: AbortSignal.timeout(30000),
@@ -1178,9 +1218,9 @@ export default class RuntimeUtil {
       }
 
       return url;
-    } catch (err) {
-      if (globalThis.logger?.error) {
-        globalThis.logger.error(["文件转 URL 错误", err.message]);
+    } catch (err: any) {
+      if (gLogger()?.error) {
+        gLogger().error(["文件转 URL 错误", err.message]);
       }
       throw err;
     }
@@ -1196,14 +1236,14 @@ export default class RuntimeUtil {
    * @param {number} [opts.timeout=60000] - 超时（毫秒）
    * @returns {Promise<Object>} 执行结果
    */
-  static async exec(cmd, opts = {}) {
+  static async exec(cmd: any, opts: any = {}): Promise<any> {
     if (!cmd) return { error: new Error("命令为空"), stdout: "", stderr: "" };
 
     const cmdStr = String(cmd);
     const startTime = Date.now();
 
-    if (!opts.quiet && globalThis.logger?.mark) {
-      globalThis.logger.mark(cmdStr, "命令");
+    if (!opts.quiet && gLogger()?.mark) {
+      gLogger().mark(cmdStr, "命令");
     }
 
     const execOpts = {
@@ -1217,7 +1257,7 @@ export default class RuntimeUtil {
     let error = null;
     let stdout = "";
     let stderr = "";
-    let raw = { stdout: null, stderr: null };
+    let raw: any = { stdout: null, stderr: null };
 
     try {
       const out = Array.isArray(cmd)
@@ -1226,7 +1266,7 @@ export default class RuntimeUtil {
       raw = { stdout: out.stdout, stderr: out.stderr };
       stdout = out.stdout?.toString() || "";
       stderr = out.stderr?.toString() || "";
-    } catch (err) {
+    } catch (err: any) {
       error = normalizeError(err);
       raw = { stdout: err.stdout, stderr: err.stderr };
       stdout = err.stdout?.toString?.() || "";
@@ -1242,15 +1282,15 @@ export default class RuntimeUtil {
       duration
     };
 
-    if (!opts.quiet && globalThis.logger?.mark) {
+    if (!opts.quiet && gLogger()?.mark) {
       let logMessage = `${cmdStr} [完成 ${duration}]`;
       if (result.stdout) logMessage += `\n${result.stdout}`;
       if (result.stderr) logMessage += `\n${result.stderr}`;
-      globalThis.logger.mark(logMessage, "命令");
+      gLogger().mark(logMessage, "命令");
     }
 
-    if (error && !opts.quiet && globalThis.logger?.error) {
-      globalThis.logger.error(error, "命令");
+    if (error && !opts.quiet && gLogger()?.error) {
+      gLogger().error(error, "命令");
     }
 
     return result;
@@ -1262,7 +1302,7 @@ export default class RuntimeUtil {
    * @param {Promise} [promise] - 可选的要竞争的 Promise
    * @returns {Promise<*>} 超时符号或 Promise 结果
    */
-  static sleep(time, promise) {
+  static sleep(time: any, promise?: any): Promise<any> {
     if (!time || time <= 0) return Promise.resolve(Symbol("timeout"));
 
     const sleepPromise = new Promise(resolve =>
@@ -1282,14 +1322,14 @@ export default class RuntimeUtil {
    * @returns {Promise<Array>} 事件参数
    * @throws {Error} 错误或超时时抛出
    */
-  static promiseEvent(emitter, event, errorEvent, timeout) {
+  static promiseEvent(emitter: any, event: any, errorEvent?: any, timeout?: any): Promise<any[]> {
     if (!emitter || !event) {
       return Promise.reject(new Error("无效的参数"));
     }
 
     return new Promise((resolve, reject) => {
       let settled = false;
-      let timeoutId;
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
       const cleanup = () => {
         emitter.off(event, onSuccess);
@@ -1297,14 +1337,14 @@ export default class RuntimeUtil {
         if (timeoutId) clearTimeout(timeoutId);
       };
 
-      const onSuccess = (...args) => {
+      const onSuccess = (...args: any[]) => {
         if (settled) return;
         settled = true;
         cleanup();
         resolve(args);
       };
 
-      const onError = (err) => {
+      const onError = (err: any) => {
         if (settled) return;
         settled = true;
         cleanup();
@@ -1331,7 +1371,7 @@ export default class RuntimeUtil {
    * @param {number} [time2=Date.now()] - 结束时间
    * @returns {string} 格式化的时间差
    */
-  static getTimeDiff(time1 = Date.now(), time2 = Date.now()) {
+  static getTimeDiff(time1: number = Date.now(), time2: number = Date.now()): string {
     const totalSeconds = Math.abs(time2 - time1) / 1000;
 
     if (totalSeconds < 0.1) {
@@ -1358,7 +1398,7 @@ export default class RuntimeUtil {
    * @param {number} [decimals=2] - 小数位数
    * @returns {string} 格式化的大小
    */
-  static formatFileSize(bytes, decimals = 2) {
+  static formatFileSize(bytes: number, decimals: number = 2): string {
     if (bytes === 0) return '0 字节';
 
     const k = 1024;
@@ -1377,7 +1417,7 @@ export default class RuntimeUtil {
    * @param {WeakMap} [cache=new WeakMap()] - 循环引用缓存
    * @returns {*} 克隆的对象
    */
-  static deepClone(obj, cache = new WeakMap()) {
+  static deepClone(obj: any, cache: WeakMap<object, any> = new WeakMap()): any {
     if (obj === null || typeof obj !== 'object') return obj;
     if (obj instanceof Date) return new Date(obj);
     if (obj instanceof Array) return obj.map(item => RuntimeUtil.deepClone(item, cache));
@@ -1415,7 +1455,7 @@ export default class RuntimeUtil {
    * @param {...Object} sources - 源对象
    * @returns {Object} 合并后的对象
    */
-  static deepMerge(target, ...sources) {
+  static deepMerge(target: any, ...sources: any[]): any {
     if (!sources.length) return target;
 
     const source = sources.shift();
@@ -1439,7 +1479,7 @@ export default class RuntimeUtil {
    * @param {*} item - 要检查的值
    * @returns {boolean} 是否为普通对象
    */
-  static isObject(item) {
+  static isObject(item: any): boolean {
     return item && typeof item === 'object' && !Array.isArray(item);
   }
 
@@ -1451,7 +1491,7 @@ export default class RuntimeUtil {
    * @param {string|Array|Object} message - 要提取的消息
    * @returns {string} 提取的文本内容
    */
-  static extractTextContent(message) {
+  static extractTextContent(message: any): string {
     if (!message) return "";
 
     if (typeof message === "string") return message.trim();
@@ -1481,7 +1521,7 @@ export default class RuntimeUtil {
    * @param {string|Array} [description=['AgentRuntime 消息']] - 描述
    * @returns {Promise<boolean>} 成功状态
    */
-  static async makeChatRecord(e, messages, title, description = ["AgentRuntime 消息"]) {
+  static async makeChatRecord(e: any, messages: any, title: any, description: any = ["AgentRuntime 消息"]): Promise<any> {
     if (!e) return false;
 
     messages = Array.isArray(messages) ? messages : (messages ? [messages] : []);
@@ -1501,7 +1541,7 @@ export default class RuntimeUtil {
         
         // 格式化消息为转发消息格式（OneBot标准格式）
         const forwardMessages = messages
-          .map((msg, idx) => {
+          .map((msg: any, idx: number) => {
             const text = typeof msg === 'string' ? msg : (msg.message || msg.content || String(msg));
             if (!text || !text.trim()) return null;
             
@@ -1515,7 +1555,7 @@ export default class RuntimeUtil {
               }
             };
           })
-          .filter(msg => msg !== null && msg.data && msg.data.content && msg.data.content.length > 0);
+          .filter((msg: any) => msg !== null && msg.data && msg.data.content && msg.data.content.length > 0);
         
         if (forwardMessages.length === 0) {
           // 如果没有有效消息，降级为普通文本消息
@@ -1551,7 +1591,7 @@ export default class RuntimeUtil {
         const user_id = bot.uin || 0;
         const currentTime = Math.floor(Date.now() / 1000);
 
-        const formatMessages = messages.map((msg, idx) => ({
+        const formatMessages = messages.map((msg: any, idx: number) => ({
           message: msg,
           nickname,
           user_id,
@@ -1566,9 +1606,9 @@ export default class RuntimeUtil {
       } else {
         return await RuntimeUtil.makeMsg(e, messages, title, description);
       }
-    } catch (err) {
-      if (globalThis.logger?.error) {
-        globalThis.logger.error(["创建聊天记录错误", err.message]);
+    } catch (err: any) {
+      if (gLogger()?.error) {
+        gLogger().error(["创建聊天记录错误", err.message]);
       }
       try {
         const simpleMessage = typeof messages[0] === 'string' ? messages[0] : '[复杂消息]';
@@ -1588,7 +1628,7 @@ export default class RuntimeUtil {
    * @param {string} description - 消息描述
    * @returns {Promise<boolean>} 成功状态
    */
-  static async makeMsg(e, messages, title, description) {
+  static async makeMsg(e: any, messages: any, title: any, description?: any): Promise<boolean> {
     if (!e) return false;
 
     messages = Array.isArray(messages) ? messages : (messages ? [messages] : []);
@@ -1619,14 +1659,14 @@ export default class RuntimeUtil {
       }
 
       await e.reply(ngm);
-      if (globalThis.logger?.mark) {
-        globalThis.logger.mark(`『${title || '转发消息'}』已发送`);
+      if (gLogger()?.mark) {
+        gLogger().mark(`『${title || '转发消息'}』已发送`);
       }
       return true;
 
-    } catch (error) {
-      if (globalThis.logger?.error) {
-        globalThis.logger.error(["转发消息错误", error.message]);
+    } catch (error: any) {
+      if (gLogger()?.error) {
+        gLogger().error(["转发消息错误", error.message]);
       }
 
       try {
@@ -1645,6 +1685,6 @@ export default class RuntimeUtil {
 
 }
 
-export async function 制作聊天记录(e, messages, title, description) {
+export async function 制作聊天记录(e: any, messages: any, title: any, description?: any): Promise<any> {
   return RuntimeUtil.makeChatRecord(e, messages, title, description);
 }

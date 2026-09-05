@@ -5,20 +5,38 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { formatSkillsForPrompt, loadSkillsFromDir } from '@mariozechner/pi-coding-agent';
+import {
+  formatSkillsForPrompt,
+  loadSkillsFromDir,
+  type Skill,
+} from '@mariozechner/pi-coding-agent';
 import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
 import { resolveSkillLimits, resolveSkillRoots } from '#utils/skills/config.js';
 
-function resolveContainedSkillPath({ rootRealPath, candidatePath }) {
+type SkillLimits = {
+  maxCandidatesPerRoot: number;
+  maxSkillsLoadedPerSource: number;
+  maxSkillsInPrompt: number;
+  maxSkillsPromptChars: number;
+  maxSkillFileBytes: number;
+};
+
+function resolveContainedSkillPath({
+  rootRealPath,
+  candidatePath,
+}: {
+  rootRealPath: string;
+  candidatePath: string;
+}): string | null {
   const candidateRealPath = realpathSyncOrResolve(candidatePath);
   if (!isPathInside(rootRealPath, candidateRealPath)) return null;
   return candidateRealPath;
 }
 
-function listChildDirectories(dir) {
+function listChildDirectories(dir: string): string[] {
   try {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
-    const dirs = [];
+    const dirs: string[] = [];
     for (const entry of entries) {
       if (entry.name.startsWith('.')) continue;
       if (entry.name === 'node_modules') continue;
@@ -41,7 +59,10 @@ function listChildDirectories(dir) {
   }
 }
 
-function resolveNestedSkillsRoot(dir, opts = {}) {
+function resolveNestedSkillsRoot(
+  dir: string,
+  opts: { maxEntriesToScan?: number } = {},
+): { baseDir: string } {
   const nested = path.join(dir, 'skills');
   try {
     if (!fs.existsSync(nested) || !fs.statSync(nested).isDirectory()) {
@@ -64,16 +85,22 @@ function resolveNestedSkillsRoot(dir, opts = {}) {
   return { baseDir: dir };
 }
 
-function unwrapLoadedSkills(loaded) {
-  if (Array.isArray(loaded)) return loaded;
+function unwrapLoadedSkills(loaded: unknown): Skill[] {
+  if (Array.isArray(loaded)) return loaded as Skill[];
   if (loaded && typeof loaded === 'object' && 'skills' in loaded) {
-    const skills = loaded.skills;
-    if (Array.isArray(skills)) return skills;
+    const skills = (loaded as { skills: unknown }).skills;
+    if (Array.isArray(skills)) return skills as Skill[];
   }
   return [];
 }
 
-function filterLoadedSkillsInsideRoot({ skills, rootRealPath }) {
+function filterLoadedSkillsInsideRoot({
+  skills,
+  rootRealPath,
+}: {
+  skills: Skill[];
+  rootRealPath: string;
+}): Skill[] {
   return skills.filter((skill) => {
     const baseDirRealPath = resolveContainedSkillPath({
       rootRealPath,
@@ -91,10 +118,11 @@ function filterLoadedSkillsInsideRoot({ skills, rootRealPath }) {
 
 /**
  * OpenClaw loadSkillEntries → loadSkills 内层逻辑（单根目录）。
- * @param {{ dir: string, source: string }} params
- * @param {{ maxCandidatesPerRoot: number, maxSkillsLoadedPerSource: number, maxSkillFileBytes: number }} limits
  */
-function loadSkillsForOneRoot(params, limits) {
+function loadSkillsForOneRoot(
+  params: { dir: string; source: string },
+  limits: SkillLimits,
+): Skill[] {
   const rootDir = path.resolve(params.dir);
   const rootRealPath = realpathSyncOrResolve(rootDir);
   const resolved = resolveNestedSkillsRoot(params.dir, {
@@ -133,7 +161,7 @@ function loadSkillsForOneRoot(params, limits) {
   const maxCandidates = Math.max(0, limits.maxCandidatesPerRoot);
   const limitedChildren = childDirs.slice().sort().slice(0, maxCandidates);
 
-  const loadedSkills = [];
+  const loadedSkills: Skill[] = [];
   for (const name of limitedChildren) {
     const skillDir = path.join(baseDir, name);
     const skillDirRealPath = resolveContainedSkillPath({
@@ -176,7 +204,7 @@ function loadSkillsForOneRoot(params, limits) {
 }
 
 /** OpenClaw compactSkillPaths */
-function compactSkillPaths(skills) {
+function compactSkillPaths(skills: Skill[]): Skill[] {
   const home = os.homedir();
   if (!home) return skills;
   const prefix = home.endsWith(path.sep) ? home : home + path.sep;
@@ -186,7 +214,7 @@ function compactSkillPaths(skills) {
   }));
 }
 
-function escapeXml(str) {
+function escapeXml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -196,7 +224,7 @@ function escapeXml(str) {
 }
 
 /** OpenClaw formatSkillsCompact（模块内用，不对外导出） */
-function formatSkillsCompact(skills) {
+function formatSkillsCompact(skills: Skill[]): string {
   const visible = skills.filter((s) => !s.disableModelInvocation);
   if (visible.length === 0) return '';
   const lines = [
@@ -217,14 +245,17 @@ function formatSkillsCompact(skills) {
 }
 
 /** OpenClaw applySkillsPromptLimits */
-function applySkillsPromptLimits(skills, limits) {
+function applySkillsPromptLimits(
+  skills: Skill[],
+  limits: SkillLimits,
+): { skillsForPrompt: Skill[]; compact: boolean } {
   const byCount = skills.slice(0, Math.max(0, limits.maxSkillsInPrompt));
   let skillsForPrompt = byCount;
   let compact = false;
 
-  const fitsFull = (s) => formatSkillsForPrompt(s).length <= limits.maxSkillsPromptChars;
+  const fitsFull = (s: Skill[]) => formatSkillsForPrompt(s).length <= limits.maxSkillsPromptChars;
   const compactBudget = limits.maxSkillsPromptChars;
-  const fitsCompact = (s) => formatSkillsCompact(s).length <= compactBudget;
+  const fitsCompact = (s: Skill[]) => formatSkillsCompact(s).length <= compactBudget;
 
   if (!fitsFull(skillsForPrompt)) {
     if (fitsCompact(skillsForPrompt)) {
@@ -246,15 +277,18 @@ function applySkillsPromptLimits(skills, limits) {
 }
 
 /**
- * @param {string} workspaceRootResolved 已 realpath 的工作区根
- * @param {object} runtimeConfig agentWorkspace 中与 skills 相关字段
- * @returns {string} XML 技能目录或空串
+ * @param workspaceRootResolved 已 realpath 的工作区根
+ * @param runtimeConfig agentWorkspace 中与 skills 相关字段
+ * @returns XML 技能目录或空串
  */
-export function buildSkillsPromptFromWorkspace(workspaceRootResolved, runtimeConfig = {}) {
-  const limits = resolveSkillLimits(runtimeConfig);
-  const skillRoots = resolveSkillRoots(runtimeConfig);
+export function buildSkillsPromptFromWorkspace(
+  workspaceRootResolved: string,
+  runtimeConfig: Record<string, any> = {},
+): string {
+  const limits = resolveSkillLimits(runtimeConfig) as SkillLimits;
+  const skillRoots = resolveSkillRoots(runtimeConfig) as string[];
 
-  const merged = new Map();
+  const merged = new Map<string, Skill>();
   for (const rel of skillRoots) {
     const abs = path.isAbsolute(rel) ? path.normalize(rel) : path.join(workspaceRootResolved, rel);
     if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) continue;
@@ -273,7 +307,7 @@ export function buildSkillsPromptFromWorkspace(workspaceRootResolved, runtimeCon
   const totalSkills = resolvedSkills.length;
   const maxChars = limits.maxSkillsPromptChars;
 
-  const buildCombined = (subsetSkills, useCompact) => {
+  const buildCombined = (subsetSkills: Skill[], useCompact: boolean): string => {
     if (!Array.isArray(subsetSkills) || subsetSkills.length === 0) return '';
     const included = subsetSkills.length;
     const isTruncated = included < totalSkills;

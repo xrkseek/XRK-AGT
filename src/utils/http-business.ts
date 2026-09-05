@@ -1,19 +1,151 @@
 /**
  * HTTP业务层工具模块
  * 提供重定向、CDN、反向代理增强等功能的统一实现
- * 
+ *
  * @module http-business
  * @description 使用 Node.js 全局 URLPattern API，提供完整的 HTTP 业务层能力
  */
 
 import crypto from 'node:crypto';
 
+type ExpressLikeReq = {
+  url?: string;
+  protocol?: string;
+  ip?: string;
+  headers?: Record<string, string | string[] | undefined>;
+  connection?: { remoteAddress?: string };
+};
+
+type ExpressLikeRes = {
+  headersSent?: boolean;
+  redirect: (status: number, url: string) => unknown;
+  setHeader: (name: string, value: string) => unknown;
+};
+
+type RedirectRuleConfig = {
+  from: string;
+  to: string;
+  status?: number;
+  hostname?: string;
+  preserveQuery?: boolean;
+  preservePath?: boolean;
+  condition?: string;
+};
+
+type CompiledRedirectRule = {
+  pattern: URLPattern;
+  to: string;
+  status: number;
+  preserveQuery: boolean;
+  preservePath: boolean;
+  condition: ((req: ExpressLikeReq) => unknown) | null;
+  from?: string;
+};
+
+type RedirectManagerConfig = {
+  redirects?: RedirectRuleConfig[];
+};
+
+type CacheControlConfig = {
+  static?: number;
+  images?: number;
+  default?: number;
+};
+
+type CDNConfig = {
+  enabled?: boolean;
+  domain?: string;
+  staticPrefix?: string;
+  cacheControl?: CacheControlConfig;
+  https?: boolean;
+};
+
+type CDNManagerConfig = {
+  cdn?: CDNConfig;
+};
+
+type CDNInfo = {
+  type: string;
+  ip: string;
+  headers: Record<string, unknown>;
+};
+
+type UpstreamEntry = {
+  url: string;
+  weight: number;
+  healthy: boolean;
+  failCount: number;
+  connections: number;
+  responseTime: number;
+  lastCheck: number;
+  healthUrl: string;
+  [key: string]: unknown;
+};
+
+type UpstreamTarget =
+  | string
+  | {
+      url?: string;
+      weight?: number;
+      healthUrl?: string;
+      [key: string]: unknown;
+    };
+
+type DomainConfig = {
+  domain: string;
+  target?: string | UpstreamTarget[];
+  healthUrl?: string;
+};
+
+type HealthCheckConfig = {
+  enabled?: boolean;
+  interval?: number;
+  cacheTime?: number;
+  timeout?: number;
+  maxFailures?: number;
+};
+
+type ProxyConfig = {
+  domains?: DomainConfig[];
+  healthCheck?: HealthCheckConfig;
+};
+
+type ProxyManagerConfig = {
+  proxy?: ProxyConfig;
+};
+
+type UpstreamStat = {
+  requests: number;
+  failures: number;
+  totalResponseTime: number;
+  avgResponseTime: number;
+};
+
+type HealthCacheEntry = {
+  healthy: boolean;
+  timestamp: number;
+};
+
+type MapWithHelpers<K, V> = Map<K, V> & {
+  getOrInsert(key: K, defaultValue: V): V;
+  getOrInsertComputed(key: K, callbackfn: () => V): V;
+};
+
+type BufferWithToBase64 = Buffer & { toBase64(): string };
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err ?? '');
+}
+
 /**
  * 重定向管理器
  * 支持多种重定向类型：301(永久), 302(临时), 307(临时保持方法), 308(永久保持方法)
  */
 export class RedirectManager {
-  constructor(config = {}) {
+  rules: CompiledRedirectRule[] = [];
+  config: RedirectManagerConfig;
+
+  constructor(config: RedirectManagerConfig = {}) {
     this.rules = [];
     this.config = config;
     this._compileRules();
@@ -22,29 +154,29 @@ export class RedirectManager {
   /**
    * 编译重定向规则（URLPattern API）
    */
-  _compileRules() {
+  _compileRules(): void {
     const redirectConfig = this.config.redirects || [];
-    
+
     for (const rule of redirectConfig) {
       try {
         const pattern = new URLPattern({
           pathname: rule.from,
-          ...(rule.hostname && { hostname: rule.hostname })
+          ...(rule.hostname && { hostname: rule.hostname }),
         });
-        
+
         this.rules.push({
           pattern,
           to: rule.to,
           status: rule.status || 301,
           preserveQuery: rule.preserveQuery !== false,
           preservePath: rule.preservePath !== false,
-          condition: rule.condition ? new Function('req', 'return ' + rule.condition) : null
+          condition: rule.condition ? (new Function('req', 'return ' + rule.condition) as (req: ExpressLikeReq) => unknown) : null,
         });
       } catch (err) {
-        console.warn(`[重定向] 规则编译失败: ${rule.from} -> ${rule.to}`, err.message);
+        console.warn(`[重定向] 规则编译失败: ${rule.from} -> ${rule.to}`, errMessage(err));
       }
     }
-    
+
     this.rules.sort((a, b) => {
       const aSpecificity = this._getPatternSpecificity(a.pattern);
       const bSpecificity = this._getPatternSpecificity(b.pattern);
@@ -55,7 +187,7 @@ export class RedirectManager {
   /**
    * 获取模式的特异性（用于优先级排序）
    */
-  _getPatternSpecificity(pattern) {
+  _getPatternSpecificity(pattern: URLPattern): number {
     // 简单实现：路径越具体（越少通配符），优先级越高
     const pathname = pattern.pathname || '';
     const wildcards = (pathname.match(/\*/g) || []).length;
@@ -64,15 +196,13 @@ export class RedirectManager {
 
   /**
    * 检查并执行重定向
-   * @param {Object} req - Express请求对象
-   * @param {Object} res - Express响应对象
-   * @returns {boolean} 是否执行了重定向
+   * @returns 是否执行了重定向
    */
-  check(req, res) {
+  check(req: ExpressLikeReq, res: ExpressLikeRes): boolean {
     if (res.headersSent) return false;
 
-    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    
+    const url = new URL(req.url as string, `http://${(req.headers as Record<string, string | string[] | undefined>).host || 'localhost'}`);
+
     for (const rule of this.rules) {
       try {
         if (rule.condition && !rule.condition(req)) {
@@ -81,20 +211,20 @@ export class RedirectManager {
 
         const match = rule.pattern.test({
           pathname: url.pathname,
-          hostname: url.hostname
+          hostname: url.hostname,
         });
 
         if (!match) continue;
 
         let targetUrl = rule.to;
-        
+
         if (targetUrl.includes('$')) {
           targetUrl = url.pathname.replace(rule.pattern.pathname, targetUrl);
         }
 
         if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
           const protocol = req.protocol || 'http';
-          const host = req.headers.host || 'localhost';
+          const host = (req.headers as Record<string, string | string[] | undefined>).host || 'localhost';
           targetUrl = `${protocol}://${host}${targetUrl.startsWith('/') ? '' : '/'}${targetUrl}`;
         }
 
@@ -109,7 +239,7 @@ export class RedirectManager {
         res.redirect(rule.status, targetUrl);
         return true;
       } catch (err) {
-        console.warn(`[重定向] 执行失败: ${rule.from} -> ${rule.to}`, err.message);
+        console.warn(`[重定向] 执行失败: ${rule.from} -> ${rule.to}`, errMessage(err));
       }
     }
 
@@ -123,13 +253,20 @@ export class RedirectManager {
  * 支持主流CDN：Cloudflare、阿里云CDN、腾讯云CDN、AWS CloudFront等
  */
 export class CDNManager {
-  constructor(config = {}) {
+  config: CDNConfig;
+  enabled: boolean;
+  cdnDomain: string;
+  staticPrefix: string;
+  cacheControl: CacheControlConfig;
+  cdnPatterns: Record<string, string[]>;
+
+  constructor(config: CDNManagerConfig = {}) {
     this.config = config.cdn || {};
     this.enabled = this.config.enabled === true;
     this.cdnDomain = this.config.domain || '';
     this.staticPrefix = this.config.staticPrefix || '/static';
     this.cacheControl = this.config.cacheControl || {};
-    
+
     // CDN识别模式（主流CDN头部）
     this.cdnPatterns = {
       cloudflare: ['cf-connecting-ip', 'cf-ray', 'cf-visitor', 'cf-ipcountry'],
@@ -139,24 +276,23 @@ export class CDNManager {
       baidu: ['x-bce-request-id', 'x-bce-date'],
       qiniu: ['x-qiniu-request-id'],
       ucloud: ['x-ucloud-request-id'],
-      general: ['x-cdn-request', 'x-forwarded-for', 'x-real-ip', 'x-forwarded-proto']
+      general: ['x-cdn-request', 'x-forwarded-for', 'x-real-ip', 'x-forwarded-proto'],
     };
   }
 
   /**
    * 检查是否为CDN回源请求
-   * @param {Object} req - Express请求对象
-   * @returns {Object|null} CDN信息对象，包含类型和IP
+   * @returns CDN信息对象，包含类型和IP
    */
-  isCDNRequest(req) {
+  isCDNRequest(req: ExpressLikeReq): CDNInfo | null {
     if (!this.enabled) return null;
-    
+
     const headers = req.headers || {};
-    const lowerHeaders = {};
-    Object.keys(headers).forEach(k => {
+    const lowerHeaders: Record<string, unknown> = {};
+    Object.keys(headers).forEach((k) => {
       lowerHeaders[k.toLowerCase()] = headers[k];
     });
-    
+
     // 检测CDN类型
     for (const [cdnType, patterns] of Object.entries(this.cdnPatterns)) {
       for (const pattern of patterns) {
@@ -165,28 +301,25 @@ export class CDNManager {
           return {
             type: cdnType,
             ip: clientIP,
-            headers: lowerHeaders
+            headers: lowerHeaders,
           };
         }
       }
     }
-    
+
     return null;
   }
 
   /**
    * 提取真实客户端IP（考虑CDN代理）
-   * @param {Object} req - Express请求对象
-   * @param {string} cdnType - CDN类型
-   * @returns {string} 客户端IP
    */
-  _extractClientIP(req, cdnType) {
+  _extractClientIP(req: ExpressLikeReq, cdnType: string): string {
     const headers = req.headers || {};
-    const lowerHeaders = {};
-    Object.keys(headers).forEach(k => {
+    const lowerHeaders: Record<string, any> = {};
+    Object.keys(headers).forEach((k) => {
       lowerHeaders[k.toLowerCase()] = headers[k];
     });
-    
+
     // 根据CDN类型提取IP
     switch (cdnType) {
       case 'cloudflare':
@@ -197,33 +330,31 @@ export class CDNManager {
         return lowerHeaders['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
       case 'aws':
         return lowerHeaders['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
-      default:
+      default: {
         // 通用提取：优先使用X-Forwarded-For，取第一个IP
         const forwardedFor = lowerHeaders['x-forwarded-for'];
         if (forwardedFor) {
           return forwardedFor.split(',')[0].trim();
         }
         return lowerHeaders['x-real-ip'] || req.ip || req.connection?.remoteAddress || 'unknown';
+      }
     }
   }
 
   /**
    * 设置CDN相关响应头
-   * @param {Object} res - Express响应对象
-   * @param {string} filePath - 文件路径
-   * @param {Object} req - Express请求对象（可选，用于CDN类型检测）
    */
-  setCDNHeaders(res, filePath, req = null) {
+  setCDNHeaders(res: ExpressLikeRes, filePath: string, req: ExpressLikeReq | null = null): void {
     if (!this.enabled || res.headersSent) return;
 
     const ext = this._getFileExtension(filePath);
     const cacheMaxAge = this._getCacheMaxAge(ext);
-    
+
     // 标准缓存控制头
     if (cacheMaxAge > 0) {
       const cacheControl = this._buildCacheControl(ext, cacheMaxAge);
       res.setHeader('Cache-Control', cacheControl);
-      
+
       // CDN特定缓存控制（部分CDN支持）
       if (req) {
         const cdnInfo = this.isCDNRequest(req);
@@ -231,7 +362,7 @@ export class CDNManager {
           this._setCDNSpecificHeaders(res, cdnInfo.type, cacheMaxAge);
         }
       }
-      
+
       // ETag支持（用于缓存验证）
       res.setHeader('ETag', this._generateETag(filePath));
     }
@@ -240,7 +371,7 @@ export class CDNManager {
     if (this.cdnDomain) {
       res.setHeader('X-CDN-Domain', this.cdnDomain);
     }
-    
+
     // 预加载提示（H2 Server Push）
     if (this._isCriticalAsset(filePath)) {
       res.setHeader('Link', `<${filePath}>; rel=preload; as=${this._getAssetType(ext)}`);
@@ -249,35 +380,29 @@ export class CDNManager {
 
   /**
    * 构建Cache-Control头
-   * @param {string} ext - 文件扩展名
-   * @param {number} maxAge - 最大缓存时间（秒）
-   * @returns {string} Cache-Control值
    */
-  _buildCacheControl(ext, maxAge) {
+  _buildCacheControl(ext: string, maxAge: number): string {
     const directives = ['public'];
-    
+
     // 静态资源使用immutable（浏览器不会重新验证）
     if (['css', 'js', 'woff', 'woff2', 'ttf', 'otf', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico'].includes(ext)) {
       directives.push('immutable');
     }
-    
+
     directives.push(`max-age=${maxAge}`);
-    
+
     // 添加stale-while-revalidate（允许在重新验证时使用过期缓存）
     if (maxAge > 3600) {
       directives.push(`stale-while-revalidate=${Math.min(maxAge / 2, 86400)}`);
     }
-    
+
     return directives.join(', ');
   }
 
   /**
    * 设置CDN特定响应头
-   * @param {Object} res - Express响应对象
-   * @param {string} cdnType - CDN类型
-   * @param {number} maxAge - 缓存时间
    */
-  _setCDNSpecificHeaders(res, cdnType, maxAge) {
+  _setCDNSpecificHeaders(res: ExpressLikeRes, cdnType: string, maxAge: number): void {
     switch (cdnType) {
       case 'cloudflare':
         // Cloudflare支持CDN-Cache-Control
@@ -296,31 +421,25 @@ export class CDNManager {
 
   /**
    * 生成ETag（简单实现）
-   * @param {string} filePath - 文件路径
-   * @returns {string} ETag值
    */
-  _generateETag(filePath) {
+  _generateETag(filePath: string): string {
     // 简单实现：基于文件路径和修改时间
     // 实际应用中可以使用文件hash
-    return `"${Buffer.from(filePath).toBase64().slice(0, 16)}"`;
+    return `"${(Buffer.from(filePath) as BufferWithToBase64).toBase64().slice(0, 16)}"`;
   }
 
   /**
    * 判断是否为关键资源（用于H2 Server Push）
-   * @param {string} filePath - 文件路径
-   * @returns {boolean}
    */
-  _isCriticalAsset(filePath) {
+  _isCriticalAsset(filePath: string): boolean {
     const criticalExts = ['.css', '.js', '.woff', '.woff2'];
-    return criticalExts.some(ext => filePath.toLowerCase().endsWith(ext));
+    return criticalExts.some((ext) => filePath.toLowerCase().endsWith(ext));
   }
 
   /**
    * 获取资源类型（用于H2 Server Push）
-   * @param {string} ext - 文件扩展名
-   * @returns {string} 资源类型
    */
-  _getAssetType(ext) {
+  _getAssetType(ext: string): string {
     if (['css'].includes(ext)) return 'style';
     if (['js'].includes(ext)) return 'script';
     if (['woff', 'woff2', 'ttf', 'otf'].includes(ext)) return 'font';
@@ -330,10 +449,8 @@ export class CDNManager {
 
   /**
    * 获取文件的CDN URL
-   * @param {string} filePath - 文件路径
-   * @returns {string} CDN URL
    */
-  getCDNUrl(filePath) {
+  getCDNUrl(filePath: string): string {
     if (!this.enabled || !this.cdnDomain) {
       return filePath;
     }
@@ -349,7 +466,7 @@ export class CDNManager {
   /**
    * 获取文件扩展名
    */
-  _getFileExtension(filePath) {
+  _getFileExtension(filePath: string): string {
     const match = filePath.match(/\.([^.]+)$/);
     return match ? match[1].toLowerCase() : '';
   }
@@ -357,25 +474,25 @@ export class CDNManager {
   /**
    * 判断是否为静态资源
    */
-  _isStaticAsset(filePath) {
+  _isStaticAsset(filePath: string): boolean {
     const staticExts = ['.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.woff', '.woff2', '.ttf', '.otf'];
-    return staticExts.some(ext => filePath.toLowerCase().endsWith(ext));
+    return staticExts.some((ext) => filePath.toLowerCase().endsWith(ext));
   }
 
   /**
    * 获取缓存时间（秒）
    */
-  _getCacheMaxAge(ext) {
+  _getCacheMaxAge(ext: string): number {
     const config = this.cacheControl;
-    
+
     if (['css', 'js', 'woff', 'woff2', 'ttf', 'otf'].includes(ext)) {
       return config.static || 31536000; // 1年
     }
-    
+
     if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'avif', 'ico'].includes(ext)) {
       return config.images || 604800; // 7天
     }
-    
+
     return config.default || 3600; // 1小时
   }
 }
@@ -386,35 +503,68 @@ export class CDNManager {
  * 支持多种负载均衡算法：轮询、加权轮询、最少连接、IP Hash、一致性哈希
  */
 export class ProxyManager {
-  config = {};
-  upstreams = new Map();
-  _roundRobinIndex = new Map();
-  _connectionCounts = new Map();
-  _responseTimes = new Map();
-  _healthCheckCache = new Map();
-  _stats = {
+  config: ProxyConfig = {};
+  upstreams = new Map<string, UpstreamEntry[]>();
+  _roundRobinIndex = new Map<string, number>();
+  _connectionCounts = new Map<string, number>();
+  _responseTimes = new Map<string, number>();
+  _healthCheckCache = new Map<string, HealthCacheEntry>();
+  _stats: {
+    totalRequests: number;
+    totalFailures: number;
+    upstreamStats: Map<string, UpstreamStat>;
+  } = {
     totalRequests: 0,
     totalFailures: 0,
     upstreamStats: new Map(),
   };
 
-  constructor(config = {}) {
+  constructor(config: ProxyManagerConfig = {}) {
     this.config = config.proxy || {};
     this._initUpstreams();
   }
 
   /**
    * 获取统计信息（企业级监控）
-   * @returns {Object} 统计信息
    */
-  getStats() {
+  getStats(): {
+    totalRequests: number;
+    totalFailures: number;
+    successRate: string;
+    upstreams: Array<{
+      domain: string;
+      url: string;
+      healthy: boolean;
+      connections: number;
+      responseTime: number;
+      failCount: number;
+      lastCheck: number;
+      requests: number;
+      failures: number;
+      successRate: string;
+      avgResponseTime: string;
+    }>;
+  } {
     const stats = {
       totalRequests: this._stats.totalRequests,
       totalFailures: this._stats.totalFailures,
-      successRate: this._stats.totalRequests > 0 
-        ? ((this._stats.totalRequests - this._stats.totalFailures) / this._stats.totalRequests * 100).toFixed(2) + '%'
-        : '0%',
-      upstreams: []
+      successRate:
+        this._stats.totalRequests > 0
+          ? (((this._stats.totalRequests - this._stats.totalFailures) / this._stats.totalRequests) * 100).toFixed(2) + '%'
+          : '0%',
+      upstreams: [] as Array<{
+        domain: string;
+        url: string;
+        healthy: boolean;
+        connections: number;
+        responseTime: number;
+        failCount: number;
+        lastCheck: number;
+        requests: number;
+        failures: number;
+        successRate: string;
+        avgResponseTime: string;
+      }>,
     };
 
     for (const [domain, upstreams] of this.upstreams.entries()) {
@@ -422,9 +572,9 @@ export class ProxyManager {
         const upstreamStat = this._stats.upstreamStats.get(`${domain}-${upstream.url}`) || {
           requests: 0,
           failures: 0,
-          avgResponseTime: 0
+          avgResponseTime: 0,
         };
-        
+
         stats.upstreams.push({
           domain,
           url: upstream.url,
@@ -435,10 +585,11 @@ export class ProxyManager {
           lastCheck: upstream.lastCheck || 0,
           requests: upstreamStat.requests,
           failures: upstreamStat.failures,
-          successRate: upstreamStat.requests > 0
-            ? ((upstreamStat.requests - upstreamStat.failures) / upstreamStat.requests * 100).toFixed(2) + '%'
-            : '0%',
-          avgResponseTime: upstreamStat.avgResponseTime.toFixed(2) + 'ms'
+          successRate:
+            upstreamStat.requests > 0
+              ? (((upstreamStat.requests - upstreamStat.failures) / upstreamStat.requests) * 100).toFixed(2) + '%'
+              : '0%',
+          avgResponseTime: upstreamStat.avgResponseTime.toFixed(2) + 'ms',
         });
       }
     }
@@ -448,23 +599,19 @@ export class ProxyManager {
 
   /**
    * 记录请求统计
-   * @param {string} domain - 域名
-   * @param {string} upstreamUrl - 上游服务器URL
-   * @param {boolean} success - 是否成功
-   * @param {number} responseTime - 响应时间（毫秒）
    */
-  recordRequest(domain, upstreamUrl, success, responseTime = 0) {
+  recordRequest(domain: string, upstreamUrl: string, success: boolean, responseTime = 0): void {
     this._stats.totalRequests++;
     if (!success) {
       this._stats.totalFailures++;
     }
 
     const key = `${domain}-${upstreamUrl}`;
-    const stat = this._stats.upstreamStats.getOrInsertComputed(key, () => ({
+    const stat = (this._stats.upstreamStats as MapWithHelpers<string, UpstreamStat>).getOrInsertComputed(key, () => ({
       requests: 0,
       failures: 0,
       totalResponseTime: 0,
-      avgResponseTime: 0
+      avgResponseTime: 0,
     }));
 
     stat.requests++;
@@ -480,33 +627,38 @@ export class ProxyManager {
   /**
    * 初始化上游服务器池
    */
-  _initUpstreams() {
+  _initUpstreams(): void {
     const domains = this.config.domains || [];
-    
+
     for (const domainConfig of domains) {
       if (!domainConfig.target || typeof domainConfig.target === 'string') {
-        this.upstreams.set(domainConfig.domain, [{
-          url: domainConfig.target,
-          weight: 1,
-          healthy: true,
-          failCount: 0,
-          connections: 0,
-          responseTime: 0,
-          lastCheck: Date.now(),
-          healthUrl: domainConfig.healthUrl || `${domainConfig.target}/health`
-        }]);
+        this.upstreams.set(domainConfig.domain, [
+          {
+            url: domainConfig.target as string,
+            weight: 1,
+            healthy: true,
+            failCount: 0,
+            connections: 0,
+            responseTime: 0,
+            lastCheck: Date.now(),
+            healthUrl: domainConfig.healthUrl || `${domainConfig.target}/health`,
+          },
+        ]);
       } else if (Array.isArray(domainConfig.target)) {
-        this.upstreams.set(domainConfig.domain, domainConfig.target.map(upstream => ({
-          url: typeof upstream === 'string' ? upstream : upstream.url,
-          weight: upstream.weight || 1,
-          healthy: true,
-          failCount: 0,
-          connections: 0,
-          responseTime: 0,
-          lastCheck: Date.now(),
-          healthUrl: upstream.healthUrl || `${typeof upstream === 'string' ? upstream : upstream.url}/health`,
-          ...upstream
-        })));
+        this.upstreams.set(
+          domainConfig.domain,
+          domainConfig.target.map((upstream: any) => ({
+            url: typeof upstream === 'string' ? upstream : upstream.url,
+            weight: upstream.weight || 1,
+            healthy: true,
+            failCount: 0,
+            connections: 0,
+            responseTime: 0,
+            lastCheck: Date.now(),
+            healthUrl: upstream.healthUrl || `${typeof upstream === 'string' ? upstream : upstream.url}/health`,
+            ...upstream,
+          })),
+        );
       }
     }
 
@@ -518,8 +670,8 @@ export class ProxyManager {
   /**
    * 启动健康检查
    */
-  _startHealthChecks() {
-    const interval = this.config.healthCheck.interval || 30000;
+  _startHealthChecks(): void {
+    const interval = this.config.healthCheck?.interval || 30000;
     setInterval(() => {
       this._performHealthChecks();
     }, interval);
@@ -528,28 +680,26 @@ export class ProxyManager {
   /**
    * 执行健康检查（并行检查所有上游服务器）
    */
-  async _performHealthChecks() {
-    const checkPromises = [];
-    
+  async _performHealthChecks(): Promise<void> {
+    const checkPromises: Promise<void>[] = [];
+
     for (const [domain, upstreams] of this.upstreams.entries()) {
       for (const upstream of upstreams) {
         checkPromises.push(this._checkUpstreamHealth(domain, upstream));
       }
     }
-    
+
     // 并行执行所有健康检查
     await Promise.allSettled(checkPromises);
   }
 
   /**
    * 检查单个上游服务器健康状态
-   * @param {string} domain - 域名
-   * @param {Object} upstream - 上游服务器配置
    */
-  async _checkUpstreamHealth(domain, upstream) {
+  async _checkUpstreamHealth(domain: string, upstream: UpstreamEntry): Promise<void> {
     const cacheKey = `${domain}-${upstream.url}`;
     const cacheTime = this.config.healthCheck?.cacheTime || 5000; // 默认5秒缓存
-    
+
     // 检查缓存
     const cached = this._healthCheckCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < cacheTime) {
@@ -557,9 +707,9 @@ export class ProxyManager {
       upstream.lastCheck = cached.timestamp;
       return;
     }
-    
+
     const startTime = Date.now();
-    
+
     try {
       const healthUrl = upstream.healthUrl || `${upstream.url}/health`;
       const timeout = this.config.healthCheck?.timeout || 5000;
@@ -568,47 +718,45 @@ export class ProxyManager {
         signal: AbortSignal.timeout(timeout),
         method: 'GET',
         headers: {
-          'User-Agent': 'XRK-AGT-HealthCheck/1.0'
-        }
+          'User-Agent': 'XRK-AGT-HealthCheck/1.0',
+        },
       });
-      
+
       const responseTime = Date.now() - startTime;
       upstream.responseTime = responseTime;
       upstream.healthy = response.ok;
       upstream.failCount = 0;
       upstream.lastCheck = Date.now();
-      
+
       // 更新缓存
       this._healthCheckCache.set(cacheKey, {
         healthy: upstream.healthy,
-        timestamp: upstream.lastCheck
+        timestamp: upstream.lastCheck,
       });
     } catch {
       upstream.failCount++;
       upstream.healthy = upstream.failCount < (this.config.healthCheck?.maxFailures || 3);
       upstream.lastCheck = Date.now();
       upstream.responseTime = Date.now() - startTime;
-      
+
       // 更新缓存
       this._healthCheckCache.set(cacheKey, {
         healthy: upstream.healthy,
-        timestamp: upstream.lastCheck
+        timestamp: upstream.lastCheck,
       });
     }
   }
 
   /**
    * 选择上游服务器（负载均衡）
-   * @param {string} domain - 域名
-   * @param {string} algorithm - 算法: 'round-robin', 'weighted', 'least-connections', 'ip-hash', 'consistent-hash', 'least-response-time'
-   * @param {string} clientIP - 客户端IP（用于IP Hash算法）
-   * @returns {Object|null} 选中的上游服务器配置
+   * @param algorithm - 算法: 'round-robin', 'weighted', 'least-connections', 'ip-hash', 'consistent-hash', 'least-response-time'
+   * @returns 选中的上游服务器配置
    */
-  selectUpstream(domain, algorithm = 'round-robin', clientIP = null) {
+  selectUpstream(domain: string, algorithm = 'round-robin', clientIP: string | null = null): UpstreamEntry | null {
     const upstreams = this.upstreams.get(domain);
     if (!upstreams || upstreams.length === 0) return null;
 
-    const healthyUpstreams = upstreams.filter(u => u.healthy);
+    const healthyUpstreams = upstreams.filter((u) => u.healthy);
     if (healthyUpstreams.length === 0) {
       // 所有服务器都不健康时，仍返回第一个（确保服务可用）
       return upstreams[0];
@@ -617,19 +765,19 @@ export class ProxyManager {
     switch (algorithm) {
       case 'weighted':
         return this._selectWeighted(healthyUpstreams);
-      
+
       case 'least-connections':
         return this._selectLeastConnections(healthyUpstreams);
-      
+
       case 'ip-hash':
         return this._selectIPHash(healthyUpstreams, clientIP || '0.0.0.0');
-      
+
       case 'consistent-hash':
         return this._selectConsistentHash(healthyUpstreams, clientIP || '0.0.0.0');
-      
+
       case 'least-response-time':
         return this._selectLeastResponseTime(healthyUpstreams);
-      
+
       case 'round-robin':
       default:
         return this._selectRoundRobin(healthyUpstreams, domain);
@@ -638,14 +786,12 @@ export class ProxyManager {
 
   /**
    * 增加连接数
-   * @param {string} domain - 域名
-   * @param {string} upstreamUrl - 上游服务器URL
    */
-  incrementConnections(domain, upstreamUrl) {
+  incrementConnections(domain: string, upstreamUrl: string): void {
     const upstreams = this.upstreams.get(domain);
     if (!upstreams) return;
-    
-    const upstream = upstreams.find(u => u.url === upstreamUrl);
+
+    const upstream = upstreams.find((u) => u.url === upstreamUrl);
     if (upstream) {
       upstream.connections = (upstream.connections || 0) + 1;
     }
@@ -653,14 +799,12 @@ export class ProxyManager {
 
   /**
    * 减少连接数
-   * @param {string} domain - 域名
-   * @param {string} upstreamUrl - 上游服务器URL
    */
-  decrementConnections(domain, upstreamUrl) {
+  decrementConnections(domain: string, upstreamUrl: string): void {
     const upstreams = this.upstreams.get(domain);
     if (!upstreams) return;
-    
-    const upstream = upstreams.find(u => u.url === upstreamUrl);
+
+    const upstream = upstreams.find((u) => u.url === upstreamUrl);
     if (upstream && upstream.connections > 0) {
       upstream.connections--;
     }
@@ -669,24 +813,24 @@ export class ProxyManager {
   /**
    * 加权轮询
    */
-  _selectWeighted(upstreams) {
+  _selectWeighted(upstreams: UpstreamEntry[]): UpstreamEntry {
     const totalWeight = upstreams.reduce((sum, u) => sum + u.weight, 0);
     let random = Math.random() * totalWeight;
-    
+
     for (const upstream of upstreams) {
       random -= upstream.weight;
       if (random <= 0) {
         return upstream;
       }
     }
-    
+
     return upstreams[0];
   }
 
   /**
    * 最少连接
    */
-  _selectLeastConnections(upstreams) {
+  _selectLeastConnections(upstreams: UpstreamEntry[]): UpstreamEntry {
     return upstreams.reduce((min, u) => {
       const connections = u.connections || 0;
       const minConnections = min.connections || 0;
@@ -697,12 +841,12 @@ export class ProxyManager {
   /**
    * 轮询
    */
-  _selectRoundRobin(upstreams, domain) {
+  _selectRoundRobin(upstreams: UpstreamEntry[], domain: string): UpstreamEntry {
     const key = `round-robin-${domain}`;
-    const currentIndex = this._roundRobinIndex.getOrInsert(key, 0);
+    const currentIndex = (this._roundRobinIndex as MapWithHelpers<string, number>).getOrInsert(key, 0);
     const selected = upstreams[currentIndex % upstreams.length];
     this._roundRobinIndex.set(key, currentIndex + 1);
-    
+
     return selected;
   }
 
@@ -710,14 +854,14 @@ export class ProxyManager {
    * IP Hash算法（基于客户端IP的哈希）
    * 相同IP总是路由到同一服务器，适合会话保持
    */
-  _selectIPHash(upstreams, clientIP) {
+  _selectIPHash(upstreams: UpstreamEntry[], clientIP: string): UpstreamEntry {
     // 简单哈希函数
     let hash = 0;
     for (let i = 0; i < clientIP.length; i++) {
-      hash = ((hash << 5) - hash) + clientIP.charCodeAt(i);
+      hash = (hash << 5) - hash + clientIP.charCodeAt(i);
       hash = hash & hash; // 转换为32位整数
     }
-    
+
     const index = Math.abs(hash) % upstreams.length;
     return upstreams[index];
   }
@@ -726,11 +870,11 @@ export class ProxyManager {
    * 一致性哈希算法（简化实现）
    * 当服务器列表变化时，最小化重新路由
    */
-  _selectConsistentHash(upstreams, clientIP) {
+  _selectConsistentHash(upstreams: UpstreamEntry[], clientIP: string): UpstreamEntry {
     // 简化的一致性哈希：使用MD5哈希
     const hash = crypto.createHash('md5').update(clientIP).digest('hex');
     const hashInt = parseInt(hash.slice(0, 8), 16);
-    
+
     const index = hashInt % upstreams.length;
     return upstreams[index];
   }
@@ -739,7 +883,7 @@ export class ProxyManager {
    * 最少响应时间算法
    * 选择响应时间最短的服务器
    */
-  _selectLeastResponseTime(upstreams) {
+  _selectLeastResponseTime(upstreams: UpstreamEntry[]): UpstreamEntry {
     return upstreams.reduce((min, u) => {
       const responseTime = u.responseTime || Infinity;
       const minResponseTime = min.responseTime || Infinity;
@@ -749,22 +893,20 @@ export class ProxyManager {
 
   /**
    * 标记上游服务器失败
-   * @param {string} domain - 域名
-   * @param {string} upstreamUrl - 上游服务器URL
    */
-  markUpstreamFailure(domain, upstreamUrl) {
+  markUpstreamFailure(domain: string, upstreamUrl: string): void {
     const upstreams = this.upstreams.get(domain);
     if (!upstreams) return;
 
-    const upstream = upstreams.find(u => u.url === upstreamUrl);
+    const upstream = upstreams.find((u) => u.url === upstreamUrl);
     if (upstream) {
       upstream.failCount++;
       const maxFailures = this.config.healthCheck?.maxFailures || 3;
       upstream.healthy = upstream.failCount < maxFailures;
-      
+
       // 记录失败统计
       this.recordRequest(domain, upstreamUrl, false);
-      
+
       // 如果标记为不健康，记录警告
       if (!upstream.healthy) {
         console.warn(`[ProxyManager] 上游服务器标记为不健康: ${domain} -> ${upstreamUrl} (失败次数: ${upstream.failCount})`);
@@ -774,19 +916,16 @@ export class ProxyManager {
 
   /**
    * 标记上游服务器成功
-   * @param {string} domain - 域名
-   * @param {string} upstreamUrl - 上游服务器URL
-   * @param {number} responseTime - 响应时间（毫秒）
    */
-  markUpstreamSuccess(domain, upstreamUrl, responseTime = 0) {
+  markUpstreamSuccess(domain: string, upstreamUrl: string, responseTime = 0): void {
     const upstreams = this.upstreams.get(domain);
     if (!upstreams) return;
 
-    const upstream = upstreams.find(u => u.url === upstreamUrl);
+    const upstream = upstreams.find((u) => u.url === upstreamUrl);
     if (upstream) {
       // 记录成功统计
       this.recordRequest(domain, upstreamUrl, true, responseTime);
-      
+
       // 如果之前不健康，现在恢复健康
       if (!upstream.healthy && upstream.failCount > 0) {
         upstream.failCount = 0;
@@ -797,12 +936,19 @@ export class ProxyManager {
   }
 }
 
+type HTTPBusinessConfig = RedirectManagerConfig & CDNManagerConfig & ProxyManagerConfig;
+
 /**
  * HTTP业务层工具类
  * 统一管理重定向、CDN、反向代理等功能
  */
 export class HTTPBusinessLayer {
-  constructor(config = {}) {
+  config: HTTPBusinessConfig;
+  redirectManager: RedirectManager;
+  cdnManager: CDNManager;
+  proxyManager: ProxyManager;
+
+  constructor(config: HTTPBusinessConfig = {}) {
     this.config = config;
     this.redirectManager = new RedirectManager(config);
     this.cdnManager = new CDNManager(config);
@@ -812,14 +958,14 @@ export class HTTPBusinessLayer {
   /**
    * 处理重定向
    */
-  handleRedirect(req, res) {
+  handleRedirect(req: ExpressLikeReq, res: ExpressLikeRes): boolean {
     return this.redirectManager.check(req, res);
   }
 
   /**
    * 处理CDN相关逻辑
    */
-  handleCDN(req, res, filePath) {
+  handleCDN(req: ExpressLikeReq, res: ExpressLikeRes, filePath: string): string {
     this.cdnManager.setCDNHeaders(res, filePath);
     return this.cdnManager.getCDNUrl(filePath);
   }
@@ -827,17 +973,16 @@ export class HTTPBusinessLayer {
   /**
    * 选择代理上游
    */
-  selectProxyUpstream(domain, algorithm) {
+  selectProxyUpstream(domain: string, algorithm?: string): UpstreamEntry | null {
     return this.proxyManager.selectUpstream(domain, algorithm);
   }
 
   /**
    * 标记代理失败
    */
-  markProxyFailure(domain, upstreamUrl) {
+  markProxyFailure(domain: string, upstreamUrl: string): void {
     this.proxyManager.markUpstreamFailure(domain, upstreamUrl);
   }
 }
 
 export default HTTPBusinessLayer;
-

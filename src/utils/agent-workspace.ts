@@ -12,7 +12,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
 import { realpathSyncOrResolve } from '#utils/path-guards.js';
-import { readTextFileUnderWorkspaceRoot } from '#utils/safe-workspace-read.js';
+import {
+  readTextFileUnderWorkspaceRoot,
+  type WorkspaceReadResult,
+} from '#utils/safe-workspace-read.js';
 import { buildSkillsPromptFromWorkspace } from '#utils/agent-workspace-skills.js';
 import { DEFAULT_SKILL_LIMITS } from '#utils/skills/defaults.js';
 import {
@@ -35,33 +38,103 @@ import {
   resolveSkillRootAbsList,
 } from '#utils/agent-workspace-paths.js';
 
-/** 工作区优先，再项目根 agents/ */
-const workspaceFileCache = new Map();
+type CacheEntry = { identity: string; content: string };
 
-function formatPermissionHints(permissions) {
+/** agentWorkspace 配置（预算/开关/技能根）；未知字段透传给 skills 等下游 */
+type AgentWorkspaceCfg = {
+  enabled?: boolean;
+  root?: string;
+  workflows?: string[] | null;
+  includeRules?: boolean;
+  includeAgentMd?: boolean;
+  includeSubagents?: boolean;
+  includeMicroagents?: boolean;
+  includeDiagnostics?: boolean;
+  maxTotalChars?: number;
+  maxRulesChars?: number;
+  maxAgentMdChars?: number;
+  maxSubagentsChars?: number;
+  maxMicroagentsChars?: number;
+  maxMicroagents?: number;
+  maxDiagnosticsChars?: number;
+  maxCandidatesPerRoot?: number;
+  maxSkillsLoadedPerSource?: number;
+  maxSkillsInPrompt?: number;
+  maxSkillsPromptChars?: number;
+  maxSkillFileBytes?: number;
+  customSkillRoots?: unknown[];
+  contextFiles?: unknown[];
+  [key: string]: unknown;
+};
+
+type AgentCatalogItem = {
+  name?: string;
+  id?: string;
+  mode?: string;
+  description?: string;
+  prompt?: string;
+  instructions?: string;
+  when?: unknown;
+  skills?: unknown;
+  model?: unknown;
+  permissions?: unknown;
+  disable?: boolean;
+  disabled?: boolean;
+  [key: string]: unknown;
+};
+
+type BuildWorkspaceOpts = {
+  userText?: string;
+  [key: string]: unknown;
+};
+
+type ChatMessage = {
+  role?: string;
+  content?: unknown;
+  [key: string]: unknown;
+};
+
+type ContextSource = {
+  key: string;
+  fingerprint: string;
+  text: string;
+};
+
+type ReadCachedFn = (
+  rootResolved: string,
+  absolutePath: string,
+  maxBytes: number,
+) => WorkspaceReadResult;
+
+type PushProseFn = (title: string, body: string | undefined) => void;
+
+/** 工作区优先，再项目根 agents/ */
+const workspaceFileCache = new Map<string, CacheEntry>();
+
+function formatPermissionHints(permissions: unknown): string {
   if (!permissions || typeof permissions !== 'object' || Array.isArray(permissions)) return '';
-  const parts = [];
-  for (const [k, v] of Object.entries(permissions)) {
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(permissions as Record<string, unknown>)) {
     if (v == null || v === '') continue;
     parts.push(`${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`);
   }
   return parts.length ? parts.join(', ') : '';
 }
 
-function formatAgentCatalogLine(item) {
+function formatAgentCatalogLine(item: AgentCatalogItem): string {
   const id = item.name || item.id || 'agent';
   const mode = String(item.mode || 'subagent').toLowerCase();
   const desc = item.description || item.prompt || item.instructions || '';
   const when = typeof item.when === 'string' ? item.when.trim() : '';
   const skills = Array.isArray(item.skills)
-    ? item.skills.filter((s) => typeof s === 'string' && s.trim()).map((s) => s.trim())
+    ? item.skills.filter((s): s is string => typeof s === 'string' && !!s.trim()).map((s) => s.trim())
     : [];
   const model = item.model != null && item.model !== '' ? String(item.model) : '';
   const perm = formatPermissionHints(item.permissions);
   const bits = [`- **${id}** [${mode}]`];
   if (model) bits[0] += ` (model: ${model})`;
   bits[0] += `: ${desc}`;
-  const extras = [];
+  const extras: string[] = [];
   if (when) extras.push(`何时：${when}`);
   if (skills.length) extras.push(`技能：${skills.join(', ')}`);
   if (perm) extras.push(`权限提示：${perm}`);
@@ -71,10 +144,12 @@ function formatAgentCatalogLine(item) {
 
 /**
  * 解析 agents 清单：工作区 subagents.* 优先覆盖项目根 `agents/subagents.*`
- * @returns {{ list: object[], sourceRel: string } | null}
  */
-function loadAgentCatalog(workspaceRoot, projectRoot) {
-  const candidates = [];
+function loadAgentCatalog(
+  workspaceRoot: string,
+  projectRoot: string,
+): { list: AgentCatalogItem[]; sourceRel: string } | null {
+  const candidates: { root: string; abs: string; rel: string }[] = [];
   for (const base of AGENT_MANIFEST_BASENAMES) {
     candidates.push({ root: workspaceRoot, abs: path.join(workspaceRoot, base), rel: base });
     candidates.push({
@@ -88,10 +163,10 @@ function loadAgentCatalog(workspaceRoot, projectRoot) {
     const got = readTextFileUnderWorkspaceRootCached(c.root, c.abs, 512 * 1024);
     if (!got.ok) continue;
     try {
-      const data = c.abs.endsWith('.json') ? JSON.parse(got.content) : YAML.parse(got.content);
+      const data: any = c.abs.endsWith('.json') ? JSON.parse(got.content) : YAML.parse(got.content);
       const list = data?.agents || data?.subagents || (Array.isArray(data) ? data : null);
       if (!Array.isArray(list) || list.length === 0) continue;
-      return { list, sourceRel: c.rel };
+      return { list: list as AgentCatalogItem[], sourceRel: c.rel };
     } catch {
       continue;
     }
@@ -99,9 +174,9 @@ function loadAgentCatalog(workspaceRoot, projectRoot) {
   return null;
 }
 
-function buildAgentsCatalogPrompt(list, maxChars) {
-  const primary = [];
-  const sub = [];
+function buildAgentsCatalogPrompt(list: AgentCatalogItem[], maxChars: number): string {
+  const primary: string[] = [];
+  const sub: string[] = [];
   for (const item of list) {
     if (!item || typeof item !== 'object') continue;
     if (item.disable === true || item.disabled === true) continue;
@@ -110,7 +185,7 @@ function buildAgentsCatalogPrompt(list, maxChars) {
     if (mode === 'primary' || mode === 'all') primary.push(line);
     else sub.push(line);
   }
-  const sections = [];
+  const sections: string[] = [];
   if (primary.length) {
     sections.push(`### Primary\n\n${primary.join('')}`);
   }
@@ -123,10 +198,13 @@ function buildAgentsCatalogPrompt(list, maxChars) {
   return truncate(note + sections.join('\n'), maxChars, 'agents-catalog');
 }
 
-function listFilesRecursive(dir, predicate) {
-  const out = [];
-  const walk = (cur) => {
-    let entries;
+function listFilesRecursive(
+  dir: string,
+  predicate: (fp: string, name: string) => boolean,
+): string[] {
+  const out: string[] = [];
+  const walk = (cur: string): void => {
+    let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(cur, { withFileTypes: true });
     } catch {
@@ -147,9 +225,9 @@ function listFilesRecursive(dir, predicate) {
   return out;
 }
 
-/** @param {string} rulesDir @returns {Map<string, string>} rel → abs */
-function indexRuleFiles(rulesDir) {
-  const map = new Map();
+/** rel → abs */
+function indexRuleFiles(rulesDir: string): Map<string, string> {
+  const map = new Map<string, string>();
   if (!rulesDir || !fs.existsSync(rulesDir)) return map;
   const absFiles = listFilesRecursive(
     rulesDir,
@@ -165,10 +243,14 @@ function indexRuleFiles(rulesDir) {
 
 /**
  * 项目 `agents/rules` ∪ 工作区 rules/；工作区同名覆盖共享（工作区仅用户加法，共享不 seed 进工作区）。
- * @returns {string}
  */
-function collectMergedRulesText(projectRoot, workspaceRoot, maxChars, readCached) {
-  const byRel = new Map();
+function collectMergedRulesText(
+  projectRoot: string,
+  workspaceRoot: string,
+  maxChars: number,
+  readCached: ReadCachedFn,
+): string {
+  const byRel = new Map<string, { abs: string; root: string }>();
   for (const [rel, abs] of indexRuleFiles(path.join(projectRoot, PROJECT_RULES_DIR_REL))) {
     byRel.set(rel, { abs, root: projectRoot });
   }
@@ -178,7 +260,8 @@ function collectMergedRulesText(projectRoot, workspaceRoot, maxChars, readCached
   const rels = [...byRel.keys()].sort((a, b) => a.localeCompare(b));
   let acc = '';
   for (const rel of rels) {
-    const { abs, root } = byRel.get(rel);
+    const entry = byRel.get(rel)!;
+    const { abs, root } = entry;
     const got = readCached(root, abs, maxChars * 4);
     if (!got.ok) continue;
     acc += `\n### ${rel}\n\n${got.content}\n`;
@@ -187,18 +270,22 @@ function collectMergedRulesText(projectRoot, workspaceRoot, maxChars, readCached
   return acc.trim();
 }
 
-function sliceWorkspaceCfg(aiWorkflowCfg) {
-  return aiWorkflowCfg?.agentWorkspace ?? {};
+function sliceWorkspaceCfg(aiWorkflowCfg: Record<string, any> | null | undefined): AgentWorkspaceCfg {
+  return (aiWorkflowCfg?.agentWorkspace ?? {}) as AgentWorkspaceCfg;
 }
 
-function truncate(text, max, label) {
+function truncate(text: string, max: number, label: string): string {
   if (text.length <= max) return text;
   return `${text.slice(0, max)}\n\n… (truncated ${label}, len=${text.length})`;
 }
 
-function readTextFileUnderWorkspaceRootCached(rootResolved, absolutePath, maxBytes) {
-  let canonical;
-  let st;
+function readTextFileUnderWorkspaceRootCached(
+  rootResolved: string,
+  absolutePath: string,
+  maxBytes: number,
+): WorkspaceReadResult {
+  let canonical: string;
+  let st: fs.Stats;
   try {
     canonical = realpathSyncOrResolve(absolutePath);
     st = fs.statSync(canonical);
@@ -221,7 +308,11 @@ function readTextFileUnderWorkspaceRootCached(rootResolved, absolutePath, maxByt
   return got;
 }
 
-function readFirstWorkspaceFile(rootResolved, candidates, maxBytes) {
+function readFirstWorkspaceFile(
+  rootResolved: string,
+  candidates: readonly string[],
+  maxBytes: number,
+): { rel: string; content: string } | null {
   for (const rel of candidates) {
     const fp = path.join(rootResolved, rel);
     const got = readTextFileUnderWorkspaceRootCached(rootResolved, fp, maxBytes);
@@ -231,7 +322,20 @@ function readFirstWorkspaceFile(rootResolved, candidates, maxBytes) {
   return null;
 }
 
-function injectWorkspaceAssistant(workspaceRoot, maxChars, pushProse, { isMainSession, includeDiagnostics, maxDiagnosticsChars }) {
+function injectWorkspaceAssistant(
+  workspaceRoot: string,
+  maxChars: number,
+  pushProse: PushProseFn,
+  {
+    isMainSession,
+    includeDiagnostics,
+    maxDiagnosticsChars,
+  }: {
+    isMainSession: boolean;
+    includeDiagnostics: boolean;
+    maxDiagnosticsChars: number;
+  },
+): void {
   const agentsGot = readFirstWorkspaceFile(workspaceRoot, [AGENTS_MD], maxChars * 4);
   if (agentsGot) {
     pushProse(agentsGot.rel, truncate(agentsGot.content, maxChars, agentsGot.rel));
@@ -244,9 +348,10 @@ function injectWorkspaceAssistant(workspaceRoot, maxChars, pushProse, { isMainSe
     pushProse(rel, truncate(got.content, maxChars, rel));
   }
 
-  const pad2 = (n) => String(n).padStart(2, '0');
+  const pad2 = (n: number): string => String(n).padStart(2, '0');
   const now = new Date();
-  const toYmd = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const toYmd = (d: Date): string =>
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
 
@@ -275,11 +380,15 @@ function injectWorkspaceAssistant(workspaceRoot, maxChars, pushProse, { isMainSe
   }
 }
 
-export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamName = '', opts = {}) {
+export async function buildAgentWorkspaceSection(
+  agentWorkspaceCfg: AgentWorkspaceCfg = {},
+  streamName = '',
+  opts: BuildWorkspaceOpts = {},
+): Promise<string> {
   const runtimeConfig = {
     enabled: true,
     root: '',
-    workflows: null,
+    workflows: null as string[] | null,
     includeRules: true,
     includeAgentMd: true,
     includeSubagents: true,
@@ -297,8 +406,8 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     maxSkillsInPrompt: DEFAULT_SKILL_LIMITS.maxSkillsInPrompt,
     maxSkillsPromptChars: DEFAULT_SKILL_LIMITS.maxSkillsPromptChars,
     maxSkillFileBytes: DEFAULT_SKILL_LIMITS.maxSkillFileBytes,
-    customSkillRoots: [],
-    contextFiles: [],
+    customSkillRoots: [] as unknown[],
+    contextFiles: [] as unknown[],
     ...agentWorkspaceCfg
   };
 
@@ -308,8 +417,8 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     if (!runtimeConfig.workflows.includes(streamName)) return '';
   }
 
-  let workspaceRoot;
-  let projectRoot;
+  let workspaceRoot: string;
+  let projectRoot: string;
   try {
     workspaceRoot = realpathSyncOrResolve(resolveAgentWorkspaceAbs(runtimeConfig.root));
     projectRoot = realpathSyncOrResolve(getProjectRoot());
@@ -319,11 +428,11 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
   }
 
   const maxProse = runtimeConfig.maxTotalChars > 0 ? runtimeConfig.maxTotalChars : Number.POSITIVE_INFINITY;
-  const proseSections = [];
+  const proseSections: string[] = [];
   let proseUsed = 0;
-  const proseRoom = () => Math.max(0, maxProse - proseUsed);
+  const proseRoom = (): number => Math.max(0, maxProse - proseUsed);
 
-  const pushProse = (title, body) => {
+  const pushProse: PushProseFn = (title, body) => {
     if (!body?.trim()) return;
     const room = proseRoom();
     if (room <= 0) return;
@@ -367,7 +476,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     }
   }
 
-  const parts = [...proseSections];
+  const parts: string[] = [...proseSections];
 
   // --- 4. Skills ---
   const skillRoots = resolveSkillRootAbsList({
@@ -403,8 +512,8 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
         userText,
         maxAgents: runtimeConfig.maxMicroagents,
         maxChars: runtimeConfig.maxMicroagentsChars,
-        extraRoots: runtimeConfig.customSkillRoots
-      });
+        extraRoots: runtimeConfig.customSkillRoots as string[],
+      }) as { section?: string };
       if (section) parts.push(section);
     }
   }
@@ -414,7 +523,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
   // opencode SystemContext：分源指纹；未变则复用已渲染文本（稳定 prefix cache）
   const proseText = proseSections.join('\n\n');
   const restParts = parts.slice(proseSections.length);
-  const sources = [];
+  const sources: ContextSource[] = [];
   if (proseText) {
     sources.push({
       key: 'workspace/prose',
@@ -423,7 +532,7 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     });
   }
   for (let i = 0; i < restParts.length; i++) {
-    const t = restParts[i];
+    const t = restParts[i]!;
     sources.push({
       key: `workspace/part/${i}`,
       fingerprint: createHash('sha256').update(t).digest('hex'),
@@ -431,23 +540,34 @@ export async function buildAgentWorkspaceSection(agentWorkspaceCfg = {}, streamN
     });
   }
   const sessionKey = `ws:${streamName || 'default'}:${workspaceRoot}`;
-  const { text: body } = reconcileSystemContext(sessionKey, sources);
+  const { text: body } = reconcileSystemContext(sessionKey, sources) as {
+    text: string;
+  };
   return `\n\n---\n\n# Workspace context\n\n${body}\n`;
 }
 
-export async function appendAgentWorkspaceToPrompt(basePrompt, aiWorkflowCfg = {}, streamName = '', opts = {}) {
+export async function appendAgentWorkspaceToPrompt(
+  basePrompt: unknown,
+  aiWorkflowCfg: Record<string, any> = {},
+  streamName = '',
+  opts: BuildWorkspaceOpts = {},
+): Promise<unknown> {
   if (basePrompt == null) return basePrompt;
   const extra = await buildAgentWorkspaceSection(sliceWorkspaceCfg(aiWorkflowCfg), streamName, opts);
   if (!extra) return String(basePrompt);
   return `${basePrompt}${extra}`;
 }
 
-export async function mergeAgentWorkspaceIntoMessages(messages, aiWorkflowCfg = {}, streamName = '') {
+export async function mergeAgentWorkspaceIntoMessages(
+  messages: ChatMessage[] | unknown,
+  aiWorkflowCfg: Record<string, any> = {},
+  streamName = '',
+): Promise<ChatMessage[] | unknown> {
   if (!Array.isArray(messages)) return messages;
-  const userText = extractLastUserText(messages);
+  const userText = extractLastUserText(messages) as string;
   const extra = await buildAgentWorkspaceSection(sliceWorkspaceCfg(aiWorkflowCfg), streamName, { userText });
   if (!extra) return messages;
-  const first = messages[0];
+  const first = messages[0] as ChatMessage | undefined;
   if (first?.role === 'system' && typeof first.content === 'string') {
     first.content = `${first.content}${extra}`;
     return messages;

@@ -4,6 +4,102 @@ import { inspectToolCallSecurity } from '#utils/security/tool-security-inspect.j
 import { parseToolCallArguments, toolArgumentsParseHint } from '#utils/llm/parse-tool-arguments.js';
 import os from 'os';
 
+type JsonSchemaProperty = {
+  type?: string;
+  description?: string;
+  enum?: unknown[];
+  default?: unknown;
+  minimum?: number;
+  maximum?: number;
+  [key: string]: unknown;
+};
+
+type JsonSchema = {
+  type?: string;
+  properties?: Record<string, JsonSchemaProperty>;
+  required?: string[];
+  [key: string]: unknown;
+};
+
+type McpToolDefinition = {
+  description?: string;
+  inputSchema?: JsonSchema;
+  handler: (args: Record<string, unknown>) => unknown | Promise<unknown>;
+};
+
+type RegisteredTool = {
+  name: string;
+  description: string;
+  inputSchema: JsonSchema;
+  handler: (args: Record<string, unknown>) => unknown | Promise<unknown>;
+};
+
+type McpResourceDefinition = {
+  name?: string;
+  description?: string;
+  mimeType?: string;
+  handler?: () => unknown | Promise<unknown>;
+};
+
+type RegisteredResource = {
+  uri: string;
+  name: string;
+  description: string;
+  mimeType: string;
+  handler?: () => unknown | Promise<unknown>;
+};
+
+type McpPromptDefinition = {
+  description?: string;
+  arguments?: unknown[];
+  handler?: (args: Record<string, unknown>) => unknown | Promise<unknown>;
+};
+
+type RegisteredPrompt = {
+  name: string;
+  description: string;
+  arguments: unknown[];
+  handler?: (args: Record<string, unknown>) => unknown | Promise<unknown>;
+};
+
+type ToolCallRequest = {
+  name: string;
+  arguments?: unknown;
+};
+
+type McpContentItem = {
+  type: string;
+  text?: string;
+  [key: string]: unknown;
+};
+
+type McpToolResult = {
+  content: McpContentItem[];
+  isError?: boolean;
+};
+
+type JsonRpcRequest = {
+  jsonrpc?: string;
+  id?: string | number | null;
+  method?: string;
+  params?: Record<string, unknown>;
+};
+
+type JsonRpcOptions = {
+  stream?: string | null;
+};
+
+type SecurityInspectResult = {
+  ok: boolean;
+  error?: string;
+  findings?: unknown;
+  warnings?: string[];
+};
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err ?? '');
+}
+
 /**
  * Model Context Protocol (MCP) 服务器实现
  * 符合 MCP 2025-11-25，基于 JSON-RPC 2.0
@@ -15,30 +111,26 @@ import os from 'os';
  * 参考：https://modelcontextprotocol.io/specification/2025-11-25
  */
 export class MCPServer {
-  tools = new Map();
-  resources = new Map();
-  prompts = new Map();
+  tools = new Map<string, RegisteredTool>();
+  resources = new Map<string, RegisteredResource>();
+  prompts = new Map<string, RegisteredPrompt>();
   initialized = false;
   serverInfo = {
     name: 'xrk-agt-mcp-server',
     version: '1.0.5',
-    protocolVersion: '2025-11-25'
+    protocolVersion: '2025-11-25',
   };
+  stream: unknown;
 
-  constructor(streamInstance = null) {
+  constructor(streamInstance: unknown = null) {
     this.stream = streamInstance;
     this.registerCoreTools();
   }
 
   /**
    * 注册MCP工具
-   * @param {string} name - 工具名称
-   * @param {Object} tool - 工具定义
-   * @param {string} tool.description - 工具描述
-   * @param {Object} tool.inputSchema - 输入参数schema（JSON Schema格式）
-   * @param {Function} tool.handler - 工具处理函数
    */
-  registerTool(name, tool) {
+  registerTool(name: string, tool: McpToolDefinition): void {
     if (this.tools.has(name)) {
       // 热重载覆盖：默认 warn，便于发现同名冲突；DEBUG_MCP_TOOLS=1 时附带 debug
       RuntimeUtil.makeLog('warn', `MCP 工具覆盖: ${name}`, 'MCPServer');
@@ -51,44 +143,33 @@ export class MCPServer {
       name,
       description: tool.description || '',
       inputSchema: tool.inputSchema || {},
-      handler: tool.handler
+      handler: tool.handler,
     });
   }
 
   /**
    * 注册MCP资源
-   * @param {string} uri - 资源URI
-   * @param {Object} resource - 资源定义
-   * @param {string} resource.name - 资源名称
-   * @param {string} resource.description - 资源描述
-   * @param {string} resource.mimeType - MIME类型
-   * @param {Function} resource.handler - 资源处理函数
    */
-  registerResource(uri, resource) {
+  registerResource(uri: string, resource: McpResourceDefinition): void {
     this.resources.set(uri, {
       uri,
       name: resource.name || uri,
       description: resource.description || '',
       mimeType: resource.mimeType || 'text/plain',
-      handler: resource.handler
+      handler: resource.handler,
     });
     RuntimeUtil.makeLog('debug', `MCP资源已注册: ${uri}`, 'MCPServer');
   }
 
   /**
    * 注册MCP提示词
-   * @param {string} name - 提示词名称
-   * @param {Object} prompt - 提示词定义
-   * @param {string} prompt.description - 提示词描述
-   * @param {Array} prompt.arguments - 参数列表
-   * @param {Function} prompt.handler - 提示词处理函数
    */
-  registerPrompt(name, prompt) {
+  registerPrompt(name: string, prompt: McpPromptDefinition): void {
     this.prompts.set(name, {
       name,
       description: prompt.description || '',
       arguments: prompt.arguments || [],
-      handler: prompt.handler
+      handler: prompt.handler,
     });
     RuntimeUtil.makeLog('debug', `MCP提示词已注册: ${name}`, 'MCPServer');
   }
@@ -98,13 +179,8 @@ export class MCPServer {
    *
    * 顺序：工具存在性 → **安全/策略检查** → inputSchema 校验 → handler → 结果投影。
    * 返回：`{ content: [{ type:'text', text }], isError }`；结构化结果经 `summarizeToolResultText`。
-   *
-   * @param {Object} request
-   * @param {string} request.name
-   * @param {Object} [request.arguments]
-   * @returns {Promise<Object>}
    */
-  async handleToolCall(request) {
+  async handleToolCall(request: ToolCallRequest): Promise<McpToolResult> {
     const { name, arguments: args } = request;
 
     if (!this.tools.has(name)) {
@@ -112,41 +188,49 @@ export class MCPServer {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: {
-                code: -32601,
-                message: `工具未找到: ${name}`,
-                timestamp: Date.now()
-              }
-            }, null, 2)
-          }
+            text: JSON.stringify(
+              {
+                success: false,
+                error: {
+                  code: -32601,
+                  message: `工具未找到: ${name}`,
+                  timestamp: Date.now(),
+                },
+              },
+              null,
+              2,
+            ),
+          },
         ],
-        isError: true
+        isError: true,
       };
     }
 
-    const tool = this.tools.get(name);
+    const tool = this.tools.get(name)!;
     const isRemote = name.startsWith('remote-mcp.');
     const parsedArgs = parseToolCallArguments(args);
     if (!parsedArgs.ok) {
       RuntimeUtil.makeLog(
         'warn',
         `MCP 工具参数解析失败: ${name}: ${parsedArgs.error} | snippet=${parsedArgs.snippet}`,
-        'MCPServer'
+        'MCPServer',
       );
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: toolArgumentsParseHint(parsedArgs.error),
-              snippet: parsedArgs.snippet
-            }, null, 2)
-          }
+            text: JSON.stringify(
+              {
+                success: false,
+                error: toolArgumentsParseHint(parsedArgs.error),
+                snippet: parsedArgs.snippet,
+              },
+              null,
+              2,
+            ),
+          },
         ],
-        isError: true
+        isError: true,
       };
     }
     const callArgs = parsedArgs.args;
@@ -154,29 +238,29 @@ export class MCPServer {
     RuntimeUtil.makeLog(
       'info',
       `MCP 工具调用开始: ${name}${isRemote ? ' (remote)' : ''} keys=[${Object.keys(callArgs).join(',')}]`,
-      'MCPServer'
+      'MCPServer',
     );
 
     try {
-      const security = await inspectToolCallSecurity(name, callArgs);
+      const security = (await inspectToolCallSecurity(name, callArgs)) as SecurityInspectResult;
       if (!security.ok) {
-        RuntimeUtil.makeLog(
-          'warn',
-          `MCP 工具调用被安全/策略拦截: ${name}`,
-          'MCPServer'
-        );
+        RuntimeUtil.makeLog('warn', `MCP 工具调用被安全/策略拦截: ${name}`, 'MCPServer');
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify({
-                success: false,
-                error: security.error,
-                findings: security.findings
-              }, null, 2)
-            }
+              text: JSON.stringify(
+                {
+                  success: false,
+                  error: security.error,
+                  findings: security.findings,
+                },
+                null,
+                2,
+              ),
+            },
           ],
-          isError: true
+          isError: true,
         };
       }
 
@@ -186,69 +270,69 @@ export class MCPServer {
       }
 
       // 调用工具handler
-      const result = await tool.handler(callArgs);
-      
+      const result = (await tool.handler(callArgs)) as Record<string, unknown> | null;
+
       // 格式化响应（符合MCP标准）
       // 如果result已经是MCP标准格式（有content数组），直接返回
       if (result && typeof result === 'object' && Array.isArray(result.content)) {
         return {
-          content: result.content,
-          isError: result.isError || false
+          content: result.content as McpContentItem[],
+          isError: (result.isError as boolean) || false,
         };
       }
-      
+
       // 检查是否为错误结果
-      const isError = result && typeof result === 'object' && result.success === false;
+      const isError = !!(result && typeof result === 'object' && result.success === false);
 
       RuntimeUtil.makeLog(
         isError ? 'warn' : 'info',
         `MCP 工具调用完成: ${name}${isRemote ? ' (remote)' : ''}, isError=${isError}`,
-        'MCPServer'
+        'MCPServer',
       );
-      
+
       const text = summarizeToolResultText(result);
       return {
         content: [{ type: 'text', text }],
-        isError
+        isError,
       };
     } catch (error) {
-      RuntimeUtil.makeLog('error', `MCP工具调用失败[${name}]: ${error.message}`, 'MCPServer');
-      
+      RuntimeUtil.makeLog('error', `MCP工具调用失败[${name}]: ${errMessage(error)}`, 'MCPServer');
+
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: {
-                code: -32603,
-                message: error.message,
-                data: { tool: name, arguments: args },
-                timestamp: Date.now()
-              }
-            }, null, 2)
-          }
+            text: JSON.stringify(
+              {
+                success: false,
+                error: {
+                  code: -32603,
+                  message: errMessage(error),
+                  data: { tool: name, arguments: args },
+                  timestamp: Date.now(),
+                },
+              },
+              null,
+              2,
+            ),
+          },
         ],
-        isError: true
+        isError: true,
       };
     }
   }
 
   /**
    * 验证工具参数（基于JSON Schema）
-   * @param {Object} args - 实际参数
-   * @param {Object} schema - JSON Schema
    */
-  validateArguments(args, schema) {
+  validateArguments(args: Record<string, unknown>, schema: JsonSchema): void {
     if (!schema.properties) return;
 
     // 检查必需参数
     if (schema.required) {
       for (const required of schema.required) {
         if (!(required in args) || args[required] === undefined || args[required] === null) {
-          const hint = args && typeof args.raw === 'string'
-            ? '（收到未解析的 raw 字符串，请检查 arguments JSON）'
-            : '';
+          const hint = args && typeof args.raw === 'string' ? '（收到未解析的 raw 字符串，请检查 arguments JSON）' : '';
           throw new Error(`缺少必需参数: ${required}${hint}`);
         }
       }
@@ -260,7 +344,7 @@ export class MCPServer {
       if (propSchema) {
         const expectedType = propSchema.type;
         const actualType = Array.isArray(value) ? 'array' : typeof value;
-        
+
         if (expectedType && actualType !== expectedType && expectedType !== 'object') {
           throw new Error(`参数 ${key} 类型不匹配: 期望 ${expectedType}, 实际 ${actualType}`);
         }
@@ -270,50 +354,67 @@ export class MCPServer {
 
   /**
    * 获取所有可用工具列表（符合MCP标准）
-   * @param {string} streamName - 可选：工作流名称，如果提供则只返回该工作流的工具
-   * @returns {Array} 工具列表
+   * @param streamName - 可选：工作流名称，如果提供则只返回该工作流的工具
    */
-  listTools(streamName = null) {
+  listTools(streamName: string | null = null): Array<{
+    name: string;
+    description: string;
+    inputSchema: JsonSchema;
+  }> {
     const tools = Array.from(this.tools.values());
 
     // 如果指定了工作流名称，只返回该工作流的工具
     if (streamName) {
       const prefix = `${streamName}.`;
       return tools
-        .filter(tool => tool.name.startsWith(prefix))
-        .map(tool => ({
+        .filter((tool) => tool.name.startsWith(prefix))
+        .map((tool) => ({
           name: tool.name,
           description: tool.description,
           inputSchema: tool.inputSchema || {
             type: 'object',
             properties: {},
-            required: []
-          }
+            required: [],
+          },
         }));
     }
 
     // 默认情况下，全局工具列表中隐藏 chat 工作流的 MCP 工具，
     // 避免在标准 JSON-RPC 接口和 LLM 工具注入时暴露群管相关能力。
     return tools
-      .filter(tool => !tool.name.startsWith('chat.'))
-      .map(tool => ({
+      .filter((tool) => !tool.name.startsWith('chat.'))
+      .map((tool) => ({
         name: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema || {
           type: 'object',
           properties: {},
-          required: []
-        }
+          required: [],
+        },
       }));
   }
 
   /**
    * 获取所有工作流分组
-   * @returns {Object} 工作流分组，格式：{ workflowName: [tools...] }
+   * @returns 工作流分组，格式：{ workflowName: [tools...] }
    */
-  listToolsByWorkflow() {
-    const groups = {};
-    
+  listToolsByWorkflow(): Record<
+    string,
+    Array<{
+      name: string;
+      description: string;
+      inputSchema: JsonSchema;
+    }>
+  > {
+    const groups: Record<
+      string,
+      Array<{
+        name: string;
+        description: string;
+        inputSchema: JsonSchema;
+      }>
+    > = {};
+
     for (const tool of this.tools.values()) {
       const parts = tool.name.split('.');
       if (parts.length >= 2) {
@@ -327,122 +428,139 @@ export class MCPServer {
           inputSchema: tool.inputSchema || {
             type: 'object',
             properties: {},
-            required: []
-          }
+            required: [],
+          },
         });
       }
     }
-    
+
     return groups;
   }
 
   /**
    * 获取工作流列表
-   * @returns {Array} 工作流名称列表
    */
-  listWorkflows() {
-    const workflows = new Set();
-    
+  listWorkflows(): string[] {
+    const workflows = new Set<string>();
+
     for (const tool of this.tools.values()) {
       const parts = tool.name.split('.');
       if (parts.length >= 2) {
         workflows.add(parts[0]);
       }
     }
-    
+
     return Array.from(workflows);
   }
 
   /**
    * 获取所有可用资源列表（符合MCP标准）
-   * @returns {Array} 资源列表
    */
-  listResources() {
-    return Array.from(this.resources.values()).map(resource => ({
+  listResources(): Array<{
+    uri: string;
+    name: string;
+    description: string;
+    mimeType: string;
+  }> {
+    return Array.from(this.resources.values()).map((resource) => ({
       uri: resource.uri,
       name: resource.name,
       description: resource.description,
-      mimeType: resource.mimeType
+      mimeType: resource.mimeType,
     }));
   }
 
   /**
    * 获取资源内容
-   * @param {string} uri - 资源URI
-   * @returns {Promise<Object>} 资源内容
    */
-  async getResource(uri) {
+  async getResource(uri: string): Promise<{
+    uri: string;
+    mimeType: string;
+    text: string;
+  }> {
     if (!this.resources.has(uri)) {
       throw new Error(`资源未找到: ${uri}`);
     }
 
-    const resource = this.resources.get(uri);
+    const resource = this.resources.get(uri)!;
     if (resource.handler) {
       const content = await resource.handler();
       return {
         uri,
         mimeType: resource.mimeType,
-        text: typeof content === 'string' ? content : JSON.stringify(content)
+        text: typeof content === 'string' ? content : JSON.stringify(content),
       };
     }
 
     return {
       uri,
       mimeType: resource.mimeType,
-      text: ''
+      text: '',
     };
   }
 
   /**
    * 获取所有可用提示词列表（符合MCP标准）
-   * @returns {Array} 提示词列表
    */
-  listPrompts() {
-    return Array.from(this.prompts.values()).map(prompt => ({
+  listPrompts(): Array<{
+    name: string;
+    description: string;
+    arguments: unknown[];
+  }> {
+    return Array.from(this.prompts.values()).map((prompt) => ({
       name: prompt.name,
       description: prompt.description,
-      arguments: prompt.arguments || []
+      arguments: prompt.arguments || [],
     }));
   }
 
   /**
    * 获取提示词内容
-   * @param {string} name - 提示词名称
-   * @param {Object} args - 参数
-   * @returns {Promise<Object>} 提示词内容
    */
-  async getPrompt(name, args = {}) {
+  async getPrompt(
+    name: string,
+    args: Record<string, unknown> = {},
+  ): Promise<{
+    name: string;
+    description: string;
+    messages: unknown[];
+  }> {
     if (!this.prompts.has(name)) {
       throw new Error(`提示词未找到: ${name}`);
     }
 
-    const prompt = this.prompts.get(name);
+    const prompt = this.prompts.get(name)!;
     if (prompt.handler) {
-      const content = await prompt.handler(args);
+      const content = (await prompt.handler(args)) as { messages?: unknown[] } | string | Record<string, unknown>;
       return {
         name,
         description: prompt.description,
-        messages: Array.isArray(content.messages) 
-          ? content.messages 
-          : [{ role: 'user', content: typeof content === 'string' ? content : JSON.stringify(content) }]
+        messages: Array.isArray((content as { messages?: unknown[] }).messages)
+          ? (content as { messages: unknown[] }).messages
+          : [{ role: 'user', content: typeof content === 'string' ? content : JSON.stringify(content) }],
       };
     }
 
     return {
       name,
       description: prompt.description,
-      messages: []
+      messages: [],
     };
   }
 
   /**
    * 处理JSON-RPC请求（MCP标准）
-   * @param {Object} request - JSON-RPC请求
-   * @param {Object} options - 选项
-   * @param {string} options.stream - 可选：工作流名称，用于过滤工具
-   * @returns {Promise<Object>} JSON-RPC响应
+   * @param options.stream - 可选：工作流名称，用于过滤工具
    */
-  async handleJSONRPC(request, options = {}) {
+  async handleJSONRPC(
+    request: JsonRpcRequest,
+    options: JsonRpcOptions = {},
+  ): Promise<{
+    jsonrpc: string;
+    id?: string | number | null;
+    result?: unknown;
+    error?: { code: number; message: string };
+  }> {
     const { jsonrpc, id, method, params } = request;
     const { stream } = options;
 
@@ -453,13 +571,13 @@ export class MCPServer {
         id,
         error: {
           code: -32600,
-          message: 'Invalid Request: jsonrpc must be "2.0"'
-        }
+          message: 'Invalid Request: jsonrpc must be "2.0"',
+        },
       };
     }
 
     try {
-      let result;
+      let result: unknown;
 
       switch (method) {
         case 'initialize':
@@ -477,8 +595,8 @@ export class MCPServer {
             throw new Error('工具名称不能为空');
           }
           result = await this.handleToolCall({
-            name: params.name,
-            arguments: params.arguments || {}
+            name: params.name as string,
+            arguments: params.arguments || {},
           });
           break;
 
@@ -490,7 +608,7 @@ export class MCPServer {
           if (!params || !params.uri) {
             throw new Error('资源URI不能为空');
           }
-          result = await this.getResource(params.uri);
+          result = await this.getResource(params.uri as string);
           break;
 
         case 'prompts/list':
@@ -501,7 +619,7 @@ export class MCPServer {
           if (!params || !params.name) {
             throw new Error('提示词名称不能为空');
           }
-          result = await this.getPrompt(params.name, params.arguments || {});
+          result = await this.getPrompt(params.name as string, (params.arguments as Record<string, unknown>) || {});
           break;
 
         default:
@@ -510,54 +628,63 @@ export class MCPServer {
             id,
             error: {
               code: -32601,
-              message: `Method not found: ${method}`
-            }
+              message: `Method not found: ${method}`,
+            },
           };
       }
 
       return {
         jsonrpc: '2.0',
         id,
-        result
+        result,
       };
     } catch (error) {
-      RuntimeUtil.makeLog('error', `MCP JSON-RPC处理失败[${method}]: ${error.message}`, 'MCPServer');
-      
+      RuntimeUtil.makeLog('error', `MCP JSON-RPC处理失败[${method}]: ${errMessage(error)}`, 'MCPServer');
+
       return {
         jsonrpc: '2.0',
         id,
         error: {
           code: -32603,
-          message: error.message
-        }
+          message: errMessage(error),
+        },
       };
     }
   }
 
   /**
    * 处理initialize请求
-   * @param {Object} params - 初始化参数
-   * @returns {Object} 初始化响应
    */
-  async handleInitialize() {
+  async handleInitialize(_params?: unknown): Promise<{
+    protocolVersion: string;
+    capabilities: {
+      tools: Record<string, never>;
+      resources: Record<string, never>;
+      prompts: Record<string, never>;
+    };
+    serverInfo: {
+      name: string;
+      version: string;
+    };
+  }> {
     return {
       protocolVersion: this.serverInfo.protocolVersion,
       capabilities: {
         tools: {},
         resources: {},
-        prompts: {}
+        prompts: {},
       },
       serverInfo: {
         name: this.serverInfo.name,
-        version: this.serverInfo.version
-      }
+        version: this.serverInfo.version,
+      },
     };
   }
 
   /**
    * 注册跨平台通用核心工具
    */
-  registerCoreTools() {
+  registerCoreTools(): void {
     // 工具1：系统信息（跨平台）
     this.registerTool('system.info', {
       description: '获取系统信息（操作系统、CPU、内存、平台等）',
@@ -567,50 +694,50 @@ export class MCPServer {
           detail: {
             type: 'boolean',
             description: '是否返回详细信息（默认false）',
-            default: false
-          }
+            default: false,
+          },
         },
-        required: []
+        required: [],
       },
       handler: async (args) => {
         const { detail = false } = args;
         const memUsage = process.memoryUsage();
         const cpuInfo = os.cpus();
-        
-        const info = {
+
+        const info: Record<string, unknown> = {
           platform: process.platform,
           arch: process.arch,
           nodeVersion: process.version,
           hostname: os.hostname(),
           cpu: {
             cores: cpuInfo.length,
-            model: cpuInfo[0]?.model || 'Unknown'
+            model: cpuInfo[0]?.model || 'Unknown',
           },
           memory: {
             total: `${Math.round(os.totalmem() / 1024 / 1024 / 1024)}GB`,
             free: `${Math.round(os.freemem() / 1024 / 1024 / 1024)}GB`,
             used: `${Math.round((os.totalmem() - os.freemem()) / 1024 / 1024 / 1024)}GB`,
-            usage: Math.round(((os.totalmem() - os.freemem()) / os.totalmem()) * 100)
+            usage: Math.round(((os.totalmem() - os.freemem()) / os.totalmem()) * 100),
           },
           uptime: {
             seconds: Math.round(os.uptime()),
             hours: Math.round(os.uptime() / 3600),
-            days: Math.round(os.uptime() / 86400)
-          }
+            days: Math.round(os.uptime() / 86400),
+          },
         };
-        
+
         if (detail) {
           info.processMemory = {
             rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
             heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
             heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
-            external: `${Math.round(memUsage.external / 1024 / 1024)}MB`
+            external: `${Math.round(memUsage.external / 1024 / 1024)}MB`,
           };
           info.networkInterfaces = Object.keys(os.networkInterfaces()).length;
         }
-        
+
         return info;
-      }
+      },
     });
 
     // 工具2：时间工具（跨平台）
@@ -623,19 +750,19 @@ export class MCPServer {
             type: 'string',
             enum: ['iso', 'locale', 'timestamp', 'unix'],
             description: '时间格式: iso(ISO 8601), locale(本地格式), timestamp(毫秒时间戳), unix(秒时间戳)',
-            default: 'locale'
+            default: 'locale',
           },
           timezone: {
             type: 'string',
-            description: '时区（可选，例如: Asia/Shanghai, America/New_York）'
-          }
+            description: '时区（可选，例如: Asia/Shanghai, America/New_York）',
+          },
         },
-        required: []
+        required: [],
       },
       handler: async (args) => {
         const { format = 'locale', timezone } = args;
         const now = new Date();
-        const options = timezone ? { timeZone: timezone } : {};
+        const options: Intl.DateTimeFormatOptions = timezone ? { timeZone: timezone as string } : {};
 
         switch (format) {
           case 'iso':
@@ -643,21 +770,21 @@ export class MCPServer {
               format: 'iso',
               time: now.toISOString(),
               timestamp: now.getTime(),
-              unix: Math.floor(now.getTime() / 1000)
+              unix: Math.floor(now.getTime() / 1000),
             };
           case 'timestamp':
             return {
               format: 'timestamp',
               timestamp: now.getTime(),
               unix: Math.floor(now.getTime() / 1000),
-              iso: now.toISOString()
+              iso: now.toISOString(),
             };
           case 'unix':
             return {
               format: 'unix',
               unix: Math.floor(now.getTime() / 1000),
               timestamp: now.getTime(),
-              iso: now.toISOString()
+              iso: now.toISOString(),
             };
           case 'locale':
           default:
@@ -668,10 +795,10 @@ export class MCPServer {
               timeOnly: now.toLocaleTimeString('zh-CN', options),
               timestamp: now.getTime(),
               unix: Math.floor(now.getTime() / 1000),
-              iso: now.toISOString()
+              iso: now.toISOString(),
             };
         }
-      }
+      },
     });
 
     // 工具3：UUID生成（跨平台）
@@ -684,17 +811,17 @@ export class MCPServer {
             type: 'string',
             enum: ['v4'],
             description: 'UUID版本: v4(随机UUID)',
-            default: 'v4'
+            default: 'v4',
           },
           count: {
             type: 'integer',
             description: '生成数量（1-100）',
             minimum: 1,
             maximum: 100,
-            default: 1
-          }
+            default: 1,
+          },
         },
-        required: []
+        required: [],
       },
       handler: async (args) => {
         const { version = 'v4', count = 1 } = args;
@@ -703,9 +830,9 @@ export class MCPServer {
         return {
           version,
           count: uuids.length,
-          uuids: n === 1 ? uuids[0] : uuids
+          uuids: n === 1 ? uuids[0] : uuids,
         };
-      }
+      },
     });
 
     // 工具4：哈希计算（跨平台）
@@ -716,16 +843,16 @@ export class MCPServer {
         properties: {
           data: {
             type: 'string',
-            description: '要计算哈希的数据'
+            description: '要计算哈希的数据',
           },
           algorithm: {
             type: 'string',
             enum: ['md5', 'sha1', 'sha256', 'sha512'],
             description: '哈希算法',
-            default: 'sha256'
-          }
+            default: 'sha256',
+          },
         },
-        required: ['data']
+        required: ['data'],
       },
       handler: async (args) => {
         const { data, algorithm = 'sha256' } = args;
@@ -734,16 +861,15 @@ export class MCPServer {
         }
 
         const crypto = await import('crypto');
-        const hash = crypto.createHash(algorithm);
-        hash.update(data);
-        
+        const hash = crypto.createHash(algorithm as string);
+        hash.update(data as string);
+
         return {
           algorithm,
           hash: hash.digest('hex'),
-          length: hash.digest('hex').length
+          length: hash.digest('hex').length,
         };
-      }
+      },
     });
   }
 }
-
