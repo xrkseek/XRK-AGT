@@ -1,7 +1,8 @@
 # TypeScript 编译至 dist + 移除热重载
 
 > **分支**：`refactor/typescript`  
-> **状态**：Draft（待审）  
+> **状态**：Accepted  
+
 > **日期**：2026-09-05  
 > **关联 ADR**：[0004](../../adr/0004-typescript-dist-no-hot-reload.md)
 
