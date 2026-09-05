@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { InputValidator } from '../../src/utils/input-validator.js';
 import { RuntimeError } from '../../src/utils/error-handler.js';
-import { Disposables } from '../../src/utils/disposables.js';
+import { Disposables } from '#utils/disposables.js';
 import {
   runWithRequestContext,
   getRequestContext,

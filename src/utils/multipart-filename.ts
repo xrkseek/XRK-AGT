@@ -3,7 +3,7 @@
  * 浏览器实际发送的是 UTF-8 字节 → 中文变成 å¹´ 一类乱码。
  * 仅当 latin1→utf8 可无损回转时才纠正。
  */
-export function decodeMulterFilename(name) {
+export function decodeMulterFilename(name: unknown): string {
   const raw = String(name ?? '').trim();
   if (!raw) return 'file';
 

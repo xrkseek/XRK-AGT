@@ -4,7 +4,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { Disposables } from '../../src/utils/disposables.js';
+import { Disposables } from '#utils/disposables.js';
 import {
   runWithRequestContext,
   getRequestContext,

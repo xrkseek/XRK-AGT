@@ -12,10 +12,8 @@ import os from 'node:os';
 
 /**
  * 安全读取网卡列表；失败时返回空对象且不抛。
- *
- * @returns {NodeJS.Dict<os.NetworkInterfaceInfo[]> | Record<string, never>}
  */
-export function safeOsNetworkInterfaces() {
+export function safeOsNetworkInterfaces(): NodeJS.Dict<os.NetworkInterfaceInfo[]> {
   try {
     return os.networkInterfaces() || {};
   } catch {
@@ -28,12 +26,9 @@ export function safeOsNetworkInterfaces() {
  *
  * 匹配：`code === 'ERR_SYSTEM_ERROR'`，或 message 含
  * `uv_interface_addresses` / `Unknown system error 2`。
- *
- * @param {unknown} err 捕获到的异常或 rejection reason
- * @returns {boolean}
  */
-export function isUvInterfaceAddressesError(err) {
-  const o = err && typeof err === 'object' ? /** @type {{ message?: unknown, code?: unknown }} */ (err) : null;
+export function isUvInterfaceAddressesError(err: unknown): boolean {
+  const o = err && typeof err === 'object' ? (err as { message?: unknown; code?: unknown }) : null;
   const msg = o && typeof o.message === 'string' ? o.message : String(err ?? '');
   const code = o && typeof o.code === 'string' ? o.code : '';
   return (

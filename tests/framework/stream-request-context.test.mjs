@@ -4,7 +4,7 @@ import {
   runWithWorkflowRequestContext,
   getWorkflowRequestContext
 } from '../../src/infrastructure/ai-workflow/workflow-request-context.js';
-import { createUserVisibleTurnState } from '../../src/utils/chat-user-visible-ack.js';
+import { createUserVisibleTurnState } from '#utils/chat-user-visible-ack.js';
 
 describe('workflow request context', () => {
   it('isolates turnState between concurrent async chains', async () => {

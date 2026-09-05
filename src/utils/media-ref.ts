@@ -3,7 +3,7 @@
  */
 
 /** 是否像本地文件路径（排除二进制误填进 file 段） */
-export function isPathLike(filePath) {
+export function isPathLike(filePath: unknown): boolean {
   if (filePath == null || typeof filePath !== 'string') return false;
   const s = filePath.trim();
   if (!s || s.length > 4096) return false;
@@ -28,7 +28,7 @@ export function isPathLike(filePath) {
 }
 
 /** file 段误存为二进制串时还原 Buffer */
-export function inlineBinaryFromRef(ref) {
+export function inlineBinaryFromRef(ref: unknown): Buffer | null {
   if (typeof ref !== 'string') return null;
   const s = ref;
   if (s.length < 12 || s.startsWith('base64://') || /^https?:\/\//i.test(s.trim())) return null;

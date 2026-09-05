@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { decodeMulterFilename } from '../../src/utils/multipart-filename.js';
+import { decodeMulterFilename } from '#utils/multipart-filename.js';
 import { resolveClientBaseUrl } from '#utils/client-base-url.js';
 
 describe('decodeMulterFilename', () => {

@@ -5,7 +5,7 @@ import {
   formatReplySentAck,
   formatReplyQueuedAck,
   isOverlappingUserVisible
-} from '../../src/utils/chat-user-visible-ack.js';
+} from '#utils/chat-user-visible-ack.js';
 
 describe('chat user-visible ack', () => {
   it('createUserVisibleTurnState 含 reply 队列与 flushed 字段', () => {

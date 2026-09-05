@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {
   safeOsNetworkInterfaces,
   isUvInterfaceAddressesError
-} from '../../src/utils/safe-os-network.js';
+} from '#utils/safe-os-network.js';
 
 describe('safe-os-network', () => {
   it('safeOsNetworkInterfaces 返回对象且不抛', () => {

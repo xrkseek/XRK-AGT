@@ -1,5 +1,6 @@
 import readline from 'node:readline';
 import { spawnSync } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 
 /** 连按两次退出的判定窗口（毫秒） */
 export const SIGNAL_TIME_THRESHOLD_MS = 3000;
@@ -7,69 +8,72 @@ export const SIGNAL_TIME_THRESHOLD_MS = 3000;
 export const EXIT_RESTART = 1;
 export const EXIT_STOP = 0;
 
-export const SERVER_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+export const SERVER_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 
 const STOP_EXIT_CODES = new Set([EXIT_STOP, 130, 143, 255]);
 
-const shutdownHooks = new Set();
+const shutdownHooks = new Set<() => void | Promise<void>>();
 
-/**
- * @param {() => void | Promise<void>} fn
- * @returns {() => void}
- */
-export function registerShutdownHook(fn) {
+export function registerShutdownHook(fn: () => void | Promise<void>): () => void {
   shutdownHooks.add(fn);
-  return () => shutdownHooks.delete(fn);
+  return () => {
+    shutdownHooks.delete(fn);
+  };
 }
 
-export async function runShutdownHooks() {
+export async function runShutdownHooks(): Promise<void> {
   await Promise.allSettled([...shutdownHooks].map((fn) => fn()));
 }
 
 /** 子进程 exit(1) → 父进程自动重启；exit(0)/130/143 → 回菜单 */
-export function resolveChildExit(code, signal) {
+export function resolveChildExit(code: number | null | undefined, signal: NodeJS.Signals | null | undefined): number {
   if (code === EXIT_RESTART) return EXIT_RESTART;
-  if (STOP_EXIT_CODES.has(code)) return EXIT_STOP;
+  if (typeof code === 'number' && STOP_EXIT_CODES.has(code)) return EXIT_STOP;
   if (signal === 'SIGINT' || signal === 'SIGTERM' || signal === 'SIGHUP') return EXIT_STOP;
   if (code == null && signal) return EXIT_STOP;
   if (typeof code === 'number' && code !== 0) return EXIT_RESTART;
   return EXIT_STOP;
 }
 
-/** @param {import('node:child_process').ChildProcess | null | undefined} child */
-export async function killProcessTree(child) {
+export async function killProcessTree(child: ChildProcess | null | undefined): Promise<void> {
   if (!child?.pid || child.killed) return;
   try {
     if (process.platform === 'win32') {
       spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
         windowsHide: true,
-        shell: false
+        shell: false,
       });
       return;
     }
     spawnSync('pkill', ['-TERM', '-P', String(child.pid)], { stdio: 'ignore' });
     try {
       child.kill('SIGTERM');
-    } catch {}
+    } catch {
+      /* ignore */
+    }
     await new Promise((resolve) => setTimeout(resolve, 400));
     spawnSync('pkill', ['-KILL', '-P', String(child.pid)], { stdio: 'ignore' });
     try {
       child.kill('SIGKILL');
-    } catch {}
-  } catch {}
+    } catch {
+      /* ignore */
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 /** 双击判定状态（ProcessManager / MenuSignalHandler 共用） */
 export class SignalTapState {
-  lastSignal = null;
+  lastSignal: string | null = null;
   lastSignalTime = 0;
 
-  reset() {
+  reset(): void {
     this.lastSignal = null;
     this.lastSignalTime = 0;
   }
 
-  isDoubleTap(signal, now = Date.now()) {
+  isDoubleTap(signal: string, now: number = Date.now()): boolean {
     return (
       signal !== 'SIGHUP' &&
       signal === this.lastSignal &&
@@ -77,19 +81,26 @@ export class SignalTapState {
     );
   }
 
-  record(signal, now = Date.now()) {
+  record(signal: string, now: number = Date.now()): void {
     this.lastSignal = signal;
     this.lastSignalTime = now;
   }
 }
 
+type DoubleTapCallbacks = {
+  onOnce?: (signal: string) => void | Promise<void>;
+  onTwice?: (signal: string) => void | Promise<void>;
+  onHangup?: () => void | Promise<void>;
+};
+
 /**
  * 统一规则：一次 onOnce，两次 onTwice，SIGHUP onHangup。
- * @param {string} signal
- * @param {SignalTapState} state
- * @param {{ onOnce?: (signal: string) => void | Promise<void>, onTwice?: (signal: string) => void | Promise<void>, onHangup?: () => void | Promise<void> }} callbacks
  */
-export async function handleDoubleTapSignal(signal, state, callbacks) {
+export async function handleDoubleTapSignal(
+  signal: string,
+  state: SignalTapState,
+  callbacks: DoubleTapCallbacks,
+): Promise<void> {
   if (signal === 'SIGHUP') {
     await callbacks.onHangup?.();
     return;
@@ -103,39 +114,50 @@ export async function handleDoubleTapSignal(signal, state, callbacks) {
   await callbacks.onOnce?.(signal);
 }
 
+type MenuLogger = {
+  log?: (msg: string, level?: string) => void | Promise<void>;
+  warning?: (msg: string) => void | Promise<void>;
+};
+
 /**
  * start.js 菜单层信号：服务器子进程运行中不抢 SIGINT（由 loader 一次重启/两次退出）；
  * 菜单界面两次 Ctrl+C 退出程序；SIGHUP 杀子进程并退出。
  */
 export class MenuSignalHandler {
-  /** @param {{ log?: (msg: string, level?: string) => void | Promise<void>, warning?: (msg: string) => void | Promise<void> }} logger */
-  constructor(logger = {}) {
+  logger: MenuLogger;
+  tap: SignalTapState;
+  isSetup: boolean;
+  inRestartLoop: boolean;
+  onStopRestartLoop: (() => void | Promise<void>) | null;
+  handlers: Record<string, () => void>;
+  _rl: readline.Interface | null;
+
+  constructor(logger: MenuLogger = {}) {
     this.logger = logger;
     this.tap = new SignalTapState();
     this.isSetup = false;
     this.inRestartLoop = false;
-    /** @type {(() => void | Promise<void>) | null} */
     this.onStopRestartLoop = null;
-    /** @type {Record<string, () => void>} */
     this.handlers = {};
-    /** @type {readline.Interface | null} */
     this._rl = null;
   }
 
-  _closeReadline() {
+  _closeReadline(): void {
     if (this._rl) {
       this._rl.close();
       this._rl = null;
     }
   }
 
-  _ensureReadline() {
+  _ensureReadline(): void {
     if (!this.isSetup || !process.stdin || this._rl) return;
     this._rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    this._rl.on('SIGINT', () => process.emit('SIGINT'));
+    this._rl.on('SIGINT', () => {
+      process.emit('SIGINT');
+    });
   }
 
-  setup() {
+  setup(): void {
     if (this.isSetup) return;
     for (const signal of SERVER_SIGNALS) {
       const handler = () => {
@@ -148,7 +170,7 @@ export class MenuSignalHandler {
     this.isSetup = true;
   }
 
-  async cleanup() {
+  async cleanup(): Promise<void> {
     if (!this.isSetup) return;
     this._closeReadline();
     for (const [signal, handler] of Object.entries(this.handlers)) {
@@ -161,7 +183,7 @@ export class MenuSignalHandler {
     this.tap.reset();
   }
 
-  async _handle(signal) {
+  async _handle(signal: string): Promise<void> {
     if (this.inRestartLoop && signal !== 'SIGHUP') return;
 
     await handleDoubleTapSignal(signal, this.tap, {
@@ -177,7 +199,7 @@ export class MenuSignalHandler {
       },
       onOnce: async (sig) => {
         await this.logger.warning?.(`收到 ${sig}，再次发送将退出程序`);
-      }
+      },
     });
   }
 }

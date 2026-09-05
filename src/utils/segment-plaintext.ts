@@ -2,7 +2,7 @@
  * 段 → 纯文本摘要（插件 / AI 历史 / 前端共用语义）
  */
 
-const MEDIA_LABEL = {
+const MEDIA_LABEL: Record<string, string> = {
   image: '[图片]',
   mface: '[图片]',
   video: '[视频]',
@@ -13,11 +13,28 @@ const MEDIA_LABEL = {
   node: '[转发]',
 };
 
+type SegmentLike = {
+  type?: unknown;
+  text?: unknown;
+  content?: unknown;
+  name?: unknown;
+  file_name?: unknown;
+  qq?: unknown;
+  user_id?: unknown;
+  id?: unknown;
+  message_id?: unknown;
+  data?: {
+    text?: unknown;
+    name?: unknown;
+    qq?: unknown;
+    id?: unknown;
+  };
+};
+
 /**
- * @param {object|null|undefined} seg 扁平或带 data 的段
- * @returns {string}
+ * @param seg 扁平或带 data 的段
  */
-export function segmentToPlainSnippet(seg) {
+export function segmentToPlainSnippet(seg: SegmentLike | null | undefined): string {
   if (!seg || typeof seg !== 'object') return '';
   const type = String(seg.type || '').toLowerCase();
   if (type === 'text' || type === 'markdown' || type === 'raw') {
@@ -28,7 +45,7 @@ export function segmentToPlainSnippet(seg) {
       const name = seg.name || seg.file_name || seg.data?.name || '';
       return name ? `[文件:${name}]` : '[文件]';
     }
-    return MEDIA_LABEL[type];
+    return MEDIA_LABEL[type]!;
   }
   if (type === 'at') {
     const qq = seg.qq ?? seg.user_id ?? seg.data?.qq;
@@ -41,14 +58,10 @@ export function segmentToPlainSnippet(seg) {
   return '';
 }
 
-/**
- * @param {unknown} segments
- * @returns {string}
- */
-export function segmentsToPlainText(segments) {
+export function segmentsToPlainText(segments: unknown): string {
   if (!Array.isArray(segments)) return '';
   return segments
-    .map((s) => segmentToPlainSnippet(s))
+    .map((s) => segmentToPlainSnippet(s as SegmentLike))
     .filter(Boolean)
     .join('')
     .replace(/\s+/g, ' ')

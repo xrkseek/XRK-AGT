@@ -7,7 +7,7 @@ import {
   SignalTapState,
   handleDoubleTapSignal,
   resolveChildExit
-} from '../../src/utils/process-signals.js';
+} from '#utils/process-signals.js';
 
 describe('SignalTapState 双击判定', () => {
   it('同信号窗口内为 double tap', () => {
