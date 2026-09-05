@@ -6,13 +6,19 @@ import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
 
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 
+export type WorkspaceReadResult =
+  | { ok: true; content: string }
+  | { ok: false; reason: string };
+
 /**
- * @param {string} rootResolved 工作区根
- * @param {string} absolutePath 待读文件绝对路径
- * @param {number} [maxBytes]
- * @returns {{ ok: true, content: string } | { ok: false, reason: string }}
+ * @param rootResolved 工作区根
+ * @param absolutePath 待读文件绝对路径
  */
-export function readTextFileUnderWorkspaceRoot(rootResolved, absolutePath, maxBytes = DEFAULT_MAX_BYTES) {
+export function readTextFileUnderWorkspaceRoot(
+  rootResolved: string,
+  absolutePath: string,
+  maxBytes: number = DEFAULT_MAX_BYTES,
+): WorkspaceReadResult {
   const rootReal = realpathSyncOrResolve(rootResolved);
   const fileReal = realpathSyncOrResolve(absolutePath);
 
@@ -20,7 +26,7 @@ export function readTextFileUnderWorkspaceRoot(rootResolved, absolutePath, maxBy
     return { ok: false, reason: 'outside_root' };
   }
 
-  let st;
+  let st: fs.Stats;
   try {
     st = fs.statSync(fileReal);
   } catch {

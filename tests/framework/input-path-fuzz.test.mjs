@@ -4,8 +4,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { InputValidator } from '../../src/utils/input-validator.js';
-import { RuntimeError } from '../../src/utils/error-handler.js';
+import { InputValidator } from '#utils/input-validator.js';
+import { RuntimeError } from '#utils/error-handler.js';
 
 const dataRoot = path.join(process.cwd(), 'data');
 

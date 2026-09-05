@@ -4,17 +4,19 @@ import { spawn, spawnSync } from 'node:child_process';
 
 export const IS_WINDOWS = process.platform === 'win32';
 
-function exists(filePath) {
+export type SpawnSpec = { command: string; args: string[]; shell: boolean };
+
+function exists(filePath: string | null | undefined): boolean {
   return !!(filePath && fsSync.existsSync(filePath));
 }
 
-function findOnPath(name) {
+function findOnPath(name: string): string | null {
   const lookup = IS_WINDOWS ? 'where.exe' : 'which';
   const result = spawnSync(lookup, [name], { encoding: 'utf8', windowsHide: true });
   if (result.status !== 0 || !result.stdout?.trim()) return null;
   const lines = result.stdout.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return null;
-  if (!IS_WINDOWS) return lines[0];
+  if (!IS_WINDOWS) return lines[0]!;
 
   // where 常先给出无扩展名 shim（如 ...\npx），裸 spawn 会 ENOENT；优先 .cmd/.bat/.exe
   const withExt = lines.find((line) => /\.(cmd|bat|exe)$/i.test(line));
@@ -24,10 +26,10 @@ function findOnPath(name) {
     if (exists(`${line}.exe`)) return `${line}.exe`;
     if (exists(`${line}.bat`)) return `${line}.bat`;
   }
-  return lines[0];
+  return lines[0]!;
 }
 
-function spawnViaNode(scriptPath, args, nodeExe = process.execPath) {
+function spawnViaNode(scriptPath: string, args: string[], nodeExe: string = process.execPath): SpawnSpec {
   return { command: nodeExe, args: [scriptPath, ...args], shell: false };
 }
 
@@ -35,21 +37,19 @@ function spawnViaNode(scriptPath, args, nodeExe = process.execPath) {
  * 跑 Windows .cmd/.bat。
  * `C:\Program Files\...` 必须给 command 本身加引号，否则 shell 会拆成 `C:\Program`。
  */
-function spawnWindowsCmd(cmdPath, args) {
+function spawnWindowsCmd(cmdPath: string, args: string[]): SpawnSpec {
   const command = /[\s]/.test(cmdPath) ? `"${cmdPath.replace(/"/g, '')}"` : cmdPath;
   return { command, args: args.map((a) => String(a)), shell: true };
 }
 
 /**
  * npm / npx：优先 `node.exe` + `*-cli.js`（避免 .cmd + Program Files 空格问题）。
- * @param {'npm'|'npx'} kind
- * @returns {{ command: string, args: string[], shell: boolean } | null}
  */
-function resolveNpmFamilySpawn(kind, args) {
+function resolveNpmFamilySpawn(kind: 'npm' | 'npx', args: string[]): SpawnSpec | null {
   const cliName = kind === 'npm' ? 'npm-cli.js' : 'npx-cli.js';
-  const roots = new Set();
+  const roots = new Set<string>();
 
-  const addRoot = (dir) => {
+  const addRoot = (dir: string | null | undefined) => {
     if (dir && exists(dir)) roots.add(dir);
   };
 
@@ -72,8 +72,7 @@ function resolveNpmFamilySpawn(kind, args) {
   return null;
 }
 
-/** @returns {string[]} */
-function pnpmCjsCandidates(cwd) {
+function pnpmCjsCandidates(cwd: string): string[] {
   const candidates = [path.join(cwd, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')];
   const appData = process.env.APPDATA;
   if (appData) {
@@ -84,7 +83,7 @@ function pnpmCjsCandidates(cwd) {
   return [...new Set(candidates)].filter((candidate) => exists(candidate));
 }
 
-function toPnpmSpawn(executable, args, cwd = process.cwd()) {
+function toPnpmSpawn(executable: string, args: string[], cwd: string = process.cwd()): SpawnSpec {
   if (executable.endsWith('.cjs')) {
     return spawnViaNode(executable, args);
   }
@@ -105,17 +104,17 @@ function toPnpmSpawn(executable, args, cwd = process.cwd()) {
   return { command: executable, args, shell: false };
 }
 
-function localPnpmBin(cwd) {
+function localPnpmBin(cwd: string): string | null {
   const bin = path.join(cwd, 'node_modules', '.bin', IS_WINDOWS ? 'pnpm.cmd' : 'pnpm');
   return exists(bin) ? bin : null;
 }
 
-function nodeCorepackPath() {
+function nodeCorepackPath(): string | null {
   const corepack = path.join(path.dirname(process.execPath), IS_WINDOWS ? 'corepack.cmd' : 'corepack');
   return exists(corepack) ? corepack : null;
 }
 
-function resolveNpmExecPnpm(args) {
+function resolveNpmExecPnpm(args: string[]): SpawnSpec | null {
   const viaCli = resolveNpmFamilySpawn('npm', ['exec', '--yes', 'pnpm', ...args]);
   if (viaCli) return viaCli;
   if (IS_WINDOWS) {
@@ -124,18 +123,22 @@ function resolveNpmExecPnpm(args) {
   }
   const npm = findOnPath('npm');
   if (npm) {
-    return resolveWindowsExecutable(npm, ['exec', '--yes', 'pnpm', ...args])
-      || { command: npm, args: ['exec', '--yes', 'pnpm', ...args], shell: false };
+    return (
+      resolveWindowsExecutable(npm, ['exec', '--yes', 'pnpm', ...args]) || {
+        command: npm,
+        args: ['exec', '--yes', 'pnpm', ...args],
+        shell: false,
+      }
+    );
   }
   return null;
 }
 
-export function getPnpmInstallHint() {
+export function getPnpmInstallHint(): string {
   return 'corepack enable pnpm  或  npm install -g pnpm  后重新运行 node app';
 }
 
-/** @returns {{ command: string, args: string[], shell: boolean }} */
-export function resolvePnpmSpawn(args, cwd = process.cwd()) {
+export function resolvePnpmSpawn(args: string[], cwd: string = process.cwd()): SpawnSpec {
   const cjs = pnpmCjsCandidates(cwd)[0];
   if (cjs) return spawnViaNode(cjs, args);
 
@@ -167,9 +170,8 @@ export function resolvePnpmSpawn(args, cwd = process.cwd()) {
 
 /**
  * Windows：把 PATH/绝对路径上的 npm/npx 等解析成可 spawn 的规格。
- * @returns {{ command: string, args: string[], shell: boolean } | null}
  */
-function resolveWindowsExecutable(executable, args) {
+function resolveWindowsExecutable(executable: string, args: string[]): SpawnSpec | null {
   if (!executable) return null;
   if (/\.(cmd|bat)$/i.test(executable)) return spawnWindowsCmd(executable, args);
   if (/\.exe$/i.test(executable)) return { command: executable, args, shell: false };
@@ -179,8 +181,11 @@ function resolveWindowsExecutable(executable, args) {
   return null;
 }
 
-/** @returns {{ command: string, args: string[], shell: boolean }} */
-export function resolveCommandSpawn(command, args, cwd = process.cwd()) {
+export function resolveCommandSpawn(
+  command: string,
+  args: string[],
+  cwd: string = process.cwd(),
+): SpawnSpec {
   if (command === 'pnpm') {
     return resolvePnpmSpawn(args, cwd);
   }
@@ -193,13 +198,11 @@ export function resolveCommandSpawn(command, args, cwd = process.cwd()) {
 
   if (IS_WINDOWS) {
     if (/[\\/]/.test(command)) {
-      return resolveWindowsExecutable(command, args)
-        || { command, args, shell: false };
+      return resolveWindowsExecutable(command, args) || { command, args, shell: false };
     }
     const onPath = findOnPath(command);
     if (onPath) {
-      return resolveWindowsExecutable(onPath, args)
-        || { command: onPath, args, shell: false };
+      return resolveWindowsExecutable(onPath, args) || { command: onPath, args, shell: false };
     }
     const besideNode = path.join(path.dirname(process.execPath), `${command}.cmd`);
     if (exists(besideNode)) return spawnWindowsCmd(besideNode, args);
@@ -208,9 +211,15 @@ export function resolveCommandSpawn(command, args, cwd = process.cwd()) {
   return { command, args, shell: false };
 }
 
-export function spawnCommand(command, args, cwd, extraEnv = {}, baseEnv = process.env) {
+export function spawnCommand(
+  command: string,
+  args: string[],
+  cwd: string,
+  extraEnv: Record<string, string | undefined> = {},
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    let spawnSpec;
+    let spawnSpec: SpawnSpec;
     try {
       spawnSpec = resolveCommandSpawn(command, args, cwd);
     } catch (err) {
@@ -223,10 +232,10 @@ export function spawnCommand(command, args, cwd, extraEnv = {}, baseEnv = proces
       shell: spawnSpec.shell,
       stdio: 'inherit',
       windowsHide: true,
-      env: { ...baseEnv, ...extraEnv }
+      env: { ...baseEnv, ...extraEnv },
     });
 
-    child.on('error', (err) => {
+    child.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'ENOENT' || err.code === 'EINVAL') {
         const hint = command === 'pnpm' ? `，请执行: ${getPnpmInstallHint()}` : '';
         reject(new Error(`${command} 未安装或不在 PATH 中${hint}`));

@@ -5,12 +5,21 @@
  * @see https://www.volcengine.com/docs/6561/1329505 （V3 TTS 双向流式，同类头字段）
  */
 
-/**
- * @param {object} config
- * @param {{ connectId?: string, requestId?: string, sequence?: number|string }} [opts]
- */
-export function buildVolcengineSpeechHeaders(config = {}, opts = {}) {
-  const headers = {};
+export function buildVolcengineSpeechHeaders(
+  config: {
+    resourceId?: unknown;
+    apiKey?: unknown;
+    xApiKey?: unknown;
+    appKey?: unknown;
+    accessKey?: unknown;
+  } = {},
+  opts: {
+    connectId?: string;
+    requestId?: string;
+    sequence?: number | string;
+  } = {},
+): Record<string, string> {
+  const headers: Record<string, string> = {};
   const resourceId = String(config.resourceId ?? '').trim();
   if (resourceId) headers['X-Api-Resource-Id'] = resourceId;
 
