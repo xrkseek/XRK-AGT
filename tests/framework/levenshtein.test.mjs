@@ -3,7 +3,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { TextSimilarity } from '../../src/utils/neural-algorithms.js';
+import { TextSimilarity } from '#utils/neural-algorithms.js';
 
 /** 朴素全矩阵对照 */
 function naive(a, b) {

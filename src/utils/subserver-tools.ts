@@ -6,124 +6,142 @@
 import {
   formatSubserverCommandResult,
   parseSubserverCommandLine,
-  subserverRuntimeUsageHint
+  subserverRuntimeUsageHint,
 } from '#utils/subserver-runtimes.js';
 import {
   formatSubserverError,
   getSubserverConfig,
-  getSubserverDefaultRuntime
+  getSubserverDefaultRuntime,
 } from '#utils/subserver-client.js';
 
 const PYSERVER = 'pyserver';
 const DEFAULT_SUBSERVER_CMD_TIMEOUT = 120_000;
 
+type AgentRuntimeLike = {
+  callSubserver: (requestPath: string, options?: Record<string, unknown>) => Promise<unknown>;
+};
+
+function getAgentRuntime(): AgentRuntimeLike {
+  return (globalThis as { AgentRuntime?: AgentRuntimeLike }).AgentRuntime!;
+}
+
 /**
  * 代码内转发到子服务 POST /api/system/command（非终端入口）
- * @param {string} rawLine
- * @param {{ timeout?: number, defaultRuntime?: string }} [options]
  */
-export async function dispatchSubserverCommand(rawLine, options = {}) {
+export async function dispatchSubserverCommand(
+  rawLine: unknown,
+  options: { timeout?: number; defaultRuntime?: string } = {},
+): Promise<{
+  ok: boolean;
+  text: string;
+  runtime: string;
+  result?: unknown;
+}> {
   const timeout = options.timeout ?? DEFAULT_SUBSERVER_CMD_TIMEOUT;
   const line = String(rawLine ?? '').trim();
   if (!line) {
     return {
       ok: true,
       text: subserverRuntimeUsageHint(),
-      runtime: options.defaultRuntime || getSubserverDefaultRuntime()
+      runtime: options.defaultRuntime || getSubserverDefaultRuntime(),
     };
   }
 
   const { runtime, commandLine } = parseSubserverCommandLine(
     line,
-    options.defaultRuntime || getSubserverDefaultRuntime()
+    options.defaultRuntime || getSubserverDefaultRuntime(),
   );
 
   try {
-    const result = await AgentRuntime.callSubserver('/api/system/command', {
+    const result = await getAgentRuntime().callSubserver('/api/system/command', {
       method: 'POST',
       body: { line: commandLine },
       timeout,
-      runtime
+      runtime,
     });
     const prefix = runtime === 'pyserver' ? '' : `[${runtime}] `;
     return {
       ok: true,
       text: prefix + formatSubserverCommandResult(result),
       runtime,
-      result
+      result,
     };
   } catch (err) {
     const hint = formatSubserverError(err, getSubserverConfig(runtime));
     return {
       ok: false,
       text: `子服务 ${runtime} 调用失败:\n${hint}`,
-      runtime
+      runtime,
     };
   }
 }
 
-/**
- * @param {string} requestPath
- * @param {Record<string, unknown>} [options]
- */
-export async function callPyserver(requestPath, options = {}) {
-  return AgentRuntime.callSubserver(requestPath, { runtime: PYSERVER, ...options });
+export async function callPyserver(
+  requestPath: string,
+  options: Record<string, unknown> = {},
+): Promise<unknown> {
+  return getAgentRuntime().callSubserver(requestPath, { runtime: PYSERVER, ...options });
 }
 
 export const PyserverApi = {
   mediaTools: {
-    resize(filePath, width, height = 0, options = {}) {
+    resize(filePath: string, width: number, height = 0, options: Record<string, unknown> = {}) {
       return callPyserver('/api/media-tools/resize', {
         method: 'POST',
         body: { path: filePath, width, height },
-        ...options
+        ...options,
       });
     },
-    convert(filePath, format, options = {}) {
+    convert(filePath: string, format: string, options: Record<string, unknown> = {}) {
       return callPyserver('/api/media-tools/convert', {
         method: 'POST',
         body: { path: filePath, format },
-        ...options
+        ...options,
       });
     },
-    thumbnail(filePath, size, options = {}) {
+    thumbnail(filePath: string, size: number, options: Record<string, unknown> = {}) {
       return callPyserver('/api/media-tools/thumbnail', {
         method: 'POST',
         body: { path: filePath, size },
-        ...options
+        ...options,
       });
-    }
+    },
   },
   docPipeline: {
-    extract(body, options = {}) {
+    extract(body: unknown, options: Record<string, unknown> = {}) {
       return callPyserver('/api/doc-pipeline/extract', { method: 'POST', body, ...options });
     },
-    markdown(body, options = {}) {
+    markdown(body: unknown, options: Record<string, unknown> = {}) {
       return callPyserver('/api/doc-pipeline/markdown', { method: 'POST', body, ...options });
-    }
+    },
   },
   webFetch: {
-    fetch(url, options = {}) {
+    fetch(url: string, options: Record<string, unknown> = {}) {
       return callPyserver('/api/web-fetch/fetch', { method: 'POST', body: { url }, ...options });
     },
-    cache(url, options = {}) {
+    cache(url: string, options: Record<string, unknown> = {}) {
       return callPyserver('/api/web-fetch/cache', { method: 'GET', query: { url }, ...options });
-    }
+    },
   },
-  groupCommand(group, cmd, args = [], options = {}) {
+  groupCommand(
+    group: string,
+    cmd: string,
+    args: unknown[] = [],
+    options: Record<string, unknown> = {},
+  ) {
     return callPyserver(`/api/${group}/command`, {
       method: 'POST',
       body: { cmd, args },
-      ...options
+      ...options,
     });
   },
-  systemCommand(line, options = {}) {
+  systemCommand(line: string, options: Record<string, unknown> = {}) {
     return dispatchSubserverCommand(line, {
       ...options,
-      defaultRuntime: PYSERVER
+      defaultRuntime: PYSERVER,
     }).then(({ ok, text, result }) => {
       if (!ok) throw new Error(text);
       return result;
     });
-  }
+  },
 };

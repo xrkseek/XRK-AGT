@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 
 /**
  * 文本相似度（Jaccard n-gram + Levenshtein）
@@ -7,17 +7,13 @@ import crypto from 'crypto';
 export class TextSimilarity {
   /**
    * Jaccard 相似度（字符 n-gram）
-   * @param {string} text1
-   * @param {string} text2
-   * @param {number} [n=2]
-   * @returns {number} 0–1
    */
-  static jaccardSimilarity(text1, text2, n = 2) {
+  static jaccardSimilarity(text1: string, text2: string, n = 2): number {
     if (!text1 || !text2) return 0;
     if (text1 === text2) return 1;
 
-    const getNGrams = (text) => {
-      const grams = new Set();
+    const getNGrams = (text: string) => {
+      const grams = new Set<string>();
       for (let i = 0; i <= text.length - n; i++) {
         grams.add(text.slice(i, i + n));
       }
@@ -27,7 +23,7 @@ export class TextSimilarity {
     const set1 = getNGrams(text1.toLowerCase());
     const set2 = getNGrams(text2.toLowerCase());
 
-    const intersection = new Set([...set1].filter(x => set2.has(x)));
+    const intersection = new Set([...set1].filter((x) => set2.has(x)));
     const union = new Set([...set1, ...set2]);
 
     return union.size > 0 ? intersection.size / union.size : 0;
@@ -35,11 +31,8 @@ export class TextSimilarity {
 
   /**
    * Levenshtein 编辑距离（两行滚动 DP，O(min(m,n)) 额外内存）
-   * @param {string} text1
-   * @param {string} text2
-   * @returns {number}
    */
-  static levenshteinDistance(text1, text2) {
+  static levenshteinDistance(text1: string, text2: string): number {
     if (!text1) return text2 ? text2.length : 0;
     if (!text2) return text1.length;
     if (text1 === text2) return 0;
@@ -54,9 +47,7 @@ export class TextSimilarity {
     }
     const m = a.length;
     const n = b.length;
-    /** @type {Uint32Array} */
     let prev = new Uint32Array(m + 1);
-    /** @type {Uint32Array} */
     let curr = new Uint32Array(m + 1);
     for (let i = 0; i <= m; i++) prev[i] = i;
 
@@ -65,25 +56,22 @@ export class TextSimilarity {
       const bj = b.charCodeAt(j - 1);
       for (let i = 1; i <= m; i++) {
         const cost = a.charCodeAt(i - 1) === bj ? 0 : 1;
-        const del = prev[i] + 1;
-        const ins = curr[i - 1] + 1;
-        const sub = prev[i - 1] + cost;
+        const del = prev[i]! + 1;
+        const ins = curr[i - 1]! + 1;
+        const sub = prev[i - 1]! + cost;
         curr[i] = del < ins ? (del < sub ? del : sub) : ins < sub ? ins : sub;
       }
       const swap = prev;
       prev = curr;
       curr = swap;
     }
-    return prev[m];
+    return prev[m]!;
   }
 
   /**
    * 计算归一化相似度（基于编辑距离）
-   * @param {string} text1 - 文本1
-   * @param {string} text2 - 文本2
-   * @returns {number} 相似度 0-1
    */
-  static normalizedSimilarity(text1, text2) {
+  static normalizedSimilarity(text1: string, text2: string): number {
     if (!text1 || !text2) return 0;
     if (text1 === text2) return 1;
 
@@ -91,16 +79,13 @@ export class TextSimilarity {
     if (maxLen === 0) return 1;
 
     const distance = this.levenshteinDistance(text1, text2);
-    return 1 - (distance / maxLen);
+    return 1 - distance / maxLen;
   }
 
   /**
    * 综合相似度（结合Jaccard和编辑距离）
-   * @param {string} text1 - 文本1
-   * @param {string} text2 - 文本2
-   * @returns {number} 综合相似度 0-1
    */
-  static combinedSimilarity(text1, text2) {
+  static combinedSimilarity(text1: string, text2: string): number {
     const jaccard = this.jaccardSimilarity(text1, text2);
     const normalized = this.normalizedSimilarity(text1, text2);
     // 加权平均：Jaccard权重0.4，编辑距离权重0.6
@@ -108,15 +93,38 @@ export class TextSimilarity {
   }
 }
 
+type DedupEvent = {
+  tasker?: unknown;
+  post_type?: unknown;
+  user_id?: unknown;
+  plainText?: string;
+  raw_message?: string;
+  msg?: string;
+  event_id?: string;
+};
+
+type DedupRecord = {
+  event: DedupEvent;
+  timestamp: number;
+  fingerprint: string;
+};
+
 /**
  * 事件去重器（使用向量相似度）
  * 基于文本相似度和时间窗口的智能去重
  */
 export class EventDeduplicator {
-  recentEvents = new Map();
-  cleanupInterval = null;
+  recentEvents = new Map<string, DedupRecord>();
+  cleanupInterval: ReturnType<typeof setInterval> | null = null;
+  similarityThreshold: number;
+  timeWindow: number;
+  maxHistory: number;
 
-  constructor(options = {}) {
+  constructor(options: {
+    similarityThreshold?: number;
+    timeWindow?: number;
+    maxHistory?: number;
+  } = {}) {
     this.similarityThreshold = options.similarityThreshold || 0.85;
     this.timeWindow = options.timeWindow || 60000; // 1分钟
     this.maxHistory = options.maxHistory || 1000;
@@ -126,7 +134,7 @@ export class EventDeduplicator {
   /**
    * 生成事件指纹（用于快速比较）
    */
-  generateFingerprint(event) {
+  generateFingerprint(event: DedupEvent): string {
     const key = `${event.tasker || ''}:${event.post_type || ''}:${event.user_id || ''}`;
     const content = (event.plainText || event.raw_message || event.msg || '').slice(0, 100);
     const hash = crypto.createHash('md5').update(key + content).digest('hex');
@@ -135,10 +143,8 @@ export class EventDeduplicator {
 
   /**
    * 检查事件是否重复
-   * @param {Object} event - 事件对象
-   * @returns {boolean} 是否重复
    */
-  isDuplicate(event) {
+  isDuplicate(event: DedupEvent): boolean {
     const now = Date.now();
     const fingerprint = this.generateFingerprint(event);
     const eventId = event.event_id || fingerprint;
@@ -155,9 +161,11 @@ export class EventDeduplicator {
 
     // 慢速检查：相似度匹配
     const content = event.plainText || event.raw_message || event.msg || '';
-    if (content.length > 10) { // 只对较长文本进行相似度检查
+    if (content.length > 10) {
+      // 只对较长文本进行相似度检查
       for (const [, record] of this.recentEvents.entries()) {
-        const recordContent = record.event.plainText || record.event.raw_message || record.event.msg || '';
+        const recordContent =
+          record.event.plainText || record.event.raw_message || record.event.msg || '';
         if (recordContent.length > 10) {
           const timeDiff = now - record.timestamp;
           if (timeDiff < this.timeWindow) {
@@ -174,7 +182,7 @@ export class EventDeduplicator {
     this.recentEvents.set(eventId, {
       event,
       timestamp: now,
-      fingerprint
+      fingerprint,
     });
 
     // 限制历史记录大小
@@ -188,9 +196,9 @@ export class EventDeduplicator {
   /**
    * 清理过期事件
    */
-  cleanup() {
+  cleanup(): void {
     const now = Date.now();
-    const toDelete = [];
+    const toDelete: string[] = [];
 
     for (const [id, record] of this.recentEvents.entries()) {
       if (now - record.timestamp > this.timeWindow * 2) {
@@ -198,13 +206,13 @@ export class EventDeduplicator {
       }
     }
 
-    toDelete.forEach(id => this.recentEvents.delete(id));
+    toDelete.forEach((id) => this.recentEvents.delete(id));
   }
 
   /**
    * 启动定期清理
    */
-  startCleanup() {
+  startCleanup(): void {
     if (this.cleanupInterval) return;
     this.cleanupInterval = setInterval(() => {
       this.cleanup();
@@ -214,7 +222,7 @@ export class EventDeduplicator {
   /**
    * 停止清理
    */
-  stopCleanup() {
+  stopCleanup(): void {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
@@ -224,22 +232,31 @@ export class EventDeduplicator {
   /**
    * 清空所有记录
    */
-  clear() {
+  clear(): void {
     this.stopCleanup();
     this.recentEvents.clear();
   }
 }
+
+type CacheEntry = {
+  value: unknown;
+  timestamp: number;
+  accessCount: number;
+  lastAccess: number;
+};
 
 /**
  * 智能缓存策略（基于LRU和访问频率）
  * 使用简单的神经网络思想：根据访问模式调整缓存策略
  */
 export class IntelligentCache {
-  cache = new Map();
-  accessPatterns = new Map();
-  cleanupInterval = null;
+  cache = new Map<string, CacheEntry>();
+  accessPatterns = new Map<string, number[]>();
+  cleanupInterval: ReturnType<typeof setInterval> | null = null;
+  maxSize: number;
+  ttl: number;
 
-  constructor(options = {}) {
+  constructor(options: { maxSize?: number; ttl?: number } = {}) {
     this.maxSize = options.maxSize || 1000;
     this.ttl = options.ttl || 3600000; // 1小时
     this.startCleanup();
@@ -248,7 +265,7 @@ export class IntelligentCache {
   /**
    * 获取缓存值
    */
-  get(key) {
+  get(key: string): unknown {
     const entry = this.cache.get(key);
     if (!entry) return null;
 
@@ -272,7 +289,7 @@ export class IntelligentCache {
   /**
    * 设置缓存值
    */
-  set(key, value) {
+  set(key: string, value: unknown): void {
     const now = Date.now();
 
     // 如果缓存已满，使用智能淘汰策略
@@ -284,7 +301,7 @@ export class IntelligentCache {
       value,
       timestamp: now,
       accessCount: 1,
-      lastAccess: now
+      lastAccess: now,
     });
 
     this.recordAccess(key);
@@ -293,12 +310,12 @@ export class IntelligentCache {
   /**
    * 记录访问模式（用于预测未来访问）
    */
-  recordAccess(key) {
+  recordAccess(key: string): void {
     if (!this.accessPatterns.has(key)) {
       this.accessPatterns.set(key, []);
     }
 
-    const history = this.accessPatterns.get(key);
+    const history = this.accessPatterns.get(key)!;
     history.push(Date.now());
 
     // 只保留最近20次访问记录
@@ -311,7 +328,7 @@ export class IntelligentCache {
    * 计算键的访问价值（基于访问频率和最近访问时间）
    * 使用简单的加权评分
    */
-  calculateValue(entry, _key) {
+  calculateValue(entry: CacheEntry, _key: string): number {
     const now = Date.now();
     const timeSinceLastAccess = now - (entry.lastAccess || entry.timestamp);
     const accessCount = entry.accessCount || 1;
@@ -329,9 +346,9 @@ export class IntelligentCache {
   /**
    * 智能淘汰：淘汰价值最低的项
    */
-  evictLeastValuable() {
+  evictLeastValuable(): void {
     let minValue = Infinity;
-    let minKey = null;
+    let minKey: string | null = null;
 
     for (const [key, entry] of this.cache.entries()) {
       const value = this.calculateValue(entry, key);
@@ -350,9 +367,9 @@ export class IntelligentCache {
   /**
    * 清理过期项
    */
-  cleanup() {
+  cleanup(): void {
     const now = Date.now();
-    const toDelete = [];
+    const toDelete: string[] = [];
 
     for (const [key, entry] of this.cache.entries()) {
       if (now - entry.timestamp > this.ttl) {
@@ -360,7 +377,7 @@ export class IntelligentCache {
       }
     }
 
-    toDelete.forEach(key => {
+    toDelete.forEach((key) => {
       this.cache.delete(key);
       this.accessPatterns.delete(key);
     });
@@ -369,7 +386,7 @@ export class IntelligentCache {
   /**
    * 启动定期清理
    */
-  startCleanup() {
+  startCleanup(): void {
     if (this.cleanupInterval) return;
     this.cleanupInterval = setInterval(() => {
       this.cleanup();
@@ -385,7 +402,7 @@ export class IntelligentCache {
   /**
    * 停止清理
    */
-  stopCleanup() {
+  stopCleanup(): void {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
@@ -395,7 +412,7 @@ export class IntelligentCache {
   /**
    * 清空缓存
    */
-  clear() {
+  clear(): void {
     this.stopCleanup();
     this.cache.clear();
     this.accessPatterns.clear();
@@ -404,51 +421,67 @@ export class IntelligentCache {
   /**
    * 获取缓存统计
    */
-  getStats() {
-    const totalAccess = Array.from(this.cache.values())
-      .reduce((sum, entry) => sum + (entry.accessCount || 0), 0);
-    
-    const avgAccess = this.cache.size > 0 
-      ? totalAccess / this.cache.size 
-      : 0;
+  getStats(): {
+    size: number;
+    maxSize: number;
+    totalAccess: number;
+    avgAccess: string;
+    hitRate: number;
+  } {
+    const totalAccess = Array.from(this.cache.values()).reduce(
+      (sum, entry) => sum + (entry.accessCount || 0),
+      0,
+    );
+
+    const avgAccess = this.cache.size > 0 ? totalAccess / this.cache.size : 0;
 
     return {
       size: this.cache.size,
       maxSize: this.maxSize,
       totalAccess,
       avgAccess: avgAccess.toFixed(2),
-      hitRate: this.calculateHitRate()
+      hitRate: this.calculateHitRate(),
     };
   }
 
   /**
    * 计算命中率（需要外部记录）
    */
-  calculateHitRate() {
+  calculateHitRate(): number {
     // 这里可以扩展为记录命中/未命中次数
     return 0; // 占位符
   }
 }
+
+type PluginRule = {
+  reg?: RegExp | { test: (text: string) => boolean; toString: () => string };
+  event?: string;
+};
+
+type RuleMatcher = {
+  test: (text: string) => boolean;
+  similarity: (text: string) => number;
+};
 
 /**
  * 插件匹配优化器（使用相似度匹配）
  * 智能匹配插件规则，提高匹配效率
  */
 export class PluginMatcher {
-  ruleCache = new Map();
-  matchStats = new Map();
+  ruleCache = new Map<string, RuleMatcher>();
+  matchStats = new Map<string, { total: number; matched: number }>();
 
   /**
    * 编译规则为高效匹配器
    */
-  compileRule(rule) {
+  compileRule(rule: PluginRule): RuleMatcher {
     const cacheKey = `${rule.reg?.toString() || ''}:${rule.event || ''}`;
-    
+
     if (this.ruleCache.has(cacheKey)) {
-      return this.ruleCache.get(cacheKey);
+      return this.ruleCache.get(cacheKey)!;
     }
 
-    const matcher = {
+    const matcher: RuleMatcher = {
       test: (text) => {
         if (rule.reg) {
           return rule.reg.test(text);
@@ -458,11 +491,11 @@ export class PluginMatcher {
       similarity: (text) => {
         // 如果规则有文本模式，计算相似度
         if (rule.reg && typeof rule.reg === 'object') {
-          const pattern = rule.reg.toString().replace(/[\/\^$]/g, '');
+          const pattern = rule.reg.toString().replace(/[\/^$]/g, '');
           return TextSimilarity.combinedSimilarity(text, pattern);
         }
         return 0;
-      }
+      },
     };
 
     this.ruleCache.set(cacheKey, matcher);
@@ -472,7 +505,10 @@ export class PluginMatcher {
   /**
    * 智能匹配规则（结合精确匹配和相似度匹配）
    */
-  matchRule(rule, event) {
+  matchRule(
+    rule: PluginRule,
+    event: { plainText?: string; msg?: string },
+  ): { matched: boolean; confidence: number } {
     const matcher = this.compileRule(rule);
     const text = event.plainText || event.msg || '';
 
@@ -496,13 +532,13 @@ export class PluginMatcher {
   /**
    * 记录匹配统计（用于优化）
    */
-  recordMatch(rule, matched) {
+  recordMatch(rule: PluginRule, matched: boolean): void {
     const key = `${rule.reg?.toString() || ''}`;
     if (!this.matchStats.has(key)) {
       this.matchStats.set(key, { total: 0, matched: 0 });
     }
 
-    const stats = this.matchStats.get(key);
+    const stats = this.matchStats.get(key)!;
     stats.total++;
     if (matched) stats.matched++;
   }
@@ -510,12 +546,12 @@ export class PluginMatcher {
   /**
    * 获取匹配统计
    */
-  getMatchStats() {
-    const stats = {};
+  getMatchStats(): Record<string, { total: number; matched: number; matchRate: string | number }> {
+    const stats: Record<string, { total: number; matched: number; matchRate: string | number }> = {};
     for (const [key, value] of this.matchStats.entries()) {
       stats[key] = {
         ...value,
-        matchRate: value.total > 0 ? (value.matched / value.total).toFixed(2) : 0
+        matchRate: value.total > 0 ? (value.matched / value.total).toFixed(2) : 0,
       };
     }
     return stats;
@@ -524,9 +560,8 @@ export class PluginMatcher {
   /**
    * 清空缓存
    */
-  clear() {
+  clear(): void {
     this.ruleCache.clear();
     this.matchStats.clear();
   }
 }
-
