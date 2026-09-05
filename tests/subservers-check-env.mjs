@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { SUBSERVER_RUNTIME_CATALOG } from '../src/utils/subserver-runtimes.js';
+import { SUBSERVER_RUNTIME_CATALOG } from '#utils/subserver-runtimes.js';
 
 if (process.platform === 'win32') {
   const extra = [

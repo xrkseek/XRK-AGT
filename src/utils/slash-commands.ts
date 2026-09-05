@@ -8,47 +8,42 @@ import { getProjectRoot, resolveAgentWorkspaceAbs } from '#utils/agent-workspace
 import { getRecipe, listRecipes, materializeRecipe } from '#utils/recipes/recipe-loader.js';
 import { parseMarkdownFrontmatter } from '#utils/skills/trigger-microagents.js';
 
-/**
- * @param {string} text
- * @returns {{ command: string, rest: string } | null}
- */
-export function parseSlashLine(text) {
+export function parseSlashLine(text: unknown): { command: string; rest: string } | null {
   const s = String(text || '').trim();
   if (!s.startsWith('/')) return null;
   const m = s.match(/^\/([A-Za-z0-9_\-.]+)(?:\s+([\s\S]*))?$/);
   if (!m) return null;
-  return { command: m[1], rest: (m[2] || '').trim() };
+  return { command: m[1]!, rest: (m[2] || '').trim() };
 }
 
-/** @param {string} rest @returns {Record<string, string>} */
-export function parseKvArgs(rest) {
-  const out = {};
+export function parseKvArgs(rest: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
   const s = String(rest || '').trim();
   if (!s) return out;
   // k=v 或 k="v v"
   const re = /([A-Za-z_][\w]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/g;
-  let m;
+  let m: RegExpExecArray | null;
   let matched = false;
   while ((m = re.exec(s)) !== null) {
     matched = true;
-    out[m[1]] = m[2] ?? m[3] ?? m[4] ?? '';
+    out[m[1]!] = m[2] ?? m[3] ?? m[4] ?? '';
   }
   if (!matched) out._ = s;
   return out;
 }
 
-function findSkillMdByName(name) {
+function findSkillMdByName(name: string): { name: string; body: string; path: string } | null {
   const want = String(name || '').toLowerCase();
   const roots = [
     path.join(getProjectRoot(), 'agents', 'skills'),
-    path.join(resolveAgentWorkspaceAbs(), 'skills')
+    path.join(resolveAgentWorkspaceAbs(), 'skills'),
   ];
   for (const root of roots) {
     if (!fs.existsSync(root)) continue;
     const stack = [root];
     while (stack.length) {
-      const dir = stack.pop();
-      let entries;
+      const dir = stack.pop()!;
+      let entries: fs.Dirent[];
       try {
         entries = fs.readdirSync(dir, { withFileTypes: true });
       } catch {
@@ -69,13 +64,16 @@ function findSkillMdByName(name) {
         } catch {
           continue;
         }
-        const fm = parseMarkdownFrontmatter(raw);
+        const fm = parseMarkdownFrontmatter(raw) as {
+          meta?: { name?: string };
+          body?: string;
+        } | null;
         const id = String(fm?.meta?.name || folder).toLowerCase();
         if (id === want || folder === want) {
           return {
             name: fm?.meta?.name || folder,
             body: (fm?.body || raw).trim(),
-            path: abs
+            path: abs,
           };
         }
       }
@@ -84,17 +82,15 @@ function findSkillMdByName(name) {
   return null;
 }
 
-/**
- * @param {string} userText
- * @returns {{
- *   handled: boolean,
- *   kind?: string,
- *   text?: string,
- *   systemExtra?: string,
- *   replyOnly?: string
- * }}
- */
-export function resolveSlashCommand(userText) {
+export type SlashCommandResult = {
+  handled: boolean;
+  kind?: string;
+  text?: string;
+  systemExtra?: string;
+  replyOnly?: string;
+};
+
+export function resolveSlashCommand(userText: unknown): SlashCommandResult {
   const parsed = parseSlashLine(userText);
   if (!parsed) return { handled: false };
 
@@ -106,8 +102,14 @@ export function resolveSlashCommand(userText) {
     if (!list.length) {
       return { handled: true, replyOnly: '暂无配方。可在 agents/recipes/*.yaml 添加。' };
     }
-    const lines = list.map((r) => `- **${r.id}**：${r.title}${r.description ? ` — ${r.description}` : ''}${r.cron ? ` \`cron:${r.cron}\`` : ''}`);
-    return { handled: true, replyOnly: `可用配方：\n${lines.join('\n')}\n\n用法：\`/recipe <id> [k=v]\`` };
+    const lines = list.map(
+      (r) =>
+        `- **${r.id}**：${r.title}${r.description ? ` — ${r.description}` : ''}${r.cron ? ` \`cron:${r.cron}\`` : ''}`,
+    );
+    return {
+      handled: true,
+      replyOnly: `可用配方：\n${lines.join('\n')}\n\n用法：\`/recipe <id> [k=v]\``,
+    };
   }
 
   if (cmd === 'recipe' || cmd === 'r') {
@@ -128,14 +130,14 @@ export function resolveSlashCommand(userText) {
       text,
       systemExtra: systemExtra
         ? `## Recipe: ${recipe.title}\n\n${systemExtra}`
-        : `## Recipe: ${recipe.title}`
+        : `## Recipe: ${recipe.title}`,
     };
   }
 
   if (cmd === 'skills' || cmd === 'skill-list') {
     return {
       handled: true,
-      replyOnly: '技能见 Workspace context 的 Skills 目录；或 `/<skill名>` 直接注入全文。'
+      replyOnly: '技能见 Workspace context 的 Skills 目录；或 `/<skill名>` 直接注入全文。',
     };
   }
 
@@ -147,7 +149,7 @@ export function resolveSlashCommand(userText) {
       handled: true,
       kind: 'skill',
       text: rest || `请按技能「${skill.name}」执行。`,
-      systemExtra: `## Activated skill: ${skill.name}\n\n${skill.body}${argsNote}`
+      systemExtra: `## Activated skill: ${skill.name}\n\n${skill.body}${argsNote}`,
     };
   }
 

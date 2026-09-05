@@ -8,7 +8,7 @@ import {
   rememberSentMsgIds,
   scheduleMsgRecall,
   clearPendingMsgRecalls,
-} from '../../src/utils/msg-recall.js'
+} from '#utils/msg-recall.js'
 
 before(() => {
   globalThis.logger ??= { info() {}, warn() {}, debug() {}, error() {} }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** 子服连通性冒烟（本地 tests/，不入库） */
-import { SUBSERVER_RUNTIME_CATALOG } from '../src/utils/subserver-runtimes.js';
+import { SUBSERVER_RUNTIME_CATALOG } from '#utils/subserver-runtimes.js';
 
 const args = process.argv.slice(2);
 const host = getArg('--host') || '127.0.0.1';
