@@ -1,4 +1,3 @@
-// @ts-nocheck
 import './bootstrap-globals.js';
 /**
  * AgentRuntime = **Host** (HTTP/WS/多 bot/Loader)，不是 LLM agent loop。
@@ -7,9 +6,12 @@ import './bootstrap-globals.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { EventEmitter } from 'node:events';
+// @ts-expect-error no @types/express
 import express from 'express';
 import http from 'node:http';
+// @ts-expect-error no @types/ws
 import { WebSocketServer } from 'ws';
+// @ts-expect-error no @types/multer
 import multer from 'multer';
 import chalk from 'chalk';
 import { pipeline } from 'node:stream/promises';
@@ -60,28 +62,29 @@ const AUTH_STATIC_EXT_REGEX = /\.(html|css|js|json|png|jpg|jpeg|gif|svg|webp|ico
  * runtime.on('online', ({ url }) => console.log(url));
  */
 export default class AgentRuntime extends EventEmitter {
-  _wsConnections = new Map();
-  _rateLimiters = new Map();
-  proxyMiddlewares = new Map();
-  domainConfigs = new Map();
-  sslContexts = new Map();
-  bots = {};
-  tasker = [];
-  server = null;
-  httpsServer = null;
-  multipartUpload = null;
-  _wsHeartbeatInterval = null;
+  [key: string]: any;
+  _wsConnections: any = new Map();
+  _rateLimiters: any = new Map();
+  proxyMiddlewares: any = new Map();
+  domainConfigs: any = new Map();
+  sslContexts: any = new Map();
+  bots: any = {};
+  tasker: any[] = [];
+  server: any = null;
+  httpsServer: any = null;
+  multipartUpload: any = null;
+  _wsHeartbeatInterval: any = null;
   apiKey = '';
-  httpPort = null;
-  httpsPort = null;
-  actualPort = null;
-  actualHttpsPort = null;
+  httpPort: any = null;
+  httpsPort: any = null;
+  actualPort: any = null;
+  actualHttpsPort: any = null;
   proxyEnabled = false;
-  proxyApp = null;
-  proxyServer = null;
-  proxyHttpsServer = null;
-  _compiledHiddenFileMatchers = null;
-  _authWhitelistCache = { ref: null, rules: [] };
+  proxyApp: any = null;
+  proxyServer: any = null;
+  proxyHttpsServer: any = null;
+  _compiledHiddenFileMatchers: any = null;
+  _authWhitelistCache: any = { ref: null, rules: [] };
 
   /**
    * 仅入口允许 `new AgentRuntime()`（start.js / debug.js）；Core 业务用裸名。
@@ -148,22 +151,22 @@ export default class AgentRuntime extends EventEmitter {
 
   _initSubServer() {
     /** 可选扩展：业务 Core 调用子服务 apis/ 时使用，见 #utils/subserver-client.js */
-    this.callSubserver = async (requestPath, options = {}) => {
+    this.callSubserver = async (requestPath: any, options: any = {}) => {
       try {
         return await callSubserverApi(requestPath, options);
-      } catch (error) {
+      } catch (error: any) {
         const err = normalizeError(error);
-        const cause = err.cause ? ` cause=${err.cause?.message ?? err.cause}` : '';
+        const cause = err.cause ? ` cause=${(err.cause as any)?.message ?? err.cause}` : '';
         RuntimeUtil.makeLog('debug', `子服务端调用失败 [${requestPath}]: ${err.message}${cause}`, 'AgentRuntime');
         throw err;
       }
     };
-    this.fetchSubserverToPath = async (requestPath, options = {}) => {
+    this.fetchSubserverToPath = async (requestPath: any, options: any = {}) => {
       try {
         return await fetchSubserverToPathApi(requestPath, options);
-      } catch (error) {
+      } catch (error: any) {
         const err = normalizeError(error);
-        const cause = err.cause ? ` cause=${err.cause?.message ?? err.cause}` : '';
+        const cause = err.cause ? ` cause=${(err as any).cause?.message ?? (err as any).cause}` : '';
         RuntimeUtil.makeLog('debug', `子服务端文件拉取失败 [${requestPath}]: ${err.message}${cause}`, 'AgentRuntime');
         throw err;
       }
@@ -177,10 +180,10 @@ export default class AgentRuntime extends EventEmitter {
    * @param {Object} [details={}] - 额外的错误详情
    * @returns {Error} 标准化的错误对象
    */
-  makeError(message, type = 'Error', details = {}) {
+  makeError(message: any, type: any = 'Error', details: any = {}) {
     let error;
 
-    if (Error.isError(message)) {
+    if ((Error as any).isError(message)) {
       error = message;
       if (type === 'Error' && error.type) {
         type = error.type;
@@ -203,16 +206,16 @@ export default class AgentRuntime extends EventEmitter {
 
     RuntimeUtil.makeLog('error', chalk.red(`✗ ${logMessage}${logDetails}`), type);
 
-    if (error.stack && runtimeConfig.debug) {
+    if (error.stack && (runtimeConfig as any).debug) {
       RuntimeUtil.makeLog('debug', chalk.gray(error.stack), type);
     }
 
     return error;
   }
 
-  _createUinManager() {
+  _createUinManager(): any {
     return Object.assign([], {
-      toJSON() {
+      toJSON(this: any) {
         if (!this.now) {
           if (this.length <= 2) return this[this.length - 1] || "";
           const array = this.slice(1);
@@ -221,15 +224,15 @@ export default class AgentRuntime extends EventEmitter {
         }
         return this.now;
       },
-      toString(raw, ...args) {
+      toString(this: any, raw: any, ...args: any[]) {
         return raw === true ?
-          Array.prototype.toString.apply(this, args) :
+          Array.prototype.toString.apply(this, args as any) :
           this.toJSON().toString(raw, ...args);
       },
-      includes(value) {
-        return this.some(i => i == value);
+      includes(this: any, value: any) {
+        return this.some((i: any) => i == value);
       }
-    });
+    }) as any;
   }
 
   _initHttpServer() {
@@ -266,7 +269,7 @@ export default class AgentRuntime extends EventEmitter {
       });
   }
 
-  _handleServerError(err, isHttps) {
+  _handleServerError(err: any, isHttps: any) {
     const handler = this[`server${err.code}`];
     if (typeof handler === "function") {
       return handler.call(this, err, isHttps);
@@ -283,7 +286,7 @@ export default class AgentRuntime extends EventEmitter {
    * 初始化代理应用和服务器
    */
   async _initProxyApp() {
-    return runtimeProxy.initProxyApp(this);
+    return runtimeProxy.initProxyApp(this as any);
   }
 
   /**
@@ -292,7 +295,7 @@ export default class AgentRuntime extends EventEmitter {
   _mountHttpBusinessMethods() {
     // 挂载代理管理器方法
     if (this.httpBusiness?.proxyManager) {
-      this.selectProxyUpstream = (domain, algorithm, clientIP) => {
+      this.selectProxyUpstream = (domain: any, algorithm: any, clientIP: any) => {
         return this.httpBusiness.proxyManager.selectUpstream(domain, algorithm, clientIP);
       };
       
@@ -303,18 +306,18 @@ export default class AgentRuntime extends EventEmitter {
     
     // 挂载CDN管理器方法
     if (this.httpBusiness?.cdnManager) {
-      this.isCDNRequest = (req) => {
+      this.isCDNRequest = (req: any) => {
         return this.httpBusiness.cdnManager.isCDNRequest(req);
       };
       
-      this.setCDNHeaders = (res, filePath, req) => {
+      this.setCDNHeaders = (res: any, filePath: any, req: any) => {
         return this.httpBusiness.cdnManager.setCDNHeaders(res, filePath, req);
       };
     }
     
     // 挂载重定向管理器方法
     if (this.httpBusiness?.redirectManager) {
-      this.handleRedirect = (req, res) => {
+      this.handleRedirect = (req: any, res: any) => {
         return this.httpBusiness.redirectManager.check(req, res);
       };
     }
@@ -334,10 +337,10 @@ export default class AgentRuntime extends EventEmitter {
    * 中间件与系统路由装配
    */
   async _initializeMiddlewareAndRoutes() {
-    return runtimeMiddleware.initializeMiddlewareAndRoutes(this);
+    return runtimeMiddleware.initializeMiddlewareAndRoutes(this as any);
   }
 
-  _parseByteSize(value, fallback = 10 * 1024 * 1024) {
+  _parseByteSize(value: any, fallback: any = 10 * 1024 * 1024) {
     if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.floor(value);
     if (typeof value !== 'string') return fallback;
     const s = value.trim().toLowerCase();
@@ -361,14 +364,14 @@ export default class AgentRuntime extends EventEmitter {
   }
 
 
-  _createMultipartUploader(options = {}) {
+  _createMultipartUploader(options: any = {}) {
     const limitsCfg = runtimeConfig.server.limits || {};
     const fileSize = this._parseByteSize(options.fileSize || limitsCfg.fileSize || '100mb', 100 * 1024 * 1024);
     const files = Number.isFinite(Number(options.files))
       ? Number(options.files)
       : (Number.isFinite(Number(limitsCfg.files)) ? Number(limitsCfg.files) : 8);
 
-    const multerOptions = {
+    const multerOptions: any = {
       limits: { fileSize, files }
     };
     if (options.storage) multerOptions.storage = options.storage;
@@ -382,7 +385,7 @@ export default class AgentRuntime extends EventEmitter {
    */
   _createProxy() {
     const botMap = this.bots;
-    const isBotEntry = (prop, value) => {
+    const isBotEntry = (prop: any, value: any) => {
       if (Reflect.has(this, prop)) return false;
       if (typeof prop !== 'string') return false;
       if (!value || typeof value !== 'object') return false;
@@ -409,7 +412,7 @@ export default class AgentRuntime extends EventEmitter {
 
         // 3. 最后透明代理到 RuntimeUtil 的静态方法/属性（仅限自有属性，避免 Function 原型污染）
         if (typeof prop === 'string' && Object.hasOwn(RuntimeUtil, prop)) {
-          const utilValue = RuntimeUtil[prop];
+          const utilValue = (RuntimeUtil as any)[prop];
           return typeof utilValue === 'function'
             ? utilValue.bind(RuntimeUtil)
             : utilValue;
@@ -443,7 +446,7 @@ export default class AgentRuntime extends EventEmitter {
    * 生成API密钥
    */
   async generateApiKey() {
-    return runtimeAuth.generateApiKey(this);
+    return runtimeAuth.generateApiKey(this as any);
   }
 
   /**
@@ -451,7 +454,7 @@ export default class AgentRuntime extends EventEmitter {
    * 仅负责基础放行规则：静态资源
    * 具体业务鉴权（如 system-Core HTTP / 各 Core 自定义）由各自模块自行处理
    */
-  _authMiddleware(req, res, next) {
+  _authMiddleware(req: any, res: any, next: any) {
     if (this._checkHeadersSent(res, next)) return;
 
     req.rid = `${req.ip}:${req.socket.remotePort}`;
@@ -469,8 +472,8 @@ export default class AgentRuntime extends EventEmitter {
    * 检查API授权
    * 当 server.auth.apiKey.enabled 为 true 时，必须提供有效密钥；密钥未加载或缺失时一律拒绝
    */
-  checkApiAuthorization(req, options = {}) {
-    return runtimeAuth.checkApiAuthorization(this, req, options);
+  checkApiAuthorization(req: any, options: any = {}) {
+    return runtimeAuth.checkApiAuthorization(this as any, req, options);
   }
 
   /**
@@ -480,7 +483,7 @@ export default class AgentRuntime extends EventEmitter {
    * @param {Error} [err] - 错误对象（可选，用于错误处理器）
    * @returns {boolean} 如果响应已发送返回true
    */
-  _checkHeadersSent(res, next, err) {
+  _checkHeadersSent(res: any, next?: any, err?: any) {
     if (res.headersSent) {
       if (next) {
         if (err) {
@@ -496,7 +499,7 @@ export default class AgentRuntime extends EventEmitter {
   /**
    * 子服务 data/ 文件直链：本地优先，缺失时按 data/<dir>/ 前缀代理到对应 runtime 的 /api/{group}/file
    */
-  async _subserverFileHandler(req, res) {
+  async _subserverFileHandler(req: any, res: any) {
     if (this._checkHeadersSent(res)) return;
 
     const rel = String(req.query.path || '').trim();
@@ -534,7 +537,7 @@ export default class AgentRuntime extends EventEmitter {
     }
 
     try {
-      const response = await callSubserverApi(upstream.upstream, {
+      const response: any = await callSubserverApi(upstream.upstream, {
         method: 'GET',
         query: { path: rel },
         rawResponse: true,
@@ -553,7 +556,7 @@ export default class AgentRuntime extends EventEmitter {
 
       res.status(response.status);
       await pipeline(Readable.fromWeb(response.body), res);
-    } catch (error) {
+    } catch (error: any) {
       if (isSubserverConnectionError(error)) {
         const hint = formatSubserverError(error, getSubserverConfig(upstream.runtime));
         return HttpResponse.error(res, new Error(hint), 503, 'subserver-file');
@@ -565,7 +568,7 @@ export default class AgentRuntime extends EventEmitter {
   /**
    * 文件处理器
    */
-  _fileHandler(req, res) {
+  _fileHandler(req: any, res: any) {
     if (this._checkHeadersSent(res)) return;
     
     const url = req.url.replace(/^\//, "");
@@ -617,14 +620,14 @@ export default class AgentRuntime extends EventEmitter {
    * 停止WebSocket心跳检测
    */
   _stopWebSocketHeartbeat() {
-    return runtimeWs.stopWebSocketHeartbeat(this);
+    return runtimeWs.stopWebSocketHeartbeat(this as any);
   }
 
   /**
    * 获取WebSocket连接统计
    */
   getWebSocketStats() {
-    return runtimeWs.getWebSocketStats(this);
+    return runtimeWs.getWebSocketStats(this as any);
   }
 
   /**
@@ -632,29 +635,29 @@ export default class AgentRuntime extends EventEmitter {
    * 所有 Tasker 暴露的 WS 路径（AgentRuntime.wsf）在此统一进行系统级鉴权：
    * - 其余连接若 server.auth.apiKey.enabled !== false，则必须通过 API Key 校验
    */
-  wsConnect(req, socket, head) {
-    return runtimeWs.wsConnect(this, req, socket, head);
+  wsConnect(req: any, socket: any, head: any) {
+    return runtimeWs.wsConnect(this as any, req, socket, head);
   }
 
   /**
    * 处理端口已占用错误
    */
-  async serverEADDRINUSE(err, isHttps) {
-    return runtimeListen.serverEADDRINUSE(this, err, isHttps);
+  async serverEADDRINUSE(err: any, isHttps: any) {
+    return runtimeListen.serverEADDRINUSE(this as any, err, isHttps);
   }
 
   /**
    * 服务器加载完成
    */
-  async serverLoad(isHttps) {
-    return runtimeListen.serverLoad(this, isHttps);
+  async serverLoad(isHttps: any) {
+    return runtimeListen.serverLoad(this as any, isHttps);
   }
 
   /**
    * 启动代理服务器
    */
   async startProxyServers() {
-    return runtimeProxy.startProxyServers(this);
+    return runtimeProxy.startProxyServers(this as any);
   }
 
   /**
@@ -662,7 +665,7 @@ export default class AgentRuntime extends EventEmitter {
    * 支持HTTP/2和现代TLS配置
    */
   async httpsLoad() {
-    return runtimeListen.httpsLoad(this);
+    return runtimeListen.httpsLoad(this as any);
   }
 
   /**
@@ -670,7 +673,7 @@ export default class AgentRuntime extends EventEmitter {
    * 按照nginx风格：先处理API 404，再处理静态文件404
    */
   _setupFinalHandlers() {
-    this.express.use(async (req, res) => {
+    this.express.use(async (req: any, res: any) => {
       if (this._checkHeadersSent(res)) return;
 
       if (req.accepts('html')) {
@@ -698,7 +701,7 @@ export default class AgentRuntime extends EventEmitter {
     });
     
     // 全局错误处理（捕获所有未处理的错误）
-    this.express.use((err, req, res, next) => {
+    this.express.use((err: any, req: any, res: any, next: any) => {
       if (this._checkHeadersSent(res, next, err)) return;
 
       if (runtimeConfig.server?.logging?.errors !== false) {
@@ -743,15 +746,15 @@ export default class AgentRuntime extends EventEmitter {
    * 关闭服务器
    * @param {{ fast?: boolean }} [options] fast 为 true 时跳过固定等待（用于 Ctrl+C 重启）
    */
-  async closeServer(options = {}) {
-    return runtimeListen.closeServer(this, options);
+  async closeServer(options: any = {}) {
+    return runtimeListen.closeServer(this as any, options);
   }
 
   /**
    * 获取服务器URL
    */
   getServerUrl() {
-    return runtimeListen.getServerUrl(this);
+    return runtimeListen.getServerUrl(this as any);
   }
 
   /**
@@ -759,22 +762,22 @@ export default class AgentRuntime extends EventEmitter {
    * 不回落到 127.0.0.1；无公网/代理配置时返回空字符串
    * @param {string} [override=''] - 业务覆盖 public_base_url
    */
-  getPublicServerUrl(override = '') {
-    return runtimeNet.getPublicServerUrl(this, override);
+  getPublicServerUrl(override: any = '') {
+    return runtimeNet.getPublicServerUrl(this as any, override);
   }
 
   /**
    * 获取本地IP地址
    */
   async getLocalIpAddress() {
-    return runtimeNet.getLocalIpAddress(this);
+    return runtimeNet.getLocalIpAddress(this as any);
   }
 
   /**
    * 主运行函数
    */
-  async run(options = {}) {
-    return runtimeBoot.runAgentRuntime(this, options);
+  async run(options: any = {}) {
+    return runtimeBoot.runAgentRuntime(this as any, options);
   }
 
 
@@ -784,7 +787,7 @@ export default class AgentRuntime extends EventEmitter {
    * 
    * @param {Object} data - 事件数据对象
    */
-  prepareEvent(data) {
+  prepareEvent(data: any) {
     // 确保bot对象存在
     if (!data.bot && data.self_id && this.bots[data.self_id]) {
       Object.defineProperty(data, "bot", {
@@ -816,7 +819,7 @@ export default class AgentRuntime extends EventEmitter {
    * 为事件对象添加通用的辅助方法
    * @param {Object} data - 事件数据对象
    */
-  _extendEventMethods(data) {
+  _extendEventMethods(data: any) {
     if (!data.reply && data.bot?.sendMsg) {
       const botInstance = data.bot;
       const selfId = data.self_id;
@@ -824,7 +827,7 @@ export default class AgentRuntime extends EventEmitter {
         if (!msg) return false;
         try {
           return await botInstance.sendMsg(msg, quote, extraData);
-        } catch (error) {
+        } catch (error: any) {
           RuntimeUtil.makeLog('error', `回复消息失败: ${error.message}`, selfId);
           return false;
         }
@@ -842,14 +845,14 @@ export default class AgentRuntime extends EventEmitter {
    * @param {boolean} [options.flat=true] - 是否返回扁平数组
    * @returns {Array} 路由列表
    */
-  getRouteList({ flat = true } = {}) {
+  getRouteList({ flat = true }: any = {}) {
     if (!HttpApiLoader?.apis) return [];
     
     const apiEntries = HttpApiLoader.priority?.length
       ? HttpApiLoader.priority
       : Array.from(HttpApiLoader.apis.values());
     
-    const result = apiEntries.map(api => {
+    const result = apiEntries.map((api: any) => {
       const apiName = api?.name || api?.key || 'undefined';
       const apiDesc = api?.dsc || apiName;
       const routes = Array.isArray(api?.routes) ? api.routes : [];
@@ -858,8 +861,8 @@ export default class AgentRuntime extends EventEmitter {
         api: apiName,
         dsc: apiDesc,
         routes: routes
-          .filter(r => r?.path && r?.method)
-          .map(r => ({
+          .filter((r: any) => r?.path && r?.method)
+          .map((r: any) => ({
             api: apiName,
             method: String(r.method ?? '').toUpperCase(),
             path: r.path,
@@ -882,7 +885,7 @@ export default class AgentRuntime extends EventEmitter {
    * @param {number} [options.timeout=5000] - 等待输出超时时间
    * @returns {Promise<*>|void}
    */
-  async em(name = "", data = {}, asJson = false, options = {}) {
+  async em(name: any = "", data: any = {}, asJson: any = false, options: any = {}) {
     this.prepareEvent(data);
     
     if (!asJson) {
@@ -903,8 +906,8 @@ export default class AgentRuntime extends EventEmitter {
    * @param {number} [options.timeout=5000] - 等待输出超时时间
    * @returns {Promise<Object>} 命令结果或stdin输出
    */
-  async callStdin(command, { user_info = {}, timeout = 5000 } = {}) {
-    const stdinHandler = getRuntimeGlobal('stdinHandler');
+  async callStdin(command: any, { user_info = {}, timeout = 5000 }: any = {}) {
+    const stdinHandler = (getRuntimeGlobal('stdinHandler') as any);
     
     if (!stdinHandler?.processCommand) {
       throw this.makeError('stdin handler not initialized', 'StdinUnavailable');
@@ -927,7 +930,7 @@ export default class AgentRuntime extends EventEmitter {
 
       const finishedEvent = await Promise.race([
         done,
-        new Promise((resolve) => setTimeout(() => resolve(event), timeout))
+        new Promise<any>((resolve) => setTimeout(() => resolve(event), timeout))
       ])
 
       // 优先返回结构化的插件结果（如果插件调用了 pushResult）
@@ -973,14 +976,14 @@ export default class AgentRuntime extends EventEmitter {
    * @param {number} [options.timeout=5000] - 超时毫秒
    * @returns {Promise<Object>} 响应结果
    */
-  async callRoute(routePath, {
+  async callRoute(routePath: any, {
     method = 'GET',
     query = {},
     body,
     headers = {},
     baseUrl,
     timeout = 5000
-  } = {}) {
+  }: any = {}) {
     if (!routePath) {
       throw this.makeError('routePath is required', 'RouteError');
     }
@@ -994,11 +997,11 @@ export default class AgentRuntime extends EventEmitter {
     if (query && typeof query === 'object') {
       for (const [k, v] of Object.entries(query)) {
         if (v === undefined) continue;
-        url.searchParams.append(k, v);
+        url.searchParams.append(k, String(v));
       }
     }
     
-    const options = {
+    const options: any = {
       method: String(method || 'GET').toUpperCase(),
       headers: { ...headers },
       signal: AbortSignal.timeout(timeout)
@@ -1032,7 +1035,7 @@ export default class AgentRuntime extends EventEmitter {
     };
   }
   
-  _cascadeEmit(name, data) {
+  _cascadeEmit(name: any, data: any) {
     while (name) {
       this.emit(name, data);
       const lastDot = name.lastIndexOf(".");
@@ -1041,11 +1044,11 @@ export default class AgentRuntime extends EventEmitter {
     }
   }
   
-  async _emitAndCollect(name, data, timeout = 5000) {
+  async _emitAndCollect(name: any, data: any, timeout: any = 5000) {
     // 兼容历史行为：对“普通 emit”只提供一个有限的收集能力
     // 若调用方希望严格按插件链路结束收集，请走 callStdin（或在事件对象上设置 _onDone）
-    const outputs = []
-    const handler = (payload) => outputs.push(payload)
+    const outputs: any[] = []
+    const handler = (payload: any) => outputs.push(payload)
 
     this.on('stdin.output', handler)
     try {
@@ -1067,9 +1070,9 @@ export default class AgentRuntime extends EventEmitter {
    * 发送消息给主人（通用函数）
    * 支持OneBot（通过pickFriend）和其他适配器
    */
-  async sendMasterMsg(msg, sleep = 5000) {
+  async sendMasterMsg(msg: any, sleep: any = 5000) {
     const masterQQs = runtimeConfig.masterQQ;
-    const results = {};
+    const results: any = {};
     
     for (const [i, user_id] of masterQQs.entries()) {
       const pickFn = this.pickFriend || this.pickUser;
@@ -1083,21 +1086,21 @@ export default class AgentRuntime extends EventEmitter {
     return results;
   }
 
-  makeForwardMsg(msg) {
+  makeForwardMsg(msg: any) {
     return { type: "node", data: msg };
   }
   
-  makeForwardArray(msg = [], node = {}) {
+  makeForwardArray(msg: any = [], node: any = {}) {
     return this.makeForwardMsg((Array.isArray(msg) ? msg : [msg]).map(message => ({ ...node, message })));
   }
 
-  async sendForwardMsg(send, msg) {
+  async sendForwardMsg(send: any, msg: any) {
     const messages = Array.isArray(msg) ? msg : [msg];
     return Promise.all(messages.map(({ message }) => send(message)));
   }
 
   /** stdin 等调试 bot：任意群号都能 pickGroup，不等于真有该群 */
-  _isStdinBot(id, bot) {
+  _isStdinBot(id: any, bot: any) {
     return (
       id === 'stdin' ||
       bot?.tasker_type === 'stdin' ||
@@ -1106,7 +1109,7 @@ export default class AgentRuntime extends EventEmitter {
     );
   }
 
-  _botHasGroup(bot, groupId) {
+  _botHasGroup(bot: any, groupId: any) {
     const gl = bot?.gl;
     if (!gl || typeof gl.has !== 'function') return false;
     if (gl.has(groupId) || gl.has(String(groupId))) return true;
@@ -1118,7 +1121,7 @@ export default class AgentRuntime extends EventEmitter {
    * 按群号选 bot：谁 gl 里有该群就用谁；stdin 永不参与群路由
    * gl 未加载时，退回具备 tasker.sendGroupMsg 的非 stdin bot
    */
-  _resolveBotForGroup(groupId) {
+  _resolveBotForGroup(groupId: any) {
     const ids = Array.isArray(this.uin) ? [...this.uin] : Object.keys(this.bots || {});
     /** @type {object[]} */
     const owned = [];
@@ -1146,7 +1149,7 @@ export default class AgentRuntime extends EventEmitter {
    * - 优先显式 botId
    * - 默认跳过 stdin（uin[0] 常为标准输入）
    */
-  _getBotForSend(botId = null) {
+  _getBotForSend(botId: any = null) {
     if (botId && this.bots?.[botId]) {
       return this.bots[botId];
     }
@@ -1164,7 +1167,7 @@ export default class AgentRuntime extends EventEmitter {
    * 选取好友（兼容 OneBot / GSUID / QBQBot 等适配器）
    * - 当未指定 botId 时，自动选择一个可用的 AgentRuntime
    */
-  pickFriend(user_id, botId = null) {
+  pickFriend(user_id: any, botId: any = null) {
     const bot = this._getBotForSend(botId);
     if (!bot || typeof bot.pickFriend !== 'function') {
       throw new Error('当前没有可用的机器人，或不支持好友消息发送');
@@ -1175,7 +1178,7 @@ export default class AgentRuntime extends EventEmitter {
   /**
    * 选取群聊：未指定 botId 时按群号归属解析（stdin 不会因假 pickGroup 抢走）
    */
-  pickGroup(group_id, botId = null) {
+  pickGroup(group_id: any, botId: any = null) {
     const bot = (botId && this.bots?.[botId]) || this._resolveBotForGroup(group_id);
     if (!bot || typeof bot.pickGroup !== 'function') {
       throw new Error(`没有机器人可访问群 ${group_id}`);
@@ -1190,7 +1193,7 @@ export default class AgentRuntime extends EventEmitter {
    * @param {any} msg 消息内容（字符串或消息数组）
    * @returns {Promise<{message_id: string}>}
    */
-  async sendFriendMsg(botId, userId, msg) {
+  async sendFriendMsg(botId: any, userId: any, msg: any) {
     const bot = this._getBotForSend(botId);
     if (!bot) {
       throw new Error(`机器人不存在或未连接: ${botId || 'default'}`);
@@ -1224,7 +1227,7 @@ export default class AgentRuntime extends EventEmitter {
    * @param {any} msg 消息内容（字符串或消息数组）
    * @returns {Promise<{message_id: string}>}
    */
-  async sendGroupMsg(botId, groupId, msg) {
+  async sendGroupMsg(botId: any, groupId: any, msg: any) {
     const bot = (botId && this.bots?.[botId]) || this._resolveBotForGroup(groupId);
     if (!bot) {
       throw new Error(`没有机器人可发送到群 ${groupId}`);
@@ -1252,10 +1255,10 @@ export default class AgentRuntime extends EventEmitter {
   }
 
   async redisExit() {
-    if (!(typeof redis === 'object' && redis.process)) return false;
+    if (!(typeof (globalThis as any).redis === 'object' && (globalThis as any).redis?.process)) return false;
     
-    const process = redis.process;
-    delete redis.process;
+    const process = (globalThis as any).redis?.process;
+    delete (globalThis as any).redis?.process;
     
     await RuntimeUtil.sleep(5000);
     return process.kill();
