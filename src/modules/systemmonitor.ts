@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 系统资源监控单例：内存 / CPU / 磁盘观察，可选本进程 GC。
  *
@@ -30,7 +29,10 @@ import {
     mayClearOsCache
 } from '#utils/monitor-safety.js';
 
+const gLogger = (): any => (globalThis as any).logger;
+
 class SystemMonitor extends EventEmitter {
+    [key: string]: any;
     /** @type {SystemMonitor | null} */
     static instance: any = null;
 
@@ -82,7 +84,7 @@ class SystemMonitor extends EventEmitter {
      * @param {unknown} [config] 原始 `runtimeConfig.monitor`
      * @returns {Promise<void>}
      */
-    async start(config) {
+    async start(config: any) {
         if (this.isRunning) {
             return;
         }
@@ -140,7 +142,7 @@ class SystemMonitor extends EventEmitter {
             this.reportInterval = null;
         }
         this.isRunning = false;
-        logger.info('系统监控已停止');
+        gLogger()?.info('系统监控已停止');
     }
 
     /**
@@ -167,11 +169,11 @@ class SystemMonitor extends EventEmitter {
      * @param {string} [label='系统任务'] 日志前缀
      * @returns {Promise<void>}
      */
-    async safeRun(task, label = '系统任务') {
+    async safeRun(task: any, label: any = '系统任务') {
         try {
             await task();
-        } catch (error) {
-            logger.error(`${label}失败: ${error?.stack || error?.message || error}`);
+        } catch (error: any) {
+            gLogger()?.error(`${label}失败: ${error?.stack || error?.message || error}`);
         }
     }
 
@@ -201,7 +203,7 @@ class SystemMonitor extends EventEmitter {
             };
 
             if (status.leak && this.config.memory?.autoOptimize) {
-                logger.warn(`检测到内存泄漏，自动执行优化...`);
+                gLogger()?.warn(`检测到内存泄漏，自动执行优化...`);
                 await this.optimizeSystem(status);
             }
 
@@ -212,8 +214,8 @@ class SystemMonitor extends EventEmitter {
             }
 
             this.emit('status', status);
-        } catch (error) {
-            logger.error(`系统检查失败: ${error.message}`);
+        } catch (error: any) {
+            gLogger()?.error(`系统检查失败: ${error.message}`);
         } finally {
             this._checking = false;
         }
@@ -320,7 +322,7 @@ class SystemMonitor extends EventEmitter {
         const needCleanup = processes.length > maxInstances;
 
         if (needCleanup) {
-            logger.warn(`检测到浏览器进程过多 (${processes.length}/${maxInstances})，执行清理...`);
+            gLogger()?.warn(`检测到浏览器进程过多 (${processes.length}/${maxInstances})，执行清理...`);
             await this.cleanupBrowsers(processes);
             const remainingProcesses = await this.detectBrowserProcesses();
             this.browserCache = { data: remainingProcesses, timestamp: now, ttl: 5000 };
@@ -375,9 +377,9 @@ class SystemMonitor extends EventEmitter {
      * @param {NodeJS.Platform} platform
      * @returns {Array<{ pid: number, startTime: number, command: string }>}
      */
-    parseBrowserProcesses(output, platform) {
+    parseBrowserProcesses(output: any, platform: any) {
         const processes = [];
-        const lines = output.split('\n').filter(line => line.trim());
+        const lines = output.split('\n').filter((line: any) => line.trim());
 
         for (const line of lines) {
             try {
@@ -433,10 +435,10 @@ class SystemMonitor extends EventEmitter {
      * @param {Array<{ pid: number, startTime: number, command: string }>} processes
      * @returns {Promise<number>} 成功结束的进程数
      */
-    async cleanupBrowsers(processes) {
-        const managed = processes.filter((p) => this._isManagedBrowserCommand(p.command || ''));
+    async cleanupBrowsers(processes: any) {
+        const managed = processes.filter((p: any) => this._isManagedBrowserCommand(p.command || ''));
         if (managed.length === 0) {
-            logger.debug('浏览器实例偏多，但无 AGT 托管进程可清理，已跳过 taskkill');
+            gLogger()?.debug('浏览器实例偏多，但无 AGT 托管进程可清理，已跳过 taskkill');
             return 0;
         }
 
@@ -460,14 +462,14 @@ class SystemMonitor extends EventEmitter {
                     : `kill -15 ${proc.pid}`;
                 await exec(cmd);
                 cleaned++;
-            } catch (e) {
+            } catch (e: any) {
                 const msg = e?.message || '';
                 if (msg.includes('not found') || msg.includes('No such process')) cleaned++;
             }
         }));
 
         if (cleaned > 0) {
-            logger.info(`已清理 ${cleaned} 个托管浏览器进程 (保留最多 ${maxInstances} 个)`);
+            gLogger()?.info(`已清理 ${cleaned} 个托管浏览器进程 (保留最多 ${maxInstances} 个)`);
         }
         return cleaned;
     }
@@ -477,7 +479,7 @@ class SystemMonitor extends EventEmitter {
      * @returns {boolean}
      * @private
      */
-    _isManagedBrowserCommand(commandLine) {
+    _isManagedBrowserCommand(commandLine: any) {
         return isManagedBrowserCommand(commandLine);
     }
 
@@ -488,13 +490,13 @@ class SystemMonitor extends EventEmitter {
      * @param {object} status `checkSystem` 汇总对象
      * @returns {boolean}
      */
-    analyzeStatus(status) {
+    analyzeStatus(status: any) {
         const issues = [];
 
         if (status.memory?.warning) {
             issues.push('memory');
         } else if (status.memory?.systemWarning) {
-            logger.debug(
+            gLogger()?.debug(
                 `整机内存偏高 ${status.memory.system.usedPercent.toFixed(1)}%，Node 堆正常，跳过自动优化`
             );
         }
@@ -509,21 +511,21 @@ class SystemMonitor extends EventEmitter {
 
         if (status.disk?.usedPercent > 90) {
             issues.push('disk');
-            logger.warn(`磁盘使用率过高: ${status.disk.usedPercent.toFixed(1)}%`);
+            gLogger()?.warn(`磁盘使用率过高: ${status.disk.usedPercent.toFixed(1)}%`);
         }
 
         if (status.network?.warning) {
             issues.push('network');
-            logger.warn(`网络连接数过多: ${status.network.connections}`);
+            gLogger()?.warn(`网络连接数过多: ${status.network.connections}`);
         }
 
         if (status.fileHandles?.warning) {
             issues.push('fileHandles');
-            logger.warn(`文件句柄使用率过高: ${status.fileHandles.usagePercent.toFixed(1)}%`);
+            gLogger()?.warn(`文件句柄使用率过高: ${status.fileHandles.usagePercent.toFixed(1)}%`);
         }
 
         if (shouldAutoRestartForHeap(status.memory?.process, this.config.optimize)) {
-            logger.error(
+            gLogger()?.error(
                 `Node 堆超过 ${this.config.optimize.restartThreshold}%，触发 critical（autoRestart）`
             );
             this.emit('critical', { type: 'memory', status });
@@ -565,13 +567,13 @@ class SystemMonitor extends EventEmitter {
         }
 
         const recentGrowth = this.leakDetection.growthRate.slice(-5);
-        const avgGrowth = recentGrowth.reduce((sum, r) => sum + r.growth, 0) / recentGrowth.length;
+        const avgGrowth = recentGrowth.reduce((sum: any, r: any) => sum + r.growth, 0) / recentGrowth.length;
 
         this.leakDetection.lastCheck = now;
 
         if (avgGrowth > this.leakDetection.threshold) {
             const growthPercent = (avgGrowth * 100).toFixed(2);
-            logger.warn(`⚠️ 检测到潜在内存泄漏: 内存增长 ${growthPercent}%`);
+            gLogger()?.warn(`⚠️ 检测到潜在内存泄漏: 内存增长 ${growthPercent}%`);
             this.emit('leak', {
                 growth: avgGrowth,
                 baseline: this.leakDetection.baseline,
@@ -718,7 +720,7 @@ class SystemMonitor extends EventEmitter {
      * @returns {Promise<number>}
      * @private
      */
-    async _getLinuxFileHandles(pid) {
+    async _getLinuxFileHandles(pid: any) {
         try {
             const { stdout } = await exec(`lsof -p ${pid} 2>/dev/null | wc -l`);
             return parseInt(stdout.trim()) || 0;
@@ -737,7 +739,7 @@ class SystemMonitor extends EventEmitter {
      * @returns {Promise<number>}
      * @private
      */
-    async _getWindowsFileHandles(pid) {
+    async _getWindowsFileHandles(pid: any) {
         try {
             const { stdout } = await exec(`handle.exe -p ${pid} 2>nul | find /c "File"`);
             return parseInt(stdout.trim()) || 0;
@@ -751,7 +753,7 @@ class SystemMonitor extends EventEmitter {
      * @returns {Promise<number>}
      * @private
      */
-    async _getDarwinFileHandles(pid) {
+    async _getDarwinFileHandles(pid: any) {
         try {
             const { stdout } = await exec(`lsof -p ${pid} 2>/dev/null | wc -l`);
             return parseInt(stdout.trim()) || 0;
@@ -767,7 +769,7 @@ class SystemMonitor extends EventEmitter {
      * @param {object | null} [status] 含 `disk.usedPercent` 时供磁盘清理门控
      * @returns {Promise<void>}
      */
-    async optimizeSystem(status = null) {
+    async optimizeSystem(status: any = null) {
         if (this._optimizing) return;
         const now = Date.now();
         const gcInterval = this.config.memory?.gcInterval || 600000;
@@ -778,7 +780,7 @@ class SystemMonitor extends EventEmitter {
 
         this._optimizing = true;
         this.lastOptimizeTime = now;
-        logger.debug('执行系统优化...');
+        gLogger()?.debug('执行系统优化...');
 
         try {
             await this.optimizeMemory();
@@ -792,9 +794,9 @@ class SystemMonitor extends EventEmitter {
                 await this.optimizeDisk();
             }
 
-            logger.debug('系统优化完成');
-        } catch (error) {
-            logger.error(`系统优化失败: ${error.message}`);
+            gLogger()?.debug('系统优化完成');
+        } catch (error: any) {
+            gLogger()?.error(`系统优化失败: ${error.message}`);
         } finally {
             this._optimizing = false;
         }
@@ -807,7 +809,7 @@ class SystemMonitor extends EventEmitter {
     async optimizeMemory() {
         const leakInfo = this.detectMemoryLeak();
         if (leakInfo) {
-            logger.warn(`内存泄漏检测: 当前 ${(leakInfo.current / 1024 / 1024).toFixed(2)}MB, 基线 ${(leakInfo.baseline / 1024 / 1024).toFixed(2)}MB`);
+            gLogger()?.warn(`内存泄漏检测: 当前 ${(leakInfo.current / 1024 / 1024).toFixed(2)}MB, 基线 ${(leakInfo.baseline / 1024 / 1024).toFixed(2)}MB`);
         }
 
         const beforeMem = process.memoryUsage();
@@ -830,7 +832,7 @@ class SystemMonitor extends EventEmitter {
         const freed = beforeMem.heapUsed - afterMem.heapUsed;
         
         if (freed > 0) {
-            logger.debug(`内存优化: 释放 ${(freed / 1024 / 1024).toFixed(2)}MB`);
+            gLogger()?.debug(`内存优化: 释放 ${(freed / 1024 / 1024).toFixed(2)}MB`);
         }
         
         if (afterMem.heapUsed < this.leakDetection.baseline * 0.9) {
@@ -851,8 +853,8 @@ class SystemMonitor extends EventEmitter {
             if (this.config.disk?.cleanupLogs === true) {
                 await this.cleanupLogFiles();
             }
-        } catch (error) {
-            logger.error(`磁盘优化失败: ${error.message}`);
+        } catch (error: any) {
+            gLogger()?.error(`磁盘优化失败: ${error.message}`);
         }
     }
 
@@ -893,10 +895,10 @@ class SystemMonitor extends EventEmitter {
             }
 
             if (cleaned > 0) {
-                logger.debug(`清理临时文件: ${cleaned} 个，释放 ${(freed / 1024 / 1024).toFixed(2)}MB`);
+                gLogger()?.debug(`清理临时文件: ${cleaned} 个，释放 ${(freed / 1024 / 1024).toFixed(2)}MB`);
             }
-        } catch (error) {
-            logger.error(`清理临时文件失败: ${error.message}`);
+        } catch (error: any) {
+            gLogger()?.error(`清理临时文件失败: ${error.message}`);
         }
     }
 
@@ -936,13 +938,13 @@ class SystemMonitor extends EventEmitter {
                 }
 
                 if (cleaned > 0) {
-                    logger.debug(`清理日志: ${cleaned} 个，释放 ${(freed / 1024 / 1024).toFixed(2)}MB`);
+                    gLogger()?.debug(`清理日志: ${cleaned} 个，释放 ${(freed / 1024 / 1024).toFixed(2)}MB`);
                 }
             } catch {
                 // 目录不存在跳过
             }
-        } catch (error) {
-            logger.error(`清理日志文件失败: ${error.message}`);
+        } catch (error: any) {
+            gLogger()?.error(`清理日志文件失败: ${error.message}`);
         }
     }
 
@@ -960,7 +962,7 @@ class SystemMonitor extends EventEmitter {
                 darwin: []
             };
 
-            const commands = cacheCommands[platform] || [];
+            const commands = (cacheCommands as any)[platform] || [];
             for (const cmd of commands) {
                 try {
                     await exec(cmd);
@@ -968,7 +970,7 @@ class SystemMonitor extends EventEmitter {
                     // 权限不足或命令失败跳过
                 }
             }
-            if (commands.length) logger.debug('系统缓存清理命令已执行');
+            if (commands.length) gLogger()?.debug('系统缓存清理命令已执行');
         } catch {
             // 整段失败忽略
         }
@@ -983,7 +985,7 @@ class SystemMonitor extends EventEmitter {
             if (this.config.system?.optimizeCPU && process.platform === 'linux') {
                 try {
                     await exec(`chrt -r -p 0 ${process.pid} 2>/dev/null || true`);
-                    logger.info('  ✓ 已优化CPU调度策略');
+                    gLogger()?.info('  ✓ 已优化CPU调度策略');
                 } catch {
                     // 权限不足跳过
                 }
@@ -1006,8 +1008,8 @@ class SystemMonitor extends EventEmitter {
             if (platform === 'linux') {
                 if (nice !== 0) {
                     try {
-                        process.setPriority(nice);
-                        logger.info(`  ✓ 已设置进程优先级 (nice: ${nice})`);
+                        (process as any).setPriority(nice);
+                        gLogger()?.info(`  ✓ 已设置进程优先级 (nice: ${nice})`);
                     } catch {
                         // 权限不足跳过
                     }
@@ -1018,10 +1020,10 @@ class SystemMonitor extends EventEmitter {
                     normal: 'normal',
                     high: 'above normal'
                 };
-                const winPriority = priorityMap[priority] || 'normal';
+                const winPriority = (priorityMap as any)[priority] || 'normal';
                 try {
                     await exec(`wmic process where processid=${process.pid} set priority="${winPriority}"`);
-                    logger.info(`  ✓ 已设置进程优先级 (${priority})`);
+                    gLogger()?.info(`  ✓ 已设置进程优先级 (${priority})`);
                 } catch {
                     // wmic 失败跳过
                 }
@@ -1042,9 +1044,9 @@ class SystemMonitor extends EventEmitter {
         const heapPct = (processMemory.heapUsed / heapStats.heap_size_limit) * 100;
         const line = `监控 ${this.formatUptime(process.uptime())} | 系统 ${memory.usedPercent.toFixed(1)}% | Node堆 ${this.formatBytes(processMemory.heapUsed)} (${heapPct.toFixed(1)}%)`;
         if (heapPct > (this.config.memory?.nodeThreshold || 85)) {
-            logger.warn(line);
+            gLogger()?.warn(line);
         } else {
-            logger.debug(line);
+            gLogger()?.debug(line);
         }
     }
 
@@ -1068,7 +1070,7 @@ class SystemMonitor extends EventEmitter {
      * @param {number} bytes
      * @returns {string}
      */
-    formatBytes(bytes) {
+    formatBytes(bytes: any) {
         if (bytes === 0) return '0 B';
         const k = 1024;
         const sizes = ['B', 'KB', 'MB', 'GB'];
@@ -1080,7 +1082,7 @@ class SystemMonitor extends EventEmitter {
      * @param {number} seconds 进程 uptime
      * @returns {string} 如 `1天2时3分`
      */
-    formatUptime(seconds) {
+    formatUptime(seconds: any) {
         const d = Math.floor(seconds / 86400);
         const h = Math.floor((seconds % 86400) / 3600);
         const m = Math.floor((seconds % 3600) / 60);
