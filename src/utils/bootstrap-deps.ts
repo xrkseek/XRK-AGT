@@ -7,38 +7,69 @@ import { statDirs, statFiles } from '#utils/core-fs.js';
 import { getPnpmInstallHint, spawnCommand as spawnCommandBase } from '#utils/command-spawn.js';
 
 const require = createRequire(import.meta.url);
-const { findSystemBrowser } = require('#utils/system-browser.cjs');
+const { findSystemBrowser } = require('#utils/system-browser.cjs') as {
+  findSystemBrowser: () => string | null;
+};
 
 /** Playwright 1.58+ CfT 仅 cdn.playwright.dev 提供 builds/cft/ 路径（npmmirror 未同步） */
 const PLAYWRIGHT_CDN = 'https://cdn.playwright.dev';
-const PLAYWRIGHT_DOWNLOAD_ENV = {
+const PLAYWRIGHT_DOWNLOAD_ENV: Record<string, string> = {
   PLAYWRIGHT_DOWNLOAD_HOST: PLAYWRIGHT_CDN,
   PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST: PLAYWRIGHT_CDN
 };
 const DEPS_READY_MARKER = '.xrk-deps-ready';
 
-/** @returns {Record<string, string>} */
-export function getBrowserDownloadEnv(overrides = {}) {
+type LoggerLike = {
+  success: (message: string) => Promise<void> | void;
+  warning: (message: string) => Promise<void> | void;
+  error: (message: string) => Promise<void> | void;
+  info: (message: string) => Promise<void> | void;
+  // SimpleLogger.log 的 level 为字面量联合；此处放宽以兼容
+  log: (message: string, level?: any) => Promise<void> | void;
+};
+
+type PackageJsonLike = {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  [key: string]: unknown;
+};
+
+export type BrowserStatus = {
+  playwrightInstalled: boolean;
+  browserInstalled: boolean;
+  executablePath: string | null;
+  systemBrowserPath: string | null;
+  needsBrowserReminder: boolean;
+};
+
+export function getBrowserDownloadEnv(
+  overrides: Record<string, string> = {},
+): Record<string, string> {
   return {
     PUPPETEER_SKIP_DOWNLOAD: process.env.PUPPETEER_SKIP_DOWNLOAD ?? 'true',
     ...overrides
   };
 }
 
-function depsReadyMarkerPath(nodeModulesPath) {
+function depsReadyMarkerPath(nodeModulesPath: string): string {
   return path.join(nodeModulesPath, DEPS_READY_MARKER);
 }
 
-function isDepsInstallComplete(nodeModulesPath) {
+function isDepsInstallComplete(nodeModulesPath: string): boolean {
   return statFiles([depsReadyMarkerPath(nodeModulesPath)])[0];
 }
 
-async function markDepsInstallComplete(nodeModulesPath) {
+async function markDepsInstallComplete(nodeModulesPath: string): Promise<void> {
   await fs.mkdir(nodeModulesPath, { recursive: true });
   await fs.writeFile(depsReadyMarkerPath(nodeModulesPath), `${Date.now()}\n`);
 }
 
-export function spawnCommand(command, args, cwd, extraEnv = {}) {
+export function spawnCommand(
+  command: string,
+  args: string[],
+  cwd: string,
+  extraEnv: Record<string, string> = {},
+): Promise<void> {
   return spawnCommandBase(command, args, cwd, {
     ...getBrowserDownloadEnv(extraEnv),
     ...extraEnv
@@ -47,9 +78,9 @@ export function spawnCommand(command, args, cwd, extraEnv = {}) {
 
 export { getPnpmInstallHint };
 
-let pnpmInstallChain = Promise.resolve();
+let pnpmInstallChain: Promise<void> = Promise.resolve();
 
-export function spawnPnpmInstall(cwd) {
+export function spawnPnpmInstall(cwd: string): Promise<void> {
   const install = pnpmInstallChain.then(() =>
     spawnCommand('pnpm', ['install'], cwd, { CI: 'true' })
   );
@@ -57,8 +88,11 @@ export function spawnPnpmInstall(cwd) {
   return install;
 }
 
-/** @param {string} depName @param {string} nodeModulesPath @param {string} packageRoot */
-export function isPackageInstalled(depName, nodeModulesPath, packageRoot) {
+export function isPackageInstalled(
+  depName: string,
+  nodeModulesPath: string,
+  packageRoot: string,
+): boolean {
   const segments = depName.split('/');
   const directPath = path.join(nodeModulesPath, ...segments);
   try {
@@ -77,21 +111,16 @@ export function isPackageInstalled(depName, nodeModulesPath, packageRoot) {
   }
 }
 
-export function getMissingDependencies(depNames, nodeModulesPath, packageRoot) {
+export function getMissingDependencies(
+  depNames: string[],
+  nodeModulesPath: string,
+  packageRoot: string,
+): string[] {
   if (!statDirs([nodeModulesPath])[0]) return depNames;
   return depNames.filter((dep) => !isPackageInstalled(dep, nodeModulesPath, packageRoot));
 }
 
-/**
- * @returns {Promise<{
- *   playwrightInstalled: boolean,
- *   browserInstalled: boolean,
- *   executablePath: string | null,
- *   systemBrowserPath: string | null,
- *   needsBrowserReminder: boolean
- * }>}
- */
-export async function getBrowserStatus(rootDir = process.cwd()) {
+export async function getBrowserStatus(rootDir: string = process.cwd()): Promise<BrowserStatus> {
   const systemBrowserPath = findSystemBrowser();
   const nodeModulesPath = path.join(rootDir, 'node_modules');
 
@@ -129,7 +158,10 @@ export async function getBrowserStatus(rootDir = process.cwd()) {
 }
 
 /** 引导阶段记录可用浏览器（系统路径同步检测，避免首次截图时才打 Found） */
-export async function logBrowserEnvironment(logger, rootDir = process.cwd()) {
+export async function logBrowserEnvironment(
+  logger: LoggerLike,
+  rootDir: string = process.cwd(),
+): Promise<void> {
   const systemBrowserPath = findSystemBrowser();
   if (systemBrowserPath) {
     await logger.success(`渲染浏览器: 系统 ${systemBrowserPath}`);
@@ -144,7 +176,7 @@ export async function logBrowserEnvironment(logger, rootDir = process.cwd()) {
   }
 }
 
-export async function installPlaywrightChromium(rootDir = process.cwd()) {
+export async function installPlaywrightChromium(rootDir: string = process.cwd()): Promise<void> {
   const extraEnv = process.env.PLAYWRIGHT_DOWNLOAD_HOST === undefined
     ? PLAYWRIGHT_DOWNLOAD_ENV
     : {};
@@ -152,15 +184,21 @@ export async function installPlaywrightChromium(rootDir = process.cwd()) {
 }
 
 export class DependencyManager {
-  constructor(logger) {
+  logger: LoggerLike;
+
+  constructor(logger: LoggerLike) {
     this.logger = logger;
   }
 
-  async parsePackageJson(packageJsonPath) {
-    return JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
+  async parsePackageJson(packageJsonPath: string): Promise<PackageJsonLike> {
+    return JSON.parse(await fs.readFile(packageJsonPath, 'utf-8')) as PackageJsonLike;
   }
 
-  async installDependencies(missingDeps, cwd = process.cwd(), { resume = false } = {}) {
+  async installDependencies(
+    missingDeps: string[],
+    cwd: string = process.cwd(),
+    { resume = false }: { resume?: boolean } = {},
+  ): Promise<void> {
     const prefix = cwd !== process.cwd() ? `[${path.basename(cwd)}] ` : '';
     if (resume) {
       await this.logger.warning(`${prefix}上次依赖安装未完成（可能因 Ctrl+C 中断），重新执行 pnpm install...`);
@@ -172,7 +210,7 @@ export class DependencyManager {
     await this.logger.success(`${prefix}依赖安装完成`);
   }
 
-  async checkAndInstall(packageJsonPath, nodeModulesPath) {
+  async checkAndInstall(packageJsonPath: string, nodeModulesPath: string): Promise<void> {
     const packageRoot = path.dirname(packageJsonPath);
     const pkg = await this.parsePackageJson(packageJsonPath);
     const depNames = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies });
@@ -186,13 +224,17 @@ export class DependencyManager {
     }
   }
 
-  _checkInstallSafe(packageJsonPath, nodeModulesPath, rootDir) {
+  _checkInstallSafe(
+    packageJsonPath: string,
+    nodeModulesPath: string,
+    rootDir: string,
+  ): Promise<void> {
     const label = path.relative(rootDir, path.dirname(packageJsonPath)) || packageJsonPath;
     return this.checkAndInstall(packageJsonPath, nodeModulesPath)
-      .catch((e) => this.logger.warning(`${label}: ${e.message}`));
+      .catch((e: Error) => this.logger.warning(`${label}: ${e.message}`));
   }
 
-  async ensurePluginDependencies(rootDir = process.cwd()) {
+  async ensurePluginDependencies(rootDir: string = process.cwd()): Promise<void> {
     const coreDirs = await paths.getCoreDirs();
     await Promise.all(coreDirs.map(async (dir) => {
       const pkgPath = path.join(dir, 'package.json');
@@ -201,8 +243,8 @@ export class DependencyManager {
     }));
   }
 
-  async ensureFrontendDependencies(rootDir = process.cwd()) {
-    const tasks = [];
+  async ensureFrontendDependencies(rootDir: string = process.cwd()): Promise<void> {
+    const tasks: Promise<void>[] = [];
     for (const coreDir of await paths.getCoreDirs()) {
       const coreName = path.basename(coreDir);
       const wwwDir = path.join(paths.coreSource, coreName, 'www');

@@ -15,9 +15,12 @@ import {
 
 const LOCK_REL = path.join('.xrk', 'managed-skills-lock.json');
 
-/** @param {string} dir @param {string[]} outRels @param {string} base */
-function walkSkillPackages(dir, outRels, base) {
-  let entries;
+type ManagedLock = {
+  packages: Record<string, { seedHash: string; syncedAt: string }>;
+};
+
+function walkSkillPackages(dir: string, outRels: string[], base: string): void {
+  let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
   } catch {
@@ -35,18 +38,18 @@ function walkSkillPackages(dir, outRels, base) {
 }
 
 /** 种子内技能包相对路径，如 core/agent-tools */
-export function listProjectManagedSkillRels(projectRoot = getProjectRoot()) {
+export function listProjectManagedSkillRels(projectRoot: string = getProjectRoot()): string[] {
   const standard = path.join(projectRoot, PROJECT_SKILLS_STANDARD_REL);
-  const out = [];
+  const out: string[] = [];
   if (!fs.existsSync(standard)) return out;
   walkSkillPackages(standard, out, standard);
   return out.sort((a, b) => a.localeCompare(b));
 }
 
-function listFilesRecursive(dir) {
-  const out = [];
-  const walk = (cur) => {
-    let entries;
+function listFilesRecursive(dir: string): string[] {
+  const out: string[] = [];
+  const walk = (cur: string) => {
+    let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(cur, { withFileTypes: true });
     } catch {
@@ -64,7 +67,7 @@ function listFilesRecursive(dir) {
 }
 
 /** 目录内容指纹（路径相对 dir，排序后哈希） */
-function hashSkillPackageDir(dirAbs) {
+function hashSkillPackageDir(dirAbs: string): string {
   if (!fs.existsSync(dirAbs)) return '';
   const files = listFilesRecursive(dirAbs)
     .map((fp) => path.relative(dirAbs, fp).replace(/\\/g, '/'))
@@ -79,14 +82,16 @@ function hashSkillPackageDir(dirAbs) {
   return h.digest('hex');
 }
 
-function lockPath(workspaceAbs) {
+function lockPath(workspaceAbs: string): string {
   return path.join(workspaceAbs, LOCK_REL);
 }
 
-function readLock(workspaceAbs) {
+function readLock(workspaceAbs: string): ManagedLock {
   const fp = lockPath(workspaceAbs);
   try {
-    const raw = JSON.parse(fs.readFileSync(fp, 'utf8'));
+    const raw = JSON.parse(fs.readFileSync(fp, 'utf8')) as {
+      packages?: Record<string, { seedHash: string; syncedAt: string }>;
+    };
     const packages = raw?.packages && typeof raw.packages === 'object' ? raw.packages : {};
     return { packages };
   } catch {
@@ -94,17 +99,17 @@ function readLock(workspaceAbs) {
   }
 }
 
-function writeLock(workspaceAbs, lock) {
+function writeLock(workspaceAbs: string, lock: ManagedLock): void {
   const fp = lockPath(workspaceAbs);
   fs.mkdirSync(path.dirname(fp), { recursive: true });
   fs.writeFileSync(
     fp,
     `${JSON.stringify({ version: 1, packages: lock.packages, updatedAt: new Date().toISOString() }, null, 2)}\n`,
-    'utf8'
+    'utf8',
   );
 }
 
-function copyDirOverwrite(src, dest) {
+function copyDirOverwrite(src: string, dest: string): void {
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.rmSync(dest, { recursive: true, force: true });
   fs.cpSync(src, dest, { recursive: true });
@@ -112,9 +117,15 @@ function copyDirOverwrite(src, dest) {
 
 /**
  * 托管包按种子覆盖；种子中不存在的工作区技能（用户自建）不碰。
- * @param {string} [workspaceAbs]
  */
-export function syncManagedSkills(workspaceAbs) {
+export function syncManagedSkills(workspaceAbs?: string): {
+  ok: boolean;
+  error?: string;
+  updated?: string[];
+  installed?: string[];
+  unchanged?: string[];
+  hint?: string;
+} {
   const ws =
     workspaceAbs && String(workspaceAbs).trim()
       ? path.normalize(workspaceAbs)
@@ -130,9 +141,9 @@ export function syncManagedSkills(workspaceAbs) {
   const lock = readLock(ws);
   const pkgs = listProjectManagedSkillRels(projectRoot);
 
-  const updated = [];
-  const unchanged = [];
-  const installed = [];
+  const updated: string[] = [];
+  const unchanged: string[] = [];
+  const installed: string[] = [];
 
   for (const rel of pkgs) {
     const src = path.join(standard, rel);
@@ -159,7 +170,7 @@ export function syncManagedSkills(workspaceAbs) {
     } catch (err) {
       return {
         ok: false,
-        error: `同步失败 ${rel}: ${err?.message || err}`,
+        error: `同步失败 ${rel}: ${(err as Error)?.message || err}`,
         updated,
         installed,
         unchanged,

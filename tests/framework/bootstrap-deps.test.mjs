@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isPackageInstalled, getBrowserStatus } from '../../src/utils/bootstrap-deps.js';
+import { isPackageInstalled, getBrowserStatus } from '#utils/bootstrap-deps.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const nodeModules = path.join(root, 'node_modules');
