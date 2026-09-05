@@ -709,20 +709,22 @@ Order:
 - Modify: `tsconfig.build.json` — `"allowJs": false` when no JS sources remain under include
 - Modify: `src/utils/module-ext.ts` — MODULE_EXTS can remain `.js` for emit output; source scan of repo for loaders is on `dist` (`.js` only)
 
-- [ ] **Step 1: Count remaining source JS**
+- [x] **Step 1: Count remaining source JS**
 
 Run: `git ls-files "src/**/*.js" "core/**/*.js" "app.js" | findstr /V www`
 
-Expected: empty (except intentional assets)
+Expected: empty (except intentional assets). *Done: only `core/system-Core/www/**` remains JS (frontend, excluded from tsc).*
 
-- [ ] **Step 2: `allowJs: false`, full `pnpm build && pnpm typecheck && pnpm test:fast`**
+- [x] **Step 2: `allowJs: false`, full `pnpm build && pnpm typecheck && pnpm test:fast`**
 
-- [ ] **Step 3: Final docs pass + push**
+- [x] **Step 3: Final docs pass + push**
 
 ```bash
 git commit -m "build: disable allowJs; TypeScript sources only"
 git push origin refactor/typescript
 ```
+
+*Shipped as `c86adb4` (`refactor(ts): disable allowJs; point tests at dist`) on `refactor/typescript`.*
 
 ---
 
