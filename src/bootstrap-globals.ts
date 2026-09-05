@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 运行时全局引导（须在 AgentRuntime / 插件加载前 import 一次）
  * - PluginBase / msgSegment：见 docs/runtime-surface.md
