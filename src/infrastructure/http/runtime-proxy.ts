@@ -2,6 +2,7 @@
  * AgentRuntime 反向代理辅助（初始化 / SSL / 域名证书 / 启动）
  * 由 AgentRuntime 类方法薄包装委托，不改变对外行为。
  */
+// @ts-expect-error express 无 @types/express（与仓库约定一致）
 import express from 'express';
 import http from 'node:http';
 import https from 'node:https';
@@ -18,7 +19,7 @@ import { getProxyConfig, getServerHost } from '#infrastructure/http/runtime-net.
  * @param {import('../../agent-runtime.js').default} runtime
  * @param {object} req
  */
-export function extractClientIP(runtime, req) {
+export function extractClientIP(runtime: any, req: any) {
   const cdnInfo = runtime.httpBusiness.cdnManager.isCDNRequest(req);
   if (cdnInfo?.ip) {
     return cdnInfo.ip;
@@ -39,7 +40,7 @@ export function extractClientIP(runtime, req) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export async function initProxyApp(runtime) {
+export async function initProxyApp(runtime: any) {
   const proxyConfig = getProxyConfig();
   if (!proxyConfig?.enabled) return;
 
@@ -47,7 +48,7 @@ export async function initProxyApp(runtime) {
 
   await loadDomainCertificates(runtime);
 
-  runtime.proxyApp.use(async (req, res, next) => {
+  runtime.proxyApp.use(async (req: any, res: any, next: any) => {
     const hostname = req.hostname || req.headers.host?.split(':')[0];
 
     if (!hostname) {
@@ -116,10 +117,10 @@ export async function initProxyApp(runtime) {
   };
 
   runtime.proxyServer = http.createServer(proxyServerOptions, runtime.proxyApp);
-  runtime.proxyServer.on("error", err => {
+  runtime.proxyServer.on("error", (err: any) => {
     RuntimeUtil.makeLog("error", `HTTP代理服务器错误：${err.message}`, '代理');
   });
-  runtime.proxyServer.on("connection", (socket) => {
+  runtime.proxyServer.on("connection", (socket: any) => {
     socket.setTimeout(socketTimeout);
     socket.setKeepAlive(keepAliveEnabled, keepAliveInitialDelay);
   });
@@ -132,7 +133,7 @@ export async function initProxyApp(runtime) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export async function loadDomainCertificates(runtime) {
+export async function loadDomainCertificates(runtime: any) {
   const proxyConfig = getProxyConfig();
   if (!proxyConfig?.domains) return;
 
@@ -157,7 +158,7 @@ export async function loadDomainCertificates(runtime) {
       runtime.sslContexts.set(domainConfig.domain, context);
       runtime.domainConfigs.set(domainConfig.domain, domainConfig);
       RuntimeUtil.makeLog("info", `✓ 加载SSL证书：${domainConfig.domain}`, '代理');
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog("error", `加载域名 ${domainConfig.domain} 的SSL证书失败：${error.message}`, '代理');
     }
   }
@@ -166,7 +167,7 @@ export async function loadDomainCertificates(runtime) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export async function createHttpsProxyServer(runtime) {
+export async function createHttpsProxyServer(runtime: any) {
   if (runtime.sslContexts.size === 0) {
     RuntimeUtil.makeLog("warn", "没有可用的SSL证书，跳过HTTPS代理服务器创建", '代理');
     return;
@@ -187,7 +188,7 @@ export async function createHttpsProxyServer(runtime) {
   let httpsOptions;
   try {
     httpsOptions = await loadSSLCertificate(cert, `HTTPS代理服务器（默认证书）`);
-  } catch (error) {
+  } catch (error: any) {
     RuntimeUtil.makeLog("error", `加载默认SSL证书失败：${error.message}`, '代理');
     return;
   }
@@ -200,7 +201,7 @@ export async function createHttpsProxyServer(runtime) {
   httpsOptions.keepAlive = keepAliveEnabled;
   httpsOptions.keepAliveInitialDelay = keepAliveInitialDelay;
 
-  httpsOptions.SNICallback = (servername, cb) => {
+  httpsOptions.SNICallback = (servername: any, cb: any) => {
     const context = runtime.sslContexts.get(servername) || findWildcardContext(runtime, servername);
     if (context) {
       cb(null, context);
@@ -216,7 +217,7 @@ export async function createHttpsProxyServer(runtime) {
 
     httpsOptions.allowHTTP1 = true;
     runtime.proxyHttpsServer = createSecureServer(httpsOptions, runtime.proxyApp);
-    runtime.proxyHttpsServer.on("error", err => {
+    runtime.proxyHttpsServer.on("error", (err: any) => {
       RuntimeUtil.makeLog("error", `HTTPS代理服务器错误：${err.message}`, '代理');
     });
     RuntimeUtil.makeLog("info", "✓ HTTPS代理服务器已启动（HTTP/2支持）", '代理');
@@ -224,7 +225,7 @@ export async function createHttpsProxyServer(runtime) {
   }
 
   runtime.proxyHttpsServer = https.createServer(httpsOptions, runtime.proxyApp);
-  runtime.proxyHttpsServer.on("error", err => {
+  runtime.proxyHttpsServer.on("error", (err: any) => {
     RuntimeUtil.makeLog("error", `HTTPS代理服务器错误：${err.message}`, '代理');
   });
 }
@@ -233,7 +234,7 @@ export async function createHttpsProxyServer(runtime) {
  * @param {object} domainConfig
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export function createProxyOptions(runtime, domainConfig) {
+export function createProxyOptions(runtime: any, domainConfig: any) {
   return {
     target: domainConfig.target,
     changeOrigin: true,
@@ -244,15 +245,15 @@ export function createProxyOptions(runtime, domainConfig) {
     secure: false,
     logLevel: 'warn',
 
-    onProxyReq: (proxyReq, req) => {
+    onProxyReq: (proxyReq: any, req: any) => {
       handleProxyRequestStart(runtime, proxyReq, req, domainConfig);
     },
 
-    onProxyRes: (proxyRes, req, res) => {
+    onProxyRes: (proxyRes: any, req: any, res: any) => {
       handleProxyResponse(runtime, proxyRes, req, res, domainConfig);
     },
 
-    onError: (err, req, res) => {
+    onError: (err: any, req: any, res: any) => {
       handleProxyError(runtime, err, req, res, domainConfig);
     },
 
@@ -266,7 +267,7 @@ export function createProxyOptions(runtime, domainConfig) {
  * @param {import('../../agent-runtime.js').default} runtime
  * @param {object} domainConfig
  */
-export function createDomainProxyMiddleware(runtime, domainConfig) {
+export function createDomainProxyMiddleware(runtime: any, domainConfig: any) {
   const proxyOptions = createProxyOptions(runtime, domainConfig);
   return createProxyMiddleware(proxyOptions);
 }
@@ -280,7 +281,7 @@ export function createDomainProxyMiddleware(runtime, domainConfig) {
  * @param {string} hostname
  * @param {string} targetUrl
  */
-export function handleProxyRequest(runtime, req, res, next, domainConfig, hostname, targetUrl) {
+export function handleProxyRequest(runtime: any, req: any, res: any, next: any, domainConfig: any, hostname: any, targetUrl: any) {
   manageProxyConnection(runtime, hostname, targetUrl, 'increment');
 
   res.on('finish', () => {
@@ -296,7 +297,7 @@ export function handleProxyRequest(runtime, req, res, next, domainConfig, hostna
  * @param {object} domainConfig
  * @param {string} targetUrl
  */
-export function getOrCreateProxyMiddleware(runtime, domainConfig, targetUrl) {
+export function getOrCreateProxyMiddleware(runtime: any, domainConfig: any, targetUrl: any) {
   const cacheKey = `${domainConfig.domain}-${targetUrl}`;
   let middleware = runtime.proxyMiddlewares.get(cacheKey);
 
@@ -315,7 +316,7 @@ export function getOrCreateProxyMiddleware(runtime, domainConfig, targetUrl) {
  * @param {string} targetUrl
  * @param {string} operation
  */
-export function manageProxyConnection(runtime, domain, targetUrl, operation) {
+export function manageProxyConnection(runtime: any, domain: any, targetUrl: any, operation: any) {
   if (operation === 'increment') {
     runtime.httpBusiness.proxyManager.incrementConnections(domain, targetUrl);
   } else if (operation === 'decrement') {
@@ -329,7 +330,7 @@ export function manageProxyConnection(runtime, domain, targetUrl, operation) {
  * @param {object} req
  * @param {object} domainConfig
  */
-export function handleProxyRequestStart(runtime, proxyReq, req, domainConfig) {
+export function handleProxyRequestStart(runtime: any, proxyReq: any, req: any, domainConfig: any) {
   req._proxyStartTime = Date.now();
 
   if (domainConfig.headers?.request) {
@@ -354,7 +355,7 @@ export function handleProxyRequestStart(runtime, proxyReq, req, domainConfig) {
  * @param {object} res
  * @param {object} domainConfig
  */
-export function handleProxyResponse(runtime, proxyRes, req, res, domainConfig) {
+export function handleProxyResponse(runtime: any, proxyRes: any, req: any, res: any, domainConfig: any) {
   const startTime = req._proxyStartTime || Date.now();
   const responseTime = Date.now() - startTime;
 
@@ -382,7 +383,7 @@ export function handleProxyResponse(runtime, proxyRes, req, res, domainConfig) {
  * @param {object} res
  * @param {object} domainConfig
  */
-export function handleProxyError(runtime, err, req, res, domainConfig) {
+export function handleProxyError(runtime: any, err: any, req: any, res: any, domainConfig: any) {
   const hostname = domainConfig.domain || req.hostname || 'unknown';
   const targetUrl = domainConfig.target || 'unknown';
 
@@ -414,7 +415,7 @@ export function handleProxyError(runtime, err, req, res, domainConfig) {
  * @param {import('../../agent-runtime.js').default} runtime
  * @param {string} hostname
  */
-export function findDomainConfig(runtime, hostname) {
+export function findDomainConfig(runtime: any, hostname: any) {
   if (runtime.domainConfigs.has(hostname)) {
     return runtime.domainConfigs.get(hostname);
   }
@@ -446,7 +447,7 @@ export function findDomainConfig(runtime, hostname) {
  * @param {import('../../agent-runtime.js').default} runtime
  * @param {string} servername
  */
-export function findWildcardContext(runtime, servername) {
+export function findWildcardContext(runtime: any, servername: any) {
   for (const [domain, context] of runtime.sslContexts) {
     if (domain.startsWith('*.')) {
       const baseDomain = domain.substring(2);
@@ -461,7 +462,7 @@ export function findWildcardContext(runtime, servername) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export async function startProxyServers(runtime) {
+export async function startProxyServers(runtime: any) {
   const proxyConfig = getProxyConfig();
   if (!proxyConfig?.enabled) return;
 
@@ -487,7 +488,7 @@ export async function startProxyServers(runtime) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export async function displayProxyInfo(runtime) {
+export async function displayProxyInfo(runtime: any) {
   console.log(chalk.cyan('\n╔════════════════════════════════════════════════════════════╗'));
   console.log(chalk.cyan('║') + chalk.yellow.bold('                  反向代理服务器配置信息                    ') + chalk.cyan('║'));
   console.log(chalk.cyan('╚════════════════════════════════════════════════════════════╝\n'));
