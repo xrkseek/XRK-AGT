@@ -5,22 +5,19 @@
 
 /**
  * R-7 连续百分位（已排序升序数组）
- * @param {number[]} sortedAsc
- * @param {number} p 0–100
- * @returns {number}
  */
-export function percentileR7(sortedAsc, p) {
+export function percentileR7(sortedAsc: number[] | null | undefined, p: number): number {
   const n = sortedAsc?.length || 0;
   if (n === 0) return 0;
-  if (n === 1) return sortedAsc[0];
+  if (n === 1) return sortedAsc![0]!;
   const clamped = Math.min(100, Math.max(0, Number(p) || 0));
-  if (clamped <= 0) return sortedAsc[0];
-  if (clamped >= 100) return sortedAsc[n - 1];
+  if (clamped <= 0) return sortedAsc![0]!;
+  if (clamped >= 100) return sortedAsc![n - 1]!;
   const h = ((n - 1) * clamped) / 100;
   const lo = Math.floor(h);
   const hi = Math.min(n - 1, lo + 1);
   const w = h - lo;
-  return sortedAsc[lo] * (1 - w) + sortedAsc[hi] * w;
+  return sortedAsc![lo]! * (1 - w) + sortedAsc![hi]! * w;
 }
 
 /** 在线均值 / 样本方差（Welford） */
@@ -29,8 +26,7 @@ export class WelfordAccumulator {
   mean = 0;
   m2 = 0;
 
-  /** @param {number} x */
-  push(x) {
+  push(x: number): void {
     const v = Number(x);
     if (!Number.isFinite(v)) return;
     this.count += 1;
@@ -39,15 +35,15 @@ export class WelfordAccumulator {
     this.m2 += d * (v - this.mean);
   }
 
-  get variance() {
+  get variance(): number {
     return this.count > 1 ? this.m2 / (this.count - 1) : 0;
   }
 
-  get stddev() {
+  get stddev(): number {
     return Math.sqrt(this.variance);
   }
 
-  snapshot() {
+  snapshot(): { count: number; mean: number; variance: number; stddev: number } {
     return {
       count: this.count,
       mean: this.mean,
@@ -61,16 +57,17 @@ export class WelfordAccumulator {
  * 算法 R 水库采样：固定容量，对全量流无偏近似分位数
  */
 export class ReservoirSampler {
-  /** @param {number} capacity */
+  capacity: number;
+  samples: number[];
+  seen: number;
+
   constructor(capacity = 10_000) {
     this.capacity = Math.max(1, Math.floor(capacity));
-    /** @type {number[]} */
     this.samples = [];
     this.seen = 0;
   }
 
-  /** @param {number} x @param {() => number} [rng] */
-  push(x, rng = Math.random) {
+  push(x: number, rng: () => number = Math.random): void {
     const v = Number(x);
     if (!Number.isFinite(v)) return;
     this.seen += 1;
@@ -85,7 +82,12 @@ export class ReservoirSampler {
 
 /** 环形滑动窗口错误率 */
 export class SlidingErrorWindow {
-  /** @param {number} size */
+  size: number;
+  buf: Uint8Array;
+  i: number;
+  filled: number;
+  failInWindow: number;
+
   constructor(size = 200) {
     this.size = Math.max(1, Math.floor(size));
     this.buf = new Uint8Array(this.size);
@@ -94,11 +96,10 @@ export class SlidingErrorWindow {
     this.failInWindow = 0;
   }
 
-  /** @param {boolean} ok */
-  push(ok) {
+  push(ok: boolean): void {
     const fail = ok ? 0 : 1;
     if (this.filled === this.size) {
-      this.failInWindow -= this.buf[this.i];
+      this.failInWindow -= this.buf[this.i]!;
     } else {
       this.filled += 1;
     }
@@ -107,29 +108,72 @@ export class SlidingErrorWindow {
     this.i = (this.i + 1) % this.size;
   }
 
-  get errorRate() {
+  get errorRate(): number {
     return this.filled === 0 ? 0 : this.failInWindow / this.filled;
   }
 }
+
+export type LatencyRecord = {
+  ok: boolean;
+  ms: number;
+  status?: number;
+  bytes?: number;
+};
+
+export type LatencySummary = {
+  total: number;
+  ok: number;
+  fail: number;
+  errorRate: number;
+  slidingErrorRate: number;
+  elapsedMs: number;
+  rps: number;
+  sampleCount: number;
+  observedCount: number;
+  reservoir: boolean;
+  latencyMs: {
+    min: number;
+    avg: number;
+    stddev: number;
+    p50: number;
+    p90: number;
+    p95: number;
+    p99: number;
+    max: number;
+  };
+  statusCounts: Record<string | number, number>;
+  bytesIn: number;
+};
 
 /**
  * 延迟直方图摘要（可选水库 + 滑动错误窗）
  * `summary()` 产出 p50/p90/p95/p99、rps、errorRate 等。
  */
 export class LatencyHistogram {
+  _reservoir: ReservoirSampler | null;
+  samples: number[];
+  ok: number;
+  fail: number;
+  statusCounts: Record<string | number, number>;
+  bytesIn: number;
+  startMs: number;
+  endMs: number;
+  welford: WelfordAccumulator;
+  sliding: SlidingErrorWindow | null;
+  minMs: number;
+  maxMs: number;
+
   /**
-   * @param {{ reservoirSize?: number|null, slidingWindow?: number }} [opts]
-   *   reservoirSize 为 null/0 时全量保留 samples
+   * @param opts.reservoirSize 为 null/0 时全量保留 samples
    */
-  constructor(opts = {}) {
+  constructor(opts: { reservoirSize?: number | null; slidingWindow?: number } = {}) {
     const rs = opts.reservoirSize;
     this._reservoir =
       rs == null || rs === 0 ? null : new ReservoirSampler(Number(rs) || 10_000);
-    /** @type {number[]} */
     this.samples = [];
     this.ok = 0;
     this.fail = 0;
-    this.statusCounts = Object.create(null);
+    this.statusCounts = Object.create(null) as Record<string | number, number>;
     this.bytesIn = 0;
     this.startMs = 0;
     this.endMs = 0;
@@ -142,16 +186,15 @@ export class LatencyHistogram {
     this.maxMs = -Infinity;
   }
 
-  begin() {
+  begin(): void {
     this.startMs = Date.now();
   }
 
-  end() {
+  end(): void {
     this.endMs = Date.now();
   }
 
-  /** @param {{ ok: boolean, ms: number, status?: number, bytes?: number }} row */
-  record(row) {
+  record(row: LatencyRecord): void {
     const ms = Number(row?.ms);
     if (Number.isFinite(ms)) {
       if (this._reservoir) this._reservoir.push(ms);
@@ -168,39 +211,38 @@ export class LatencyHistogram {
     this.sliding?.push(!!row?.ok);
   }
 
-  _sampleView() {
+  _sampleView(): number[] {
     return this._reservoir ? this._reservoir.samples : this.samples;
   }
 
-  get elapsedMs() {
+  get elapsedMs(): number {
     return Math.max(1, (this.endMs || Date.now()) - this.startMs);
   }
 
-  get total() {
+  get total(): number {
     return this.ok + this.fail;
   }
 
-  get rps() {
+  get rps(): number {
     return (this.total / this.elapsedMs) * 1000;
   }
 
-  get errorRate() {
+  get errorRate(): number {
     return this.total === 0 ? 0 : this.fail / this.total;
   }
 
-  get slidingErrorRate() {
+  get slidingErrorRate(): number {
     return this.sliding ? this.sliding.errorRate : this.errorRate;
   }
 
-  /** @param {number} p */
-  percentile(p) {
+  percentile(p: number): number {
     const view = this._sampleView();
     if (!view.length) return 0;
     const sorted = [...view].sort((a, b) => a - b);
     return percentileR7(sorted, p);
   }
 
-  summary() {
+  summary(): LatencySummary {
     const view = this._sampleView();
     const sorted = view.length ? [...view].sort((a, b) => a - b) : [];
     const w = this.welford.snapshot();
@@ -231,21 +273,23 @@ export class LatencyHistogram {
   }
 }
 
+export type SloThresholds = {
+  maxP99Ms?: number;
+  maxP95Ms?: number;
+  maxErrorRate?: number;
+  maxSlidingErrorRate?: number;
+  minRps?: number;
+  minSamples?: number;
+};
+
 /**
  * 对照 SLO 阈值，返回违规列表
- * @param {ReturnType<LatencyHistogram['summary']>} summary
- * @param {{
- *   maxP99Ms?: number,
- *   maxP95Ms?: number,
- *   maxErrorRate?: number,
- *   maxSlidingErrorRate?: number,
- *   minRps?: number,
- *   minSamples?: number
- * }} [slo]
- * @returns {{ ok: boolean, violations: string[] }}
  */
-export function evaluateSlo(summary, slo = {}) {
-  const violations = [];
+export function evaluateSlo(
+  summary: LatencySummary,
+  slo: SloThresholds = {},
+): { ok: boolean; violations: string[] } {
+  const violations: string[] = [];
   if (slo.minSamples != null && (summary.sampleCount ?? summary.total) < slo.minSamples) {
     violations.push(`samples ${summary.sampleCount ?? summary.total} < ${slo.minSamples}`);
   }
@@ -263,7 +307,7 @@ export function evaluateSlo(summary, slo = {}) {
     (summary.slidingErrorRate ?? summary.errorRate) > slo.maxSlidingErrorRate
   ) {
     violations.push(
-      `slidingErrorRate ${summary.slidingErrorRate ?? summary.errorRate} > ${slo.maxSlidingErrorRate}`
+      `slidingErrorRate ${summary.slidingErrorRate ?? summary.errorRate} > ${slo.maxSlidingErrorRate}`,
     );
   }
   if (slo.minRps != null && summary.rps < slo.minRps) {

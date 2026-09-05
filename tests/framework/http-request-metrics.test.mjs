@@ -9,7 +9,7 @@ import {
   getHttpRequestMetricsSummary,
   resetHttpRequestMetrics,
   recordHttpRequest,
-} from '../../src/utils/http-request-metrics.js';
+} from '#utils/http-request-metrics.js';
 import {
   buildProcessMetrics,
   formatPrometheusMetrics,

@@ -15,36 +15,55 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 
-/**
- * 规范化后的监控配置（字段齐全、副作用项为布尔真值）。
- *
- * @typedef {object} NormalizedMonitorConfig
- * @property {boolean} enabled
- * @property {number} interval 检查间隔（毫秒）
- * @property {number} initialDelay 首次检查延迟（毫秒）
- * @property {{ enabled: boolean, maxInstances: number, memoryThreshold: number, reserveNewest: boolean }} browser
- * @property {{ enabled: boolean, systemThreshold: number, nodeThreshold: number, autoOptimize: boolean, gcInterval: number, leakDetection: { enabled: boolean, threshold: number, checkInterval: number } }} memory
- * @property {{ enabled: boolean, threshold: number, checkDuration: number }} cpu
- * @property {{ aggressive: boolean, autoRestart: boolean, restartThreshold: number }} optimize
- * @property {{ enabled: boolean, interval: number }} report
- * @property {{ enabled: boolean, cleanupTemp: boolean, cleanupLogs: boolean, tempMaxAge: number, logMaxAge: number, maxLogSize: number }} disk
- * @property {{ enabled: boolean, maxConnections: number, cleanupIdle: boolean }} network
- * @property {{ enabled: boolean, priority: string, nice: number }} process
- * @property {{ enabled: boolean, clearCache: boolean, optimizeCPU: boolean }} system
- */
+/** 规范化后的监控配置（字段齐全、副作用项为布尔真值）。 */
+export type NormalizedMonitorConfig = {
+  enabled: boolean;
+  interval: number;
+  initialDelay: number;
+  browser: {
+    enabled: boolean;
+    maxInstances: number;
+    memoryThreshold: number;
+    reserveNewest: boolean;
+  };
+  memory: {
+    enabled: boolean;
+    systemThreshold: number;
+    nodeThreshold: number;
+    autoOptimize: boolean;
+    gcInterval: number;
+    leakDetection: {
+      enabled: boolean;
+      threshold: number;
+      checkInterval: number;
+    };
+  };
+  cpu: { enabled: boolean; threshold: number; checkDuration: number };
+  optimize: { aggressive: boolean; autoRestart: boolean; restartThreshold: number };
+  report: { enabled: boolean; interval: number };
+  disk: {
+    enabled: boolean;
+    cleanupTemp: boolean;
+    cleanupLogs: boolean;
+    tempMaxAge: number;
+    logMaxAge: number;
+    maxLogSize: number;
+  };
+  network: { enabled: boolean; maxConnections: number; cleanupIdle: boolean };
+  process: { enabled: boolean; priority: string; nice: number };
+  system: { enabled: boolean; clearCache: boolean; optimizeCPU: boolean };
+};
 
 /**
  * 运行中不可 unlink 的日志基名（即使 `disk.cleanupLogs === true`）。
  * 大小写不敏感，匹配时会 `toLowerCase()`。
- *
- * @type {ReadonlySet<string>}
  */
-export const PROTECTED_LOG_BASENAMES = new Set([
+export const PROTECTED_LOG_BASENAMES: ReadonlySet<string> = new Set([
   'app.log',
   'bootstrap.log',
   'restart.log',
   'trace.log',
-  'error.log'
+  'error.log',
 ]);
 
 /**
@@ -52,12 +71,9 @@ export const PROTECTED_LOG_BASENAMES = new Set([
  *
  * - 观察类开关：缺省偏开（监控本身）
  * - 副作用类开关：仅 `=== true` 才开（browser / network / process / system / 删文件 / 激进 / 自重启）
- *
- * @param {unknown} raw 原始配置（可为 null / 非对象）
- * @returns {NormalizedMonitorConfig}
  */
-export function normalizeMonitorConfig(raw) {
-  const config = raw && typeof raw === 'object' ? /** @type {Record<string, any>} */ (raw) : {};
+export function normalizeMonitorConfig(raw: unknown): NormalizedMonitorConfig {
+  const config = raw && typeof raw === 'object' ? (raw as Record<string, any>) : {};
   return {
     enabled: config.enabled !== false,
     interval: Number(config.interval) > 0 ? Number(config.interval) : 300000,
@@ -66,7 +82,7 @@ export function normalizeMonitorConfig(raw) {
       enabled: config.browser?.enabled === true,
       maxInstances: Number(config.browser?.maxInstances) > 0 ? Number(config.browser.maxInstances) : 5,
       memoryThreshold: Number(config.browser?.memoryThreshold) || 90,
-      reserveNewest: config.browser?.reserveNewest !== false
+      reserveNewest: config.browser?.reserveNewest !== false,
     },
     memory: {
       enabled: config.memory?.enabled !== false,
@@ -77,22 +93,22 @@ export function normalizeMonitorConfig(raw) {
       leakDetection: {
         enabled: config.memory?.leakDetection?.enabled !== false,
         threshold: Number(config.memory?.leakDetection?.threshold) || 0.1,
-        checkInterval: Number(config.memory?.leakDetection?.checkInterval) || 300000
-      }
+        checkInterval: Number(config.memory?.leakDetection?.checkInterval) || 300000,
+      },
     },
     cpu: {
       enabled: config.cpu?.enabled !== false,
       threshold: Number(config.cpu?.threshold) || 90,
-      checkDuration: Number(config.cpu?.checkDuration) || 30000
+      checkDuration: Number(config.cpu?.checkDuration) || 30000,
     },
     optimize: {
       aggressive: config.optimize?.aggressive === true,
       autoRestart: config.optimize?.autoRestart === true,
-      restartThreshold: Number(config.optimize?.restartThreshold) || 95
+      restartThreshold: Number(config.optimize?.restartThreshold) || 95,
     },
     report: {
       enabled: config.report?.enabled !== false,
-      interval: Number(config.report?.interval) || 3600000
+      interval: Number(config.report?.interval) || 3600000,
     },
     disk: {
       enabled: config.disk?.enabled !== false,
@@ -100,34 +116,31 @@ export function normalizeMonitorConfig(raw) {
       cleanupLogs: config.disk?.cleanupLogs === true,
       tempMaxAge: Number(config.disk?.tempMaxAge) || 86400000,
       logMaxAge: Number(config.disk?.logMaxAge) || 604800000,
-      maxLogSize: Number(config.disk?.maxLogSize) || 100 * 1024 * 1024
+      maxLogSize: Number(config.disk?.maxLogSize) || 100 * 1024 * 1024,
     },
     network: {
       enabled: config.network?.enabled === true,
       maxConnections: Number(config.network?.maxConnections) || 1000,
-      cleanupIdle: config.network?.cleanupIdle === true
+      cleanupIdle: config.network?.cleanupIdle === true,
     },
     process: {
       enabled: config.process?.enabled === true,
       priority: config.process?.priority || 'normal',
-      nice: Number(config.process?.nice) || 0
+      nice: Number(config.process?.nice) || 0,
     },
     system: {
       enabled: config.system?.enabled === true,
       clearCache: config.system?.clearCache === true,
-      optimizeCPU: config.system?.optimizeCPU === true
-    }
+      optimizeCPU: config.system?.optimizeCPU === true,
+    },
   };
 }
 
 /**
  * 判断命令行是否为 AGT 托管的浏览器（headless / puppeteer / playwright 等）。
  * 未命中则禁止 taskkill，避免误伤用户桌面 Chrome。
- *
- * @param {string} [commandLine] 进程命令行
- * @returns {boolean}
  */
-export function isManagedBrowserCommand(commandLine) {
+export function isManagedBrowserCommand(commandLine?: string): boolean {
   const s = String(commandLine || '').toLowerCase();
   if (s.includes('puppeteer') || s.includes('playwright') || s.includes('--headless')) return true;
   if (s.includes('xrk-agt') || s.includes('xr-agt')) return true;
@@ -137,11 +150,8 @@ export function isManagedBrowserCommand(commandLine) {
 /**
  * 判断 PID 是否允许被监控器结束。
  * 拒绝：非正整数、当前进程、父进程。
- *
- * @param {unknown} pid
- * @returns {boolean}
  */
-export function isSafeKillPid(pid) {
+export function isSafeKillPid(pid: unknown): boolean {
   const n = Number(pid);
   if (!Number.isInteger(n) || n <= 0) return false;
   if (n === process.pid) return false;
@@ -152,40 +162,33 @@ export function isSafeKillPid(pid) {
 /**
  * 允许自动清理的临时目录根（绝对路径）。
  * 当前仅 `data/temp`，不含 `data/uploads`。
- *
- * @param {string} [cwd=process.cwd()] 项目根
- * @returns {string[]}
  */
-export function allowedTempRoots(cwd = process.cwd()) {
+export function allowedTempRoots(cwd: string = process.cwd()): string[] {
   return [path.resolve(cwd, 'data', 'temp')];
 }
 
 /**
  * 允许自动清理日志的目录根（绝对路径）。
- *
- * @param {string} [cwd=process.cwd()] 项目根
- * @returns {string}
  */
-export function allowedLogRoot(cwd = process.cwd()) {
+export function allowedLogRoot(cwd: string = process.cwd()): string {
   return path.resolve(cwd, 'logs');
 }
 
 /**
  * 判断 `filePath` 是否位于任一 `allowedRoots` 之下（realpath，防 `../` 跳出）。
- *
- * @param {string} filePath 候选文件路径
- * @param {string[]} allowedRoots 允许的根目录列表
- * @returns {Promise<boolean>}
  */
-export async function isPathInsideAllowedRoots(filePath, allowedRoots) {
-  let resolvedFile;
+export async function isPathInsideAllowedRoots(
+  filePath: string,
+  allowedRoots: string[],
+): Promise<boolean> {
+  let resolvedFile: string;
   try {
     resolvedFile = await fs.realpath(filePath);
   } catch {
     resolvedFile = path.resolve(filePath);
   }
   for (const root of allowedRoots) {
-    let resolvedRoot;
+    let resolvedRoot: string;
     try {
       resolvedRoot = await fs.realpath(root);
     } catch {
@@ -200,23 +203,20 @@ export async function isPathInsideAllowedRoots(filePath, allowedRoots) {
 
 /**
  * 是否为受保护的活跃日志基名（不可自动删除）。
- *
- * @param {string} [basename] 文件名（含扩展名）
- * @returns {boolean} `true` 表示受保护、不可删
+ * @returns `true` 表示受保护、不可删
  */
-export function isProtectedLogBasename(basename) {
+export function isProtectedLogBasename(basename?: string): boolean {
   return PROTECTED_LOG_BASENAMES.has(String(basename || '').toLowerCase());
 }
 
 /**
  * 是否应因 Node 堆过高触发 autoRestart。
  * 禁止用整机内存占比（企业共享机常态偏高）。
- *
- * @param {{ heapUsedPercent?: number } | null | undefined} processMem `checkMemory().process`
- * @param {{ autoRestart?: boolean, restartThreshold?: number } | null | undefined} optimize `config.optimize`
- * @returns {boolean}
  */
-export function shouldAutoRestartForHeap(processMem, optimize) {
+export function shouldAutoRestartForHeap(
+  processMem: { heapUsedPercent?: number } | null | undefined,
+  optimize: { autoRestart?: boolean; restartThreshold?: number } | null | undefined,
+): boolean {
   if (optimize?.autoRestart !== true) return false;
   const heap = Number(processMem?.heapUsedPercent);
   const th = Number(optimize?.restartThreshold) || 95;
@@ -226,12 +226,14 @@ export function shouldAutoRestartForHeap(processMem, optimize) {
 /**
  * 是否允许执行 OS 级缓存清理（如 Windows `ipconfig /flushdns`）。
  * Windows 另须 `optimize.aggressive === true`。
- *
- * @param {{ system?: { clearCache?: boolean }, optimize?: { aggressive?: boolean } } | null | undefined} runtimeConfig
- * @param {NodeJS.Platform} [platform=process.platform]
- * @returns {boolean}
  */
-export function mayClearOsCache(runtimeConfig, platform = process.platform) {
+export function mayClearOsCache(
+  runtimeConfig: {
+    system?: { clearCache?: boolean };
+    optimize?: { aggressive?: boolean };
+  } | null | undefined,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
   if (runtimeConfig?.system?.clearCache !== true) return false;
   if (platform === 'win32' && runtimeConfig?.optimize?.aggressive !== true) return false;
   return true;

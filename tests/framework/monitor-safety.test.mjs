@@ -13,7 +13,7 @@ import {
   isProtectedLogBasename,
   shouldAutoRestartForHeap,
   mayClearOsCache
-} from '../../src/utils/monitor-safety.js';
+} from '#utils/monitor-safety.js';
 
 describe('monitor-safety', () => {
   it('缺省配置：危险开关全部关闭', () => {

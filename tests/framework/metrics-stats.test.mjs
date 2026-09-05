@@ -9,7 +9,7 @@ import {
   ReservoirSampler,
   LatencyHistogram,
   evaluateSlo
-} from '../../src/utils/metrics-stats.js';
+} from '#utils/metrics-stats.js';
 import { mulberry32, exponentialDelayMs } from '#utils/prng.js';
 
 describe('percentileR7 (Hyndman–Fan)', () => {
