@@ -3,13 +3,11 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
 import { findInCoreSubDirs, resolveQualifiedCoreModuleKey } from '#utils/core-fs.js';
 import { FileLoader } from '#utils/file-loader.js';
-import { HotReloadBase } from '#utils/hot-reload-base.js';
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
 
 class CommonConfigRegistry {
   configs = new Map();
   loaded = false;
-  _hotReload = null;
   _configDirsCache = null;
 
   async load() {
@@ -127,34 +125,6 @@ class CommonConfigRegistry {
       if (seen.has(config)) continue;
       seen.add(config);
       config.clearCache?.();
-    }
-  }
-
-  async watch(enable = true) {
-    if (!enable) {
-      await this._hotReload?.stop();
-      this._hotReload = null;
-      return;
-    }
-    if (this._hotReload?.watcher) return;
-
-    try {
-      const hotReload = new HotReloadBase({ loggerName: 'CommonConfigRegistry' });
-      const configDirs = await paths.getCoreSubDirs('commonconfig');
-      if (configDirs.length === 0) return;
-
-      const started = await hotReload.watch(true, {
-        dirs: configDirs,
-        onAdd: (filePath) => this._loadConfig(filePath),
-        onChange: (filePath) => this.reloadFile(filePath),
-        onUnlink: (filePath) => {
-          const key = resolveQualifiedCoreModuleKey(filePath, configDirs, 'commonconfig');
-          this.configs.delete(key);
-        }
-      });
-      if (started) this._hotReload = hotReload;
-    } catch (error) {
-      RuntimeUtil.makeLog('error', '启动 CommonConfig 文件监视失败', 'CommonConfigRegistry', error);
     }
   }
 }

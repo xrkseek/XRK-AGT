@@ -6,7 +6,6 @@ import paths from '#utils/paths.js';
 import { validateApiInstance, getApiPriority } from './utils/helpers.js';
 import { FileLoader } from '#utils/file-loader.js';
 import { resolveCoreModuleKey, resolveQualifiedCoreModuleKey } from '#utils/core-fs.js';
-import { HotReloadBase } from '#utils/hot-reload-base.js';
 import { API_REGISTER_BATCH_SIZE, LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
 import { classifyModuleImportError } from '#utils/module-import-error.js';
 
@@ -17,7 +16,6 @@ class HttpApiLoader {
   app = null;
   bot = null;
   _httpDirsCache = null;
-  _hotReload = null;
 
   async load() {
     const startTime = Date.now();
@@ -238,43 +236,6 @@ class HttpApiLoader {
 
   getApi(key) {
     return this.apis.get(key) ?? null;
-  }
-
-  async watch(enable = true) {
-    if (!enable) {
-      await this._hotReload?.stop();
-      this._hotReload = null;
-      return;
-    }
-
-    if (this._hotReload?.watcher) return;
-
-    try {
-      const hotReload = new HotReloadBase({ loggerName: 'HttpApiLoader' });
-      const apiDirs = await paths.getCoreSubDirs('http');
-      if (apiDirs.length === 0) return;
-
-      const started = await hotReload.watch(true, {
-        dirs: apiDirs,
-        onAdd: async (filePath) => {
-          const key = await this.getApiKey(filePath);
-          await this.loadApi(filePath);
-          this.sortByPriority();
-          await this._initApi(this.apis.get(key));
-        },
-        onChange: async (filePath) => {
-          await this.changeApi(await this.getApiKey(filePath), filePath);
-        },
-        onUnlink: async (filePath) => {
-          await this.unloadApi(await this.getApiKey(filePath));
-          this.sortByPriority();
-        }
-      });
-
-      if (started) this._hotReload = hotReload;
-    } catch (error) {
-      RuntimeUtil.makeLog('error', '启动 API 文件监视失败', 'HttpApiLoader', error);
-    }
   }
 }
 

@@ -6,7 +6,6 @@ import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { getWorkflowRequestContext } from './workflow-request-context.js';
 import { MCPServer } from '#utils/mcp-server.js';
 import { FileLoader } from '#utils/file-loader.js';
-import { HotReloadBase } from '#utils/hot-reload-base.js';
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js';
 import MonitorService from '#infrastructure/ai-workflow/monitor-service.js';
 import { setAiWorkflowHost } from './workflow-host.js';
@@ -20,7 +19,6 @@ class AiWorkflowLoader {
   workflows = new Map();
   mcpPluginServers = new Map();
   loaded = false;
-  _hotReload = null;
   loadStats = {
     workflows: [],
     totalLoadTime: 0,
@@ -386,10 +384,7 @@ class AiWorkflowLoader {
    */
   async cleanupAll() {
     RuntimeUtil.makeLog('info', '清理资源...', 'AiWorkflowLoader');
-    
-    await this._hotReload?.stop();
-    this._hotReload = null;
-    
+
     for (const stream of this.workflows.values()) {
       if (typeof stream.cleanup === 'function') {
         await stream.cleanup().catch(() => {});
@@ -438,52 +433,6 @@ class AiWorkflowLoader {
     await this.loadWorkflowClass(filePath)
     this.applyEmbeddingConfig(getAiWorkflowConfigOptional().embedding || {})
     await this.initMCP()
-  }
-
-  /**
-   * 启用文件监视（热加载）
-   * @param {boolean} enable - 是否启用
-   */
-  async watch(enable = true) {
-    if (!enable) {
-      await this._hotReload?.stop();
-      this._hotReload = null;
-      return;
-    }
-
-    if (this._hotReload?.watcher) return;
-
-    try {
-      const hotReload = new HotReloadBase({ loggerName: 'AiWorkflowLoader' });
-      
-      const streamDirs = await paths.getCoreSubDirs('workflow');
-      if (streamDirs.length === 0) return;
-
-      const started = await hotReload.watch(true, {
-        dirs: streamDirs,
-        onAdd: async (filePath) => {
-          const streamName = hotReload.getFileKey(filePath);
-          RuntimeUtil.makeLog('debug', `检测到新工作流: ${streamName}`, 'AiWorkflowLoader');
-          await this._reloadWorkflow(filePath);
-        },
-        onChange: async (filePath) => {
-          const streamName = this._workflowNameForFile(filePath);
-          RuntimeUtil.makeLog('debug', `检测到工作流变更: ${streamName}`, 'AiWorkflowLoader');
-          await this._cleanupWorkflow(streamName);
-          await this._reloadWorkflow(filePath);
-        },
-        onUnlink: async (filePath) => {
-          const streamName = this._workflowNameForFile(filePath);
-          RuntimeUtil.makeLog('debug', `检测到工作流删除: ${streamName}`, 'AiWorkflowLoader');
-          await this._cleanupWorkflow(streamName);
-          await this.initMCP();
-        }
-      });
-
-      if (started) this._hotReload = hotReload;
-    } catch (error) {
-      RuntimeUtil.makeLog('error', '启动工作流文件监视失败', 'AiWorkflowLoader', error);
-    }
   }
 
   _registerTool(mcpServer, stream, toolName, tool) {
