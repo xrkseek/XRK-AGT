@@ -11,7 +11,7 @@ import {
 } from './ssrf-ip-policy.js';
 
 export class SsrFBlockedError extends Error {
-  constructor(message) {
+  constructor(message: any) {
     super(message);
     this.name = 'SsrFBlockedError';
   }
@@ -21,11 +21,11 @@ const BLOCKED_HOSTNAMES = new Set(['localhost', 'localhost.localdomain', 'metada
 const BLOCKED_SUFFIXES = ['.localhost', '.local', '.internal'];
 const DISPATCHER_CLOSE_TIMEOUT_MS = 100;
 
-export function isPrivateNetworkAllowedByPolicy(policy) {
+export function isPrivateNetworkAllowedByPolicy(policy: any) {
   return policy?.dangerouslyAllowPrivateNetwork === true || policy?.allowPrivateNetwork === true;
 }
 
-export function normalizeHostnameAllowlist(values) {
+export function normalizeHostnameAllowlist(values: any) {
   if (!Array.isArray(values)) return [];
   const out = new Set();
   for (const raw of values) {
@@ -35,7 +35,7 @@ export function normalizeHostnameAllowlist(values) {
   return [...out];
 }
 
-export function isHostnameAllowedByPattern(hostname, pattern) {
+export function isHostnameAllowedByPattern(hostname: any, pattern: any) {
   if (pattern.startsWith('*.')) {
     const suffix = pattern.slice(2);
     if (!suffix || hostname === suffix) return false;
@@ -44,13 +44,13 @@ export function isHostnameAllowedByPattern(hostname, pattern) {
   return hostname === pattern;
 }
 
-export function matchesHostnameAllowlist(hostname, allowlist) {
+export function matchesHostnameAllowlist(hostname: any, allowlist: any) {
   if (!allowlist?.length) return true;
-  return allowlist.some((pattern) => isHostnameAllowedByPattern(hostname, pattern));
+  return allowlist.some((pattern: any) => isHostnameAllowedByPattern(hostname, pattern));
 }
 
-export function mergeSsrFPolicies(...policies) {
-  const merged = {};
+export function mergeSsrFPolicies(...policies: any[]) {
+  const merged: Record<string, any> = {};
   for (const policy of policies) {
     if (!policy) continue;
     if (policy.allowPrivateNetwork) merged.allowPrivateNetwork = true;
@@ -70,7 +70,7 @@ export function mergeSsrFPolicies(...policies) {
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
-function normalizeOrigin(value) {
+function normalizeOrigin(value: any) {
   const trimmed = String(value || '').trim();
   if (!trimmed) return undefined;
   try {
@@ -83,7 +83,7 @@ function normalizeOrigin(value) {
   }
 }
 
-export function resolveSsrFPolicyForUrl(url, policy) {
+export function resolveSsrFPolicyForUrl(url: any, policy: any) {
   if (!policy?.allowedOrigins?.length) return policy;
   const requestOrigin = normalizeOrigin(url.toString());
   const allowed = (policy.allowedOrigins || []).map(normalizeOrigin).filter(Boolean);
@@ -94,25 +94,25 @@ export function resolveSsrFPolicyForUrl(url, policy) {
   };
 }
 
-function isBlockedHostnameNormalized(normalized) {
+function isBlockedHostnameNormalized(normalized: any) {
   if (BLOCKED_HOSTNAMES.has(normalized)) return true;
-  return BLOCKED_SUFFIXES.some((s) => normalized.endsWith(s));
+  return BLOCKED_SUFFIXES.some((s: any) => normalized.endsWith(s));
 }
 
-export function isBlockedHostnameOrIp(hostnameOrIp, policy) {
+export function isBlockedHostnameOrIp(hostnameOrIp: any, policy: any) {
   const normalized = normalizeHostname(hostnameOrIp);
   if (!normalized) return false;
   if (isBlockedHostnameNormalized(normalized)) return true;
   return isPrivateIpAddress(normalized, policy);
 }
 
-function shouldSkipPrivateNetworkChecks(hostname, policy) {
+function shouldSkipPrivateNetworkChecks(hostname: any, policy: any) {
   if (isPrivateNetworkAllowedByPolicy(policy)) return true;
   const allowed = new Set((policy?.allowedHostnames ?? []).map(normalizeHostname));
   return allowed.has(hostname);
 }
 
-function resolveHostnamePolicyChecks(hostname, policy) {
+function resolveHostnamePolicyChecks(hostname: any, policy: any) {
   const normalized = normalizeHostname(hostname);
   if (!normalized) throw new Error('Invalid hostname');
 
@@ -128,7 +128,7 @@ function resolveHostnamePolicyChecks(hostname, policy) {
   return { normalized, skipPrivateNetworkChecks };
 }
 
-function assertAllowedResolvedAddresses(results, policy) {
+function assertAllowedResolvedAddresses(results: any, policy: any) {
   for (const entry of results) {
     if (isBlockedHostnameOrIp(entry.address, policy)) {
       throw new SsrFBlockedError('Blocked: resolves to private/internal/special-use IP address');
@@ -136,7 +136,7 @@ function assertAllowedResolvedAddresses(results, policy) {
   }
 }
 
-function assertAllowedTrustedHostnameResolvedAddresses(results) {
+function assertAllowedTrustedHostnameResolvedAddresses(results: any) {
   for (const entry of results) {
     if (isLinkLocalIpAddress(entry.address) || isCloudMetadataIpAddress(entry.address)) {
       throw new SsrFBlockedError('Blocked: resolves to private/internal/special-use IP address');
@@ -144,7 +144,7 @@ function assertAllowedTrustedHostnameResolvedAddresses(results) {
   }
 }
 
-function dedupeAndPreferIpv4(results) {
+function dedupeAndPreferIpv4(results: any) {
   const seen = new Set();
   const ipv4 = [];
   const other = [];
@@ -157,15 +157,15 @@ function dedupeAndPreferIpv4(results) {
   return [...ipv4, ...other];
 }
 
-export function createPinnedLookup({ hostname, addresses, fallback }) {
+export function createPinnedLookup({ hostname, addresses, fallback }: any) {
   const normalizedHost = normalizeHostname(hostname);
-  const records = addresses.map((address) => ({ address, family: address.includes(':') ? 6 : 4 }));
-  const ipv4Records = records.filter((e) => e.family === 4);
+  const records = addresses.map((address: any) => ({ address, family: address.includes(':') ? 6 : 4 }));
+  const ipv4Records = records.filter((e: any) => e.family === 4);
   const automaticRecords = ipv4Records.length > 0 ? ipv4Records : records;
   let index = 0;
   const fb = fallback ?? dns.lookup;
 
-  return (host, options, callback) => {
+  return (host: any, options: any, callback: any) => {
     const cb = typeof options === 'function' ? options : callback;
     if (!cb) return;
     const normalized = normalizeHostname(host);
@@ -178,7 +178,7 @@ export function createPinnedLookup({ hostname, addresses, fallback }) {
       typeof options === 'number' ? options : typeof opts.family === 'number' ? opts.family : 0;
     const candidates =
       requestedFamily === 4 || requestedFamily === 6
-        ? records.filter((e) => e.family === requestedFamily)
+        ? records.filter((e: any) => e.family === requestedFamily)
         : automaticRecords;
     const usable = candidates.length > 0 ? candidates : automaticRecords;
     if (opts.all) {
@@ -191,7 +191,7 @@ export function createPinnedLookup({ hostname, addresses, fallback }) {
   };
 }
 
-export async function resolvePinnedHostnameWithPolicy(hostname, params = {}) {
+export async function resolvePinnedHostnameWithPolicy(hostname: any, params: any = {}) {
   const { normalized, skipPrivateNetworkChecks } = resolveHostnamePolicyChecks(hostname, params.policy);
   const lookupFn = params.lookupFn ?? dnsLookup;
   const results = await lookupFn(normalized, { all: true });
@@ -212,34 +212,34 @@ export async function resolvePinnedHostnameWithPolicy(hostname, params = {}) {
   };
 }
 
-export function assertHostnameAllowedWithPolicy(hostname, policy) {
+export function assertHostnameAllowedWithPolicy(hostname: any, policy: any) {
   return resolveHostnamePolicyChecks(hostname, policy).normalized;
 }
 
-export function createPinnedDispatcher(pinned, policy, timeoutMs) {
+export function createPinnedDispatcher(pinned: any, policy: any, timeoutMs: any) {
   const connect = { lookup: pinned.lookup, ...(policy?.connect || {}) };
   const ms = Math.max(1000, timeoutMs ?? 30_000);
   if (!policy || policy.mode === 'direct' || !policy.mode) {
-    return new Agent({ connect, bodyTimeout: ms, headersTimeout: ms });
+    return new Agent({ connect, bodyTimeout: ms, headersTimeout: ms } as any);
   }
   if (policy.mode === 'env-proxy') {
     const proxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
     if (proxy) {
-      return new ProxyAgent({ uri: proxy, requestTls: { connect }, connectTimeout: ms });
+      return new ProxyAgent({ uri: proxy, requestTls: { connect }, connectTimeout: ms } as any);
     }
-    return new Agent({ connect, bodyTimeout: ms, headersTimeout: ms });
+    return new Agent({ connect, bodyTimeout: ms, headersTimeout: ms } as any);
   }
   if (policy.mode === 'explicit-proxy' && policy.proxyUrl) {
     return new ProxyAgent({
       uri: policy.proxyUrl,
       requestTls: { connect },
       connectTimeout: ms
-    });
+    } as any);
   }
-  return new Agent({ connect, bodyTimeout: ms, headersTimeout: ms });
+  return new Agent({ connect, bodyTimeout: ms, headersTimeout: ms } as any);
 }
 
-export async function closeDispatcher(dispatcher) {
+export async function closeDispatcher(dispatcher: any) {
   if (!dispatcher) return;
   const candidate = dispatcher;
   const close = candidate.close?.bind(candidate);
@@ -251,7 +251,7 @@ export async function closeDispatcher(dispatcher) {
   try {
     await Promise.race([
       Promise.resolve(close()),
-      new Promise((resolve) => {
+      new Promise((resolve: any) => {
         timeout = setTimeout(() => {
           candidate.destroy?.();
           resolve();
@@ -267,7 +267,7 @@ export async function closeDispatcher(dispatcher) {
 }
 
 /** 对 URL 做完整 SSRF 校验（含 DNS） */
-export async function assertUrlSafeForFetch(urlString, policy = {}, lookupFn) {
+export async function assertUrlSafeForFetch(urlString: any, policy: any = {}, lookupFn?: any) {
   let u;
   try {
     u = new URL(urlString);

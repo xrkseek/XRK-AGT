@@ -16,22 +16,24 @@ const pageStates = new WeakMap();
 const observedPages = new WeakSet();
 
 export class BrowserObservedDialogBlockedError extends Error {
+  browserState: any
+
   /** @param {object} browserState */
-  constructor(browserState) {
+  constructor(browserState: any) {
     super('Browser action blocked by a modal dialog.');
     this.name = 'BrowserObservedDialogBlockedError';
     this.browserState = browserState;
   }
 }
 
-export function isBrowserObservedDialogBlockedError(err) {
+export function isBrowserObservedDialogBlockedError(err: any) {
   return err instanceof BrowserObservedDialogBlockedError;
 }
 
-function serializeObservedBrowserState(state) {
+function serializeObservedBrowserState(state: any) {
   return {
     dialogs: {
-      pending: state.pendingDialogs.map((d) => ({
+      pending: state.pendingDialogs.map((d: any) => ({
         id: d.id,
         type: d.type,
         message: d.message,
@@ -43,12 +45,12 @@ function serializeObservedBrowserState(state) {
   };
 }
 
-function appendRecentDialog(state, record) {
+function appendRecentDialog(state: any, record: any) {
   state.recentDialogs.push(record);
   while (state.recentDialogs.length > MAX_RECENT_DIALOGS) state.recentDialogs.shift();
 }
 
-function abortActionsBlockedByDialog(state) {
+function abortActionsBlockedByDialog(state: any) {
   if (!state.dialogAbortControllers.size) return;
   const err = new BrowserObservedDialogBlockedError(serializeObservedBrowserState(state));
   for (const controller of state.dialogAbortControllers) {
@@ -57,13 +59,13 @@ function abortActionsBlockedByDialog(state) {
   state.dialogAbortControllers.clear();
 }
 
-async function settleObservedDialog({ state, pending, accept, promptText, closedBy }) {
-  state.pendingDialogs = state.pendingDialogs.filter((d) => d.id !== pending.id);
+async function settleObservedDialog({ state, pending, accept, promptText, closedBy }: any) {
+  state.pendingDialogs = state.pendingDialogs.filter((d: any) => d.id !== pending.id);
   let finalClosedBy = closedBy;
   try {
     if (accept) await pending.dialog.accept(promptText);
     else await pending.dialog.dismiss();
-  } catch (err) {
+  } catch (err: any) {
     const msg = err?.message || String(err);
     if (!msg.toLowerCase().includes('no dialog is showing')) {
       if (closedBy === 'agent') state.pendingDialogs.push(pending);
@@ -84,7 +86,7 @@ async function settleObservedDialog({ state, pending, accept, promptText, closed
   return record;
 }
 
-function observeDialog(state, dialog) {
+function observeDialog(state: any, dialog: any) {
   state.nextObservedDialogId += 1;
   const type = dialog.type();
   const pending = {
@@ -118,21 +120,21 @@ function observeDialog(state, dialog) {
 }
 
 /** @param {import('playwright').Page} page */
-export function ensurePageState(page) {
+export function ensurePageState(page: any) {
   const existing = pageStates.get(page);
   if (existing) return existing;
 
-  const state = {
-    console: [],
-    errors: [],
-    requests: [],
+  const state: any = {
+    console: [] as any[],
+    errors: [] as any[],
+    requests: [] as any[],
     requestIds: new WeakMap(),
     nextRequestId: 0,
     nextObservedDialogId: 0,
-    pendingDialogs: [],
-    recentDialogs: [],
-    armedDialogResponse: undefined,
-    dialogAbortControllers: new Set(),
+    pendingDialogs: [] as any[],
+    recentDialogs: [] as any[],
+    armedDialogResponse: undefined as any,
+    dialogAbortControllers: new Set<any>(),
     roleRefs: undefined,
     roleRefsMode: undefined,
     roleRefsFrameSelector: undefined
@@ -141,7 +143,7 @@ export function ensurePageState(page) {
 
   if (!observedPages.has(page)) {
     observedPages.add(page);
-    page.on('console', (msg) => {
+    page.on('console', (msg: any) => {
       state.console.push({
         type: msg.type(),
         text: msg.text(),
@@ -150,7 +152,7 @@ export function ensurePageState(page) {
       });
       if (state.console.length > MAX_CONSOLE) state.console.shift();
     });
-    page.on('pageerror', (err) => {
+    page.on('pageerror', (err: any) => {
       state.errors.push({
         message: err.message || String(err),
         name: err.name,
@@ -159,7 +161,7 @@ export function ensurePageState(page) {
       });
       if (state.errors.length > MAX_ERRORS) state.errors.shift();
     });
-    page.on('request', (req) => {
+    page.on('request', (req: any) => {
       state.nextRequestId += 1;
       const id = `r${state.nextRequestId}`;
       state.requestIds.set(req, id);
@@ -172,25 +174,25 @@ export function ensurePageState(page) {
       });
       if (state.requests.length > MAX_NETWORK) state.requests.shift();
     });
-    page.on('response', (resp) => {
+    page.on('response', (resp: any) => {
       const id = state.requestIds.get(resp.request());
       if (!id) return;
-      const rec = state.requests.find((r) => r.id === id);
+      const rec = state.requests.find((r: any) => r.id === id);
       if (rec) {
         rec.status = resp.status();
         rec.ok = resp.ok();
       }
     });
-    page.on('requestfailed', (req) => {
+    page.on('requestfailed', (req: any) => {
       const id = state.requestIds.get(req);
       if (!id) return;
-      const rec = state.requests.find((r) => r.id === id);
+      const rec = state.requests.find((r: any) => r.id === id);
       if (rec) {
         rec.failureText = req.failure()?.errorText;
         rec.ok = false;
       }
     });
-    page.on('dialog', (dialog) => observeDialog(state, dialog));
+    page.on('dialog', (dialog: any) => observeDialog(state, dialog));
     page.on('close', () => {
       if (state.armedDialogResponse?.timer) clearTimeout(state.armedDialogResponse.timer);
       state.armedDialogResponse = undefined;
@@ -206,22 +208,22 @@ export function ensurePageState(page) {
   return state;
 }
 
-export function getPageState(page) {
+export function getPageState(page: any) {
   return pageStates.get(page) ?? null;
 }
 
-export function storeRoleRefsOnPage(page, { refs, mode = 'role', frameSelector }) {
+export function storeRoleRefsOnPage(page: any, { refs, mode = 'role', frameSelector }: any) {
   const state = ensurePageState(page);
   state.roleRefs = refs;
   state.roleRefsMode = mode;
   state.roleRefsFrameSelector = frameSelector;
 }
 
-export function getObservedBrowserStateForPage(page) {
+export function getObservedBrowserStateForPage(page: any) {
   return serializeObservedBrowserState(ensurePageState(page));
 }
 
-export function createObservedDialogAbortSignalForPage(page, parentSignal) {
+export function createObservedDialogAbortSignalForPage(page: any, parentSignal: any) {
   const state = ensurePageState(page);
   const controller = new AbortController();
   const abortForDialog = () => {
@@ -249,23 +251,23 @@ export function createObservedDialogAbortSignalForPage(page, parentSignal) {
   };
 }
 
-export function armObservedDialogResponseOnPage(page, { accept, promptText, timeoutMs }) {
+export function armObservedDialogResponseOnPage(page: any, { accept, promptText, timeoutMs }: any) {
   const state = ensurePageState(page);
   if (state.armedDialogResponse?.timer) clearTimeout(state.armedDialogResponse.timer);
   const ms = Math.max(1, Math.floor(Number(timeoutMs) || OBSERVED_DIALOG_TIMEOUT_MS));
   const expiresAt = Date.now() + ms;
-  const response = { accept, promptText, expiresAt };
+  const response: any = { accept, promptText, expiresAt };
   response.timer = setTimeout(() => {
     if (state.armedDialogResponse === response) state.armedDialogResponse = undefined;
   }, ms);
   state.armedDialogResponse = response;
 }
 
-export async function respondToObservedDialogOnPage(page, { dialogId, accept, promptText }) {
+export async function respondToObservedDialogOnPage(page: any, { dialogId, accept, promptText }: any) {
   const state = ensurePageState(page);
   let pending;
   if (dialogId) {
-    pending = state.pendingDialogs.find((d) => d.id === dialogId);
+    pending = state.pendingDialogs.find((d: any) => d.id === dialogId);
     if (!pending) throw new Error(`Dialog "${dialogId}" is not pending.`);
   } else if (state.pendingDialogs.length === 1) {
     pending = state.pendingDialogs[0];

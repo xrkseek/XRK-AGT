@@ -38,11 +38,11 @@ const SEARCH_PROVIDER_IDS = [
   'ollama'
 ];
 
-function trimString(value) {
+function trimString(value: any) {
   return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
 
-function pickString(...candidates) {
+function pickString(...candidates: any) {
   for (const c of candidates) {
     const s = trimString(c);
     if (s) return s;
@@ -50,14 +50,14 @@ function pickString(...candidates) {
   return '';
 }
 
-function pickBool(fallback, ...candidates) {
+function pickBool(fallback: any, ...candidates: any) {
   for (const c of candidates) {
     if (typeof c === 'boolean') return c;
   }
   return fallback;
 }
 
-function pickNumber(fallback, { min, max } = {}, ...candidates) {
+function pickNumber(fallback: any, { min, max }: any = {}, ...candidates: any[]) {
   for (const c of candidates) {
     if (typeof c === 'number' && Number.isFinite(c)) {
       let v = Math.floor(c);
@@ -78,25 +78,25 @@ function pickNumber(fallback, { min, max } = {}, ...candidates) {
   return fallback;
 }
 
-function pickStringArray(fallback, ...candidates) {
+function pickStringArray(fallback: any, ...candidates: any) {
   for (const c of candidates) {
     if (Array.isArray(c) && c.length) {
-      const out = c.map((s) => String(s ?? '').trim()).filter(Boolean);
+      const out = c.map((s: any) => String(s ?? '').trim()).filter(Boolean);
       if (out.length) return out;
     }
   }
   return fallback;
 }
 
-function mergeSection(sectionSlice, overrideSlice) {
+function mergeSection(sectionSlice: any, overrideSlice: any) {
   return {
     ...(sectionSlice && typeof sectionSlice === 'object' ? sectionSlice : {}),
     ...(overrideSlice && typeof overrideSlice === 'object' ? overrideSlice : {})
   };
 }
 
-function mergeAllProviderSections(section, overrides) {
-  const out = {};
+function mergeAllProviderSections(section: any, overrides: any) {
+  const out: Record<string, any> = {};
   for (const id of SEARCH_PROVIDER_IDS) {
     out[id] = mergeSection(section?.[id], overrides?.[id]);
   }
@@ -104,7 +104,7 @@ function mergeAllProviderSections(section, overrides) {
 }
 
 /** YAML 段名（camelCase）与 provider id（可含连字符）对齐 */
-export function getWebSearchProviderScope(runtime, providerId) {
+export function getWebSearchProviderScope(runtime: any, providerId: any) {
   const id = String(providerId || '').toLowerCase();
   if (!runtime || typeof runtime !== 'object') return undefined;
   if (id === 'parallel-free') {
@@ -113,7 +113,7 @@ export function getWebSearchProviderScope(runtime, providerId) {
   return runtime[id];
 }
 
-function attachProviderScopeAliases(config) {
+function attachProviderScopeAliases(config: any) {
   if (config.parallelFree && !config['parallel-free']) {
     config['parallel-free'] = config.parallelFree;
   }
@@ -133,7 +133,7 @@ export function getPlaywrightRendererConfig() {
 }
 
 /** @param {object} [overrides] */
-export function resolveWebFetchRuntime(overrides = {}) {
+export function resolveWebFetchRuntime(overrides: any = {}) {
   const section = getCrawlConfigSection().webFetch ?? {};
 
   const maxCharsCap = pickNumber(
@@ -216,7 +216,7 @@ export function resolveWebFetchRuntime(overrides = {}) {
 }
 
 /** @param {object} [overrides] */
-export function resolveWebSearchConfig(overrides = {}) {
+export function resolveWebSearchConfig(overrides: any = {}) {
   const section = getCrawlConfigSection().webSearch ?? {};
   const providers = mergeAllProviderSections(section, overrides);
 
@@ -244,7 +244,7 @@ export function resolveWebSearchConfig(overrides = {}) {
 }
 
 /** @param {object} [overrides] */
-export function buildBrowserRuntime(overrides = {}) {
+export function buildBrowserRuntime(overrides: any = {}) {
   const section = getCrawlConfigSection().browser ?? {};
   const pw = getPlaywrightRendererConfig();
 
@@ -376,7 +376,7 @@ export function buildBrowserRuntime(overrides = {}) {
  * @param {ReturnType<typeof buildBrowserRuntime>|object} [runtime]
  * @param {object} [overrides] 启动项覆盖（viewport / deviceScaleFactor 等）
  */
-export function toPlaywrightAgentLaunchOptions(runtime = {}, overrides = {}) {
+export function toPlaywrightAgentLaunchOptions(runtime: any = {}, overrides: any = {}) {
   const rt = runtime && typeof runtime === 'object' ? runtime : {};
   const o = overrides && typeof overrides === 'object' ? overrides : {};
   const viewport = o.viewport ?? rt.viewport;
@@ -411,6 +411,6 @@ export function toPlaywrightAgentLaunchOptions(runtime = {}, overrides = {}) {
  * @param {object} [runtimeOverrides] 传给 buildBrowserRuntime（含 viewport/deviceScaleFactor）
  * @param {object} [launchOverrides] 仅启动项覆盖
  */
-export function launchOptionsFromBrowserRuntime(runtimeOverrides = {}, launchOverrides = {}) {
+export function launchOptionsFromBrowserRuntime(runtimeOverrides: any = {}, launchOverrides: any = {}) {
   return toPlaywrightAgentLaunchOptions(buildBrowserRuntime(runtimeOverrides), launchOverrides);
 }

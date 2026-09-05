@@ -48,15 +48,15 @@ const LABEL_COLON_NUM_CLASS = 'pss-label-num'
  * @property {string} [colonMarginRight='-0.14em'] 半角冒号与数字之间的负间距
  */
 
-function resolveDir(dir) {
+function resolveDir(dir: any) {
   return path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir)
 }
 
-function fontFormat(fileName) {
+function fontFormat(fileName: any) {
   return fileName.endsWith('.woff2') ? 'woff2' : 'truetype'
 }
 
-function fontContentType(fileName) {
+function fontContentType(fileName: any) {
   return fileName.endsWith('.woff2') ? 'font/woff2' : 'font/ttf'
 }
 
@@ -64,7 +64,7 @@ function fontContentType(fileName) {
  * 创建「本地字体 + 页面样式 + 区域截图」助手（HTTPS 页通过 page.route 同源回源 fontDir）
  * @param {LocalFontScreenshotHelperOptions} options
  */
-export function createLocalFontScreenshotHelper(options) {
+export function createLocalFontScreenshotHelper(options: any) {
   const {
     fontUrlBase,
     fontDir,
@@ -86,16 +86,16 @@ export function createLocalFontScreenshotHelper(options) {
   const assetDirAbs = assetDir ? resolveDir(assetDir) : null
   const baseUrl = fontUrlBase.endsWith('/') ? fontUrlBase : `${fontUrlBase}/`
   const routedPages = new WeakSet()
-  const colonTweaks = domTweaks.filter((t) => t.kind === DOM_TWEAK_LABEL_COLON_HALF)
+  const colonTweaks = domTweaks.filter((t: any) => t.kind === DOM_TWEAK_LABEL_COLON_HALF)
 
-  const log = (level, msg) => RuntimeUtil.makeLog(level, msg, logContext)
+  const log = (level: any, msg: any) => RuntimeUtil.makeLog(level, msg, logContext)
 
-  const loadSpecs = fonts.map((f) => ({
+  const loadSpecs = fonts.map((f: any) => ({
     family: f.family,
     loadWeight: f.loadWeight || String(f.weight || '400').split(/\s+/)[0] || '400',
   }))
 
-  const fontPublicUrl = (fileName) => `${baseUrl}${encodeURIComponent(fileName)}`
+  const fontPublicUrl = (fileName: any) => `${baseUrl}${encodeURIComponent(fileName)}`
 
   const css = (() => {
     const faces = []
@@ -123,7 +123,7 @@ export function createLocalFontScreenshotHelper(options) {
       ? `.content,.content *{font-family:${stack}!important;-webkit-font-smoothing:antialiased!important;-moz-osx-font-smoothing:grayscale!important;text-rendering:geometricPrecision!important;font-synthesis:none!important;}`
       : ''
 
-    const colonHalfRules = colonTweaks.map((t) => {
+    const colonHalfRules = colonTweaks.map((t: any) => {
       const gap = t.colonMarginRight ?? '-0.14em'
       return (
         `.${LABEL_COLON_HALF_CLASS}{display:inline!important;margin:0 ${gap} 0 0!important;` +
@@ -135,7 +135,7 @@ export function createLocalFontScreenshotHelper(options) {
     return [hideRule, ...faces, baseRule, ...colonHalfRules, extraCss].filter(Boolean).join('')
   })()
 
-  async function fulfillLocalFile(route, filePath, contentType) {
+  async function fulfillLocalFile(route: any, filePath: any, contentType: any) {
     if (!fs.existsSync(filePath)) {
       await route.abort()
       return false
@@ -148,13 +148,13 @@ export function createLocalFontScreenshotHelper(options) {
     return true
   }
 
-  async function ensureRoutes(page) {
+  async function ensureRoutes(page: any) {
     if (routedPages.has(page)) return
     routedPages.add(page)
 
     for (const f of fonts) {
       const url = fontPublicUrl(f.file)
-      await page.route(url, async (route) => {
+      await page.route(url, async (route: any) => {
         const filePath = path.join(fontDirAbs, f.file)
         if (!(await fulfillLocalFile(route, filePath, fontContentType(f.file)))) {
           log('warn', `字体文件不存在: ${filePath}`)
@@ -164,7 +164,7 @@ export function createLocalFontScreenshotHelper(options) {
 
     if (!assetDirAbs) return
     for (const spec of assetRoutes) {
-      await page.route(spec.match, async (route) => {
+      await page.route(spec.match, async (route: any) => {
         const filePath = path.join(assetDirAbs, spec.file)
         if (!(await fulfillLocalFile(route, filePath, spec.contentType || 'application/octet-stream'))) {
           log('warn', `资源文件不存在: ${filePath}`)
@@ -173,18 +173,24 @@ export function createLocalFontScreenshotHelper(options) {
     }
   }
 
-  async function waitFonts(page) {
+  async function waitFonts(page: any) {
     const fontDeadline = AbortSignal.timeout(fontWaitMs)
     await Promise.race([
       page
-        .evaluate(async (specs) => {
-          await Promise.all(
-            specs.map(({ family, loadWeight }) => document.fonts.load(`${loadWeight} 16px "${family}"`))
-          )
-          await document.fonts.ready
-        }, loadSpecs)
+        .evaluate(
+          (async (specs: any) => {
+            const doc = (globalThis as any).document
+            await Promise.all(
+              specs.map(({ family, loadWeight }: any) =>
+                doc.fonts.load(`${loadWeight} 16px "${family}"`)
+              )
+            )
+            await doc.fonts.ready
+          }) as any,
+          loadSpecs
+        )
         .catch(() => {}),
-      new Promise((resolve) => {
+      new Promise((resolve: any) => {
         if (fontDeadline.aborted) {
           resolve()
           return
@@ -193,27 +199,32 @@ export function createLocalFontScreenshotHelper(options) {
       }),
     ])
 
-    const families = await page.evaluate((specs) => {
-      const out = /** @type {Record<string, boolean>} */ ({})
-      for (const { family, loadWeight } of specs) {
-        const spec = `${loadWeight} 16px "${family}"`
-        out[family] = document.fonts.check(spec)
-      }
-      return out
-    }, loadSpecs)
+    const families = await page.evaluate(
+      ((specs: any) => {
+        const doc = (globalThis as any).document
+        const out: Record<string, boolean> = {}
+        for (const { family, loadWeight } of specs) {
+          const spec = `${loadWeight} 16px "${family}"`
+          out[family] = doc.fonts.check(spec)
+        }
+        return out
+      }) as any,
+      loadSpecs
+    )
 
-    const missing = loadSpecs.filter((s) => !families[s.family]).map((s) => s.family)
+    const missing = loadSpecs.filter((s: any) => !families[s.family]).map((s: any) => s.family)
     if (missing.length) log('warn', `字体未完全加载: ${missing.join(', ')}`)
   }
 
-  async function applyColonTweaks(page) {
+  async function applyColonTweaks(page: any) {
     if (!colonTweaks.length) return
     await page.evaluate(
-      ({ tweaks, colonClass, numClass }) => {
+      (({ tweaks, colonClass, numClass }: any) => {
+        const doc = (globalThis as any).document
         for (const { selector, label = '价格' } of tweaks) {
           const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
           const re = new RegExp(`^\\s*${escaped}\\s*([：:])\\s*(\\d+)\\s*$`)
-          document.querySelectorAll(selector).forEach((el) => {
+          doc.querySelectorAll(selector).forEach((el: any) => {
             const text = (el.textContent || '').replace(/\s+/g, ' ')
             const m = text.match(re)
             if (!m) return
@@ -221,9 +232,9 @@ export function createLocalFontScreenshotHelper(options) {
               `${label}<span class="${colonClass}">:</span> <span class="${numClass}">${m[2]}</span>`
           })
         }
-      },
+      }) as any,
       {
-        tweaks: colonTweaks.map((t) => ({ selector: t.selector, label: t.label })),
+        tweaks: colonTweaks.map((t: any) => ({ selector: t.selector, label: t.label })),
         colonClass: LABEL_COLON_HALF_CLASS,
         numClass: LABEL_COLON_NUM_CLASS,
       }
@@ -231,23 +242,25 @@ export function createLocalFontScreenshotHelper(options) {
   }
 
   /** 在 goto 前注册 route（与 apply 内 ensureRoutes 幂等） */
-  async function prepare(page) {
+  async function prepare(page: any) {
     await ensureRoutes(page)
   }
 
   /** @param {import('playwright').Page} page */
-  async function apply(page) {
+  async function apply(page: any) {
     await ensureRoutes(page)
     if (css) await page.addStyleTag({ content: css })
     await waitFonts(page)
-    await page.evaluate(() => {
-      document.getAnimations?.().forEach((a) => a.cancel?.())
-    }).catch(() => {})
+    await page
+      .evaluate((() => {
+        ;(globalThis as any).document.getAnimations?.().forEach((a: any) => a.cancel?.())
+      }) as any)
+      .catch(() => {})
     await applyColonTweaks(page)
   }
 
   /** @param {import('playwright').Page} page @param {string} [selector='.content'] */
-  async function capture(page, selector = '.content') {
+  async function capture(page: any, selector: any = '.content') {
     const shotOpts = { type: 'png', animations: 'disabled', caret: 'hide', scale: 'device' }
     const locator = page.locator(selector).first()
     return locator.screenshot(shotOpts)

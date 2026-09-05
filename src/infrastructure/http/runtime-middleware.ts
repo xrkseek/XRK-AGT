@@ -2,9 +2,11 @@
  * AgentRuntime 全局中间件装配（CORS / 日志 / 限流 / body / 压缩 / helmet）
  * 由 AgentRuntime 薄包装委托。
  */
+// @ts-expect-error compression 无类型声明
 import compression from 'compression';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+// @ts-expect-error express 无 @types/express（与仓库约定一致）
 import express from 'express';
 import chalk from 'chalk';
 import RuntimeUtil from '#utils/runtime-util.js';
@@ -24,15 +26,15 @@ import {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export async function initializeMiddlewareAndRoutes(runtime) {
+export async function initializeMiddlewareAndRoutes(runtime: any) {
   let frontendMountPrefixes = [];
   try {
     const apps = await FrontendLauncher.discover();
     if (apps && apps.size > 0) {
       frontendMountPrefixes = Array.from(apps.values())
-        .map((app) => app && app.config)
+        .map((app: any) => app && app.config)
         .filter(Boolean)
-        .map((cfgApp) => {
+        .map((cfgApp: any) => {
           const mountPath = (cfgApp.mountPath && String(cfgApp.mountPath).trim()) || `/${cfgApp.id}`;
           return mountPath;
         });
@@ -41,7 +43,7 @@ export async function initializeMiddlewareAndRoutes(runtime) {
     frontendMountPrefixes = [];
   }
 
-  runtime.express.use((req, res, next) => {
+  runtime.express.use((req: any, res: any, next: any) => {
     req.requestId = resolveRequestId(req);
     const traceparent = req.headers?.traceparent;
     enterRequestContext({
@@ -57,7 +59,7 @@ export async function initializeMiddlewareAndRoutes(runtime) {
   });
 
   // /xrk、/core：X-Robots-Tag
-  runtime.express.use((req, res, next) => {
+  runtime.express.use((req: any, res: any, next: any) => {
     const p = req.path || '';
     if (p === '/xrk' || p.startsWith('/xrk/') || p === '/core' || p.startsWith('/core/')) {
       if (!res.headersSent) {
@@ -75,7 +77,7 @@ export async function initializeMiddlewareAndRoutes(runtime) {
 
   if (runtimeConfig.server.compression.enabled !== false) {
     runtime.express.use(compression({
-      filter: (req, res) => {
+      filter: (req: any, res: any) => {
         if (req.headers['x-no-compression']) return false;
         return compression.filter(req, res);
       },
@@ -104,14 +106,14 @@ export async function initializeMiddlewareAndRoutes(runtime) {
   setupRateLimiting(runtime);
   setupBodyParsers(runtime);
 
-  runtime.express.use((req, res, next) => {
+  runtime.express.use((req: any, res: any, next: any) => {
     req.multipartUpload = runtime.multipartUpload;
-    req.createMultipartUploader = (options = {}) => runtime._createMultipartUploader(options);
+    req.createMultipartUploader = (options: any = {}) => runtime._createMultipartUploader(options);
     req.serverLimits = runtimeConfig.server?.limits || {};
     next();
   });
 
-  runtime.express.use((req, res, next) => {
+  runtime.express.use((req: any, res: any, next: any) => {
     const baseSkipPrefixes = ['/api/', '/media/', '/uploads/', '/File', '/core/', '/subserver-file'];
     if (!req.path || req.path === '/') return next();
     const redirectSkipPrefixes = baseSkipPrefixes.concat(frontendMountPrefixes || []);
@@ -124,17 +126,17 @@ export async function initializeMiddlewareAndRoutes(runtime) {
     next();
   });
 
-  runtime.express.get('/status', (req, res) => runtimeObs.handleStatus(runtime, req, res));
-  runtime.express.get('/health', (req, res) => runtimeObs.handleLiveness(runtime, req, res));
-  runtime.express.get('/subserver-file', (req, res) => runtime._subserverFileHandler(req, res));
-  runtime.express.get('/metrics', (req, res) => runtimeObs.handleMetrics(runtime, req, res));
+  runtime.express.get('/status', (req: any, res: any) => runtimeObs.handleStatus(runtime, req, res));
+  runtime.express.get('/health', (req: any, res: any) => runtimeObs.handleLiveness(runtime, req, res));
+  runtime.express.get('/subserver-file', (req: any, res: any) => runtime._subserverFileHandler(req, res));
+  runtime.express.get('/metrics', (req: any, res: any) => runtimeObs.handleMetrics(runtime, req, res));
 
   const { setupDataStaticServing, setupStaticServing, handleRobotsTxt, handleFavicon } = await import('#infrastructure/http/runtime-static.js');
-  runtime.express.get('/robots.txt', (req, res) => handleRobotsTxt(runtime, req, res));
-  runtime.express.get('/favicon.ico', (req, res) => handleFavicon(runtime, req, res));
+  runtime.express.get('/robots.txt', (req: any, res: any) => handleRobotsTxt(runtime, req, res));
+  runtime.express.get('/favicon.ico', (req: any, res: any) => handleFavicon(runtime, req, res));
 
-  runtime.express.use('/File', (req, res) => runtime._fileHandler(req, res));
-  runtime.express.use((req, res, next) => runtime._authMiddleware(req, res, next));
+  runtime.express.use('/File', (req: any, res: any) => runtime._fileHandler(req, res));
+  runtime.express.use((req: any, res: any, next: any) => runtime._authMiddleware(req, res, next));
 
   setupDataStaticServing(runtime);
   await setupStaticServing(runtime);
@@ -143,11 +145,11 @@ export async function initializeMiddlewareAndRoutes(runtime) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export function setupCors(runtime) {
+export function setupCors(runtime: any) {
   const corsConfig = runtimeConfig.server.cors;
   if (corsConfig.enabled === false) return;
 
-  runtime.express.use((req, res, next) => {
+  runtime.express.use((req: any, res: any, next: any) => {
     if (runtime._checkHeadersSent(res, next)) return;
 
     const config = corsConfig || {};
@@ -198,10 +200,10 @@ export function setupCors(runtime) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export function setupRequestLogging(runtime) {
+export function setupRequestLogging(runtime: any) {
   if (runtimeConfig.server.logging.requests === false) return;
 
-  runtime.express.use((req, res, next) => {
+  runtime.express.use((req: any, res: any, next: any) => {
     const start = Date.now();
 
     if (!res.headersSent) {
@@ -211,7 +213,7 @@ export function setupRequestLogging(runtime) {
     res.once('finish', () => {
       const duration = Date.now() - start;
       const quietPaths = runtimeConfig.server.logging.quiet || [];
-      if (!quietPaths.some((p) => req.path.startsWith(p))) {
+      if (!quietPaths.some((p: any) => req.path.startsWith(p))) {
         const statusColor = res.statusCode < 400 ? 'green'
           : res.statusCode < 500 ? 'yellow' : 'red';
         const method = chalk.cyan(req.method.padEnd(6));
@@ -225,7 +227,7 @@ export function setupRequestLogging(runtime) {
     });
 
     const originalWriteHead = res.writeHead;
-    res.writeHead = function (...args) {
+    res.writeHead = function (...args: any) {
       const duration = Date.now() - start;
       if (!res.headersSent) {
         res.setHeader('X-Response-Time', `${duration}ms`);
@@ -234,7 +236,7 @@ export function setupRequestLogging(runtime) {
     };
 
     const originalEnd = res.end;
-    res.end = function (chunk, encoding, callback) {
+    res.end = function (chunk: any, encoding: any, callback: any) {
       const duration = Date.now() - start;
       if (!res.headersSent) {
         res.setHeader('X-Response-Time', `${duration}ms`);
@@ -249,17 +251,17 @@ export function setupRequestLogging(runtime) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export function setupRateLimiting(runtime) {
+export function setupRateLimiting(runtime: any) {
   const rateLimitConfig = runtimeConfig.server.rateLimit;
   if (rateLimitConfig.enabled === false) return;
 
-  const createLimiter = (options) => rateLimit({
+  const createLimiter = (options: any) => rateLimit({
     windowMs: options.windowMs || 15 * 60 * 1000,
     max: options.max || 100,
     message: options.message || '请求过于频繁',
     standardHeaders: true,
     legacyHeaders: false,
-    skip: (req) => isPrivateOrLoopbackAddress(req.ip),
+    skip: (req: any) => isPrivateOrLoopbackAddress(req.ip),
   });
 
   if (rateLimitConfig?.global) {
@@ -273,7 +275,7 @@ export function setupRateLimiting(runtime) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export function setupBodyParsers(runtime) {
+export function setupBodyParsers(runtime: any) {
   const limits = runtimeConfig.server.limits || {};
 
   runtime.express.use(express.urlencoded({

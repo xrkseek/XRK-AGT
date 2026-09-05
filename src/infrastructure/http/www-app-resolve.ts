@@ -54,7 +54,7 @@ export const WWW_BUILD_OUT_CANDIDATES = [
  * @param {string} signPath
  * @returns {WwwSignRead}
  */
-export function readWwwSignFile(signPath) {
+export function readWwwSignFile(signPath: any) {
   try {
     if (!fsSync.existsSync(signPath)) {
       return { ok: true, value: null };
@@ -65,7 +65,7 @@ export function readWwwSignFile(signPath) {
       return { ok: false, value: null, error: 'sign.json 根须为对象' };
     }
     return { ok: true, value };
-  } catch (err) {
+  } catch (err: any) {
     return {
       ok: false,
       value: null,
@@ -87,7 +87,7 @@ export function readWwwSignFile(signPath) {
  * @param {object | null | undefined} sign
  * @returns {boolean}
  */
-export function shouldProxyFrontend(sign) {
+export function shouldProxyFrontend(sign: any) {
   if (!sign || typeof sign !== 'object') return false;
   if (sign.enabled === false) return false;
 
@@ -102,7 +102,7 @@ export function shouldProxyFrontend(sign) {
  * @param {string} dir
  * @returns {boolean}
  */
-function hasIndexHtml(dir) {
+function hasIndexHtml(dir: any) {
   try {
     return fsSync.existsSync(path.join(dir, 'index.html'));
   } catch {
@@ -116,7 +116,7 @@ function hasIndexHtml(dir) {
  * @param {string} appDir
  * @returns {boolean}
  */
-export function looksLikeFrontendSourceTree(appDir) {
+export function looksLikeFrontendSourceTree(appDir: any) {
   try {
     if (!fsSync.existsSync(path.join(appDir, 'package.json'))) return false;
     if (hasIndexHtml(appDir)) {
@@ -141,7 +141,7 @@ export function looksLikeFrontendSourceTree(appDir) {
  * @param {string} candidateAbs
  * @returns {boolean}
  */
-function isInsideAppDir(appDir, candidateAbs) {
+function isInsideAppDir(appDir: any, candidateAbs: any) {
   let base;
   let target;
   try {
@@ -172,7 +172,7 @@ function isInsideAppDir(appDir, candidateAbs) {
  * @param {object | null} [sign]
  * @returns {{ root: string, via: string, warn?: string }}
  */
-export function resolveWwwStaticRoot(appDir, sign = null) {
+export function resolveWwwStaticRoot(appDir: any, sign: any = null) {
   if (!sign || typeof sign !== 'object') {
     return { root: appDir, via: '.' };
   }
@@ -218,7 +218,7 @@ export function resolveWwwStaticRoot(appDir, sign = null) {
  * @param {{ root?: string, via?: string } | null | undefined} resolved
  * @returns {boolean}
  */
-export function isWwwSignedStaticRootOk(appDir, sign, resolved) {
+export function isWwwSignedStaticRootOk(appDir: any, sign: any, resolved: any) {
   if (!resolved?.root) return false;
   if (resolved.via && resolved.via !== '.') return true;
   const hint = String(sign?.staticRoot || sign?.outDir || '').trim();
@@ -237,7 +237,7 @@ export function isWwwSignedStaticRootOk(appDir, sign, resolved) {
  * @param {object | null | undefined} sign 有效 sign 对象；null=零配置静态
  * @returns {string} 形如 `/example`（无尾斜杠）
  */
-export function resolveWwwPublicMountPath(appDirName, sign = null) {
+export function resolveWwwPublicMountPath(appDirName: any, sign: any = null) {
   const fallback = `/${String(appDirName || '').replace(/^\/+|\/+$/g, '') || 'app'}`;
   if (!sign || typeof sign !== 'object') return fallback;
 
@@ -259,7 +259,7 @@ export function resolveWwwPublicMountPath(appDirName, sign = null) {
  * @param {string} mountPath
  * @returns {string}
  */
-export function wwwMountPathRootSegment(mountPath) {
+export function wwwMountPathRootSegment(mountPath: any) {
   const s = String(mountPath || '').replace(/^\/+/, '').split('/')[0] || '';
   return s;
 }
@@ -271,7 +271,7 @@ export function wwwMountPathRootSegment(mountPath) {
  * @param {string} [signPath] 默认 `appDir/sign.json`
  * @returns {WwwAppMountDecision}
  */
-export function resolveWwwAppMount(appDir, signPath = path.join(appDir, 'sign.json')) {
+export function resolveWwwAppMount(appDir: any, signPath: any = path.join(appDir, 'sign.json')) {
   const appDirName = path.basename(appDir);
   const read = readWwwSignFile(signPath);
 
@@ -333,7 +333,7 @@ export function resolveWwwAppMount(appDir, signPath = path.join(appDir, 'sign.js
  * @deprecated 请用 `shouldProxyFrontend(readWwwSignFile(path).value)`
  * @param {string} signPath
  */
-export function isActiveFrontendSign(signPath) {
+export function isActiveFrontendSign(signPath: any) {
   const read = readWwwSignFile(signPath);
   if (!read.ok) return false;
   return shouldProxyFrontend(read.value);
@@ -343,6 +343,6 @@ export function isActiveFrontendSign(signPath) {
  * @deprecated 请用 `resolveWwwStaticRoot(dir, null).root`（普通静态=目录本体）
  * @param {string} subDirPath
  */
-export function resolveWwwAppStaticRoot(subDirPath) {
+export function resolveWwwAppStaticRoot(subDirPath: any) {
   return resolveWwwStaticRoot(subDirPath, null).root;
 }
