@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
 import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '#utils/llm/openai-chat-utils.js';

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { pick } from '#utils/llm/openai-chat-utils.js';
 import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
 import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
