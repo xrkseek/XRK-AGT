@@ -5,13 +5,12 @@ import PluginBase from './plugin-base.js'
 import Handler from './handler.js'
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
 import { resolvePluginCoreLabel } from '#utils/core-fs.js'
-import { resolveModuleInDir } from '#utils/module-ext.ts'
+import { resolveModuleInDir, moduleFileKey } from '#utils/module-ext.ts'
 import { FileLoader } from '#utils/file-loader.js'
 import {
   classifyModuleImportError,
   isMissingPackageError
 } from '#utils/module-import-error.js'
-import { HotReloadBase } from '#utils/hot-reload-base.js'
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js'
 import { coerceTaskerId, resolveTaskerId } from '#utils/event-keys.js'
 
@@ -82,7 +81,7 @@ export const discoveryMethods = {
 
   /** 插件文件短键名（不含 .js） */
   _pluginFileKey(nameOrPath) {
-    return HotReloadBase.moduleFileKey(nameOrPath);
+    return moduleFileKey(nameOrPath);
   },
 
   /** 多 Core 限定键：`system-Core/ai`；已是 `core/name` 则原样返回 */

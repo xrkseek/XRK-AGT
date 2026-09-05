@@ -2,7 +2,6 @@ import paths from '#utils/paths.js'
 import Handler from './handler.js'
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
 import { findInCoreSubDirs } from '#utils/core-fs.js'
-import { HotReloadBase } from '#utils/hot-reload-base.js'
 
 export const hotReloadMethods = {
   /**
@@ -48,7 +47,7 @@ export const hotReloadMethods = {
       return true
     })
 
-    // 释放插件实例资源（如 add 插件的 HotReloadBase 监视）
+    // 释放插件实例资源
     for (const pluginData of removedPlugins) {
       const inst = pluginData.plugin
       if (typeof inst?.destroy === 'function') {
@@ -107,12 +106,12 @@ export const hotReloadMethods = {
   },
 
   /**
-   * 热更新插件（优化：简化逻辑）
+   * 重新加载插件（手动/工具调用；无文件监视）
    * @param {string} key - 插件文件名（不含扩展名）
    */
   async changePlugin(key, filePath = null) {
     if (!key) {
-      logger.error('热更新插件: 缺少插件key')
+      logger.error('重新加载插件: 缺少插件key')
       return
     }
 
@@ -130,64 +129,11 @@ export const hotReloadMethods = {
 
       if (loadedPlugins.length > 0) {
         this._rebuildPluginGraph()
-        logger.mark(`[热更新插件][${key}] 更新了 ${loadedPlugins.length} 个插件实例`)
+        logger.mark(`[重新加载插件][${key}] 更新了 ${loadedPlugins.length} 个插件实例`)
       }
     } catch (error) {
       errorHandler.handle(error, { context: 'changePlugin', pluginKey: key, code: ErrorCodes.PLUGIN_LOAD_FAILED }, true)
-      logger.error(`热更新插件错误: ${key}`, error)
-    }
-  },
-
-  /**
-   * 启用文件监视（热加载）
-   * @param {boolean} enable - 是否启用
-   */
-  async watch(enable = true) {
-    if (!enable) {
-      await this._hotReload?.stop()
-      this._hotReload = null
-      return
-    }
-
-    if (this._hotReload?.watcher) return
-
-    try {
-      const hotReload = new HotReloadBase({ loggerName: 'PluginLoader' })
-      
-      const pluginDirs = await paths.getCoreSubDirs('plugin')
-      if (pluginDirs.length === 0) return
-
-      const started = await hotReload.watch(true, {
-        dirs: pluginDirs,
-        onAdd: async (filePath) => {
-          const key = this._pluginQualifiedKey(filePath)
-          logger.mark(`[新增插件][${key}]`)
-          try {
-            const file = this.buildPluginFileObject(filePath, key)
-            const loadedPlugins = await this.importPlugin(file, [], false)
-            if (loadedPlugins.length > 0) {
-              this._rebuildPluginGraph()
-              logger.mark(`[新增插件][${key}] 成功加载 ${loadedPlugins.length} 个插件实例`)
-            }
-          } catch (error) {
-            logger.error(`[新增插件][${key}] 加载失败`, error)
-          }
-        },
-        onChange: async (filePath) => {
-          const key = this._pluginQualifiedKey(filePath)
-          logger.mark(`[修改插件][${key}]`)
-          await this.changePlugin(key, filePath)
-        },
-        onUnlink: async (filePath) => {
-          const key = this._pluginQualifiedKey(filePath)
-          logger.mark(`[删除插件][${key}]`)
-          this.unloadPlugin(key)
-        }
-      })
-
-      if (started) this._hotReload = hotReload
-    } catch (error) {
-      logger.error('启动插件文件监视失败', error)
+      logger.error(`重新加载插件错误: ${key}`, error)
     }
   }
 }

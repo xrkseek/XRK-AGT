@@ -35,14 +35,11 @@ class PluginLoader {
     taskCount: 0,
     extendedCount: 0
   }
-  _hotReload = null
   _taskScheduleKey = ''
 
   async destroy() {
     try {
       this.task.forEach(task => task.job?.cancel())
-      await this._hotReload?.stop()
-      this._hotReload = null
       if (this.cleanupTimer) {
         clearInterval(this.cleanupTimer)
         this.cleanupTimer = null
