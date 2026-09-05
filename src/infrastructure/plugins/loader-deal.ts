@@ -1,4 +1,3 @@
-// @ts-nocheck — PluginLoader mixin（this 绑定在 Object.assign 之后）
 import fs from 'fs/promises'
 import runtimeConfig from '../config/config.js'
 import PluginBase from './plugin-base.js'
@@ -19,9 +18,11 @@ import { readMediaBuffer } from '#utils/entry-media.js'
 import moment from 'moment'
 
 const gLogger = (): any => (globalThis as any).logger
+const gAgentRuntime = (): any => (globalThis as any).AgentRuntime
+const gRedis = (): any => (globalThis as any).redis
 
 export const dealMethods: any = {
-  async deal(e: any) {
+  async deal(this: any, e: any) {
     try {
       if (!e) return
 
@@ -57,7 +58,7 @@ export const dealMethods: any = {
     }
   },
 
-  async dealMsg(e: any) {
+  async dealMsg(this: any, e: any) {
     try {
       await this.parseMessage(e)
       this.setupEventProps(e)
@@ -74,7 +75,7 @@ export const dealMethods: any = {
    * Tasker 特有字段由各 Enhancer 挂载（见 docs/事件系统标准化文档.md）。
    * OneBot CQ → raw_message 须在 parseMessage 之前，故按 tasker 短名早做一次。
    */
-  normalizeEventPayload(e: any) {
+  normalizeEventPayload(this: any, e: any) {
     if (!e) return
     // normalizeBase 内提升遗留 post_type/event_type，再补默认字段
     EventNormalizer.normalize(e, {
@@ -93,7 +94,7 @@ export const dealMethods: any = {
     e.plainText = this.extractMessageText(e)
   },
 
-  async parseMessage(e: any) {
+  async parseMessage(this: any, e: any) {
     // 重置msg，从message数组重新构建
     e.msg = ''
     if (!e.forwardIds) e.forwardIds = []
@@ -130,7 +131,7 @@ export const dealMethods: any = {
     }
   },
 
-  setupEventProps(e: any) {
+  setupEventProps(this: any, e: any) {
     if (!e) return
     if (!e.sender) e.sender = {}
     if (!e.logText || e.logText.includes('未知')) {
@@ -139,7 +140,7 @@ export const dealMethods: any = {
     }
   },
 
-  checkPermissions(e: any) {
+  checkPermissions(this: any, e: any) {
     // stdin和device(web)已在事件监听器中设置isMaster，跳过
     if (e.isStdin || (e.isDevice && e.device_type === 'web')) return
     
@@ -148,13 +149,13 @@ export const dealMethods: any = {
     e.isMaster = masters.some(id => String(e.user_id) === String(id))
   },
 
-  setupReply(e: any) {
+  setupReply(this: any, e: any) {
     if (e._replySetup) return
     if (!e.reply || e.isDevice) return
     e._replySetup = true
 
     e.replyNew = e.reply
-    e.reply = async (msg = '', quote = false, data = {}) => {
+    e.reply = async (msg: any = '', quote: any = false, data: any = {}) => {
       if (!msg) return false
 
       try {
@@ -169,7 +170,7 @@ export const dealMethods: any = {
 
         let { recallMsg = 0, at = '', recallUser = true } = data
         if (!Array.isArray(msg)) msg = [msg]
-        msg = msg.map(m => {
+        msg = msg.map((m: any) => {
           if (Buffer.isBuffer(m) || m instanceof Uint8Array) return msgSegment.image(m)
           return m
         })
@@ -194,7 +195,7 @@ export const dealMethods: any = {
         } catch (err: any) {
           const error = normalizeError(err)
           gLogger()?.debug(`发送消息错误: ${error.message}`)
-          const textMsg = msg.map(m => typeof m === 'string' ? m : m?.text || '').join('')
+          const textMsg = msg.map((m: any) => typeof m === 'string' ? m : m?.text || '').join('')
           if (textMsg) {
             try {
               msgRes = await e.replyNew(textMsg)
@@ -230,7 +231,7 @@ export const dealMethods: any = {
     }
   },
 
-  async runPlugins(e: any, isExtended: any = false) {
+  async runPlugins(this: any, e: any, isExtended: any = false) {
     if (!e) return false
     
     try {
@@ -271,7 +272,7 @@ export const dealMethods: any = {
 
       // 上下文：所有事件都参与，便于点歌等“先发列表再等数字”在 device/web 下生效
       if (await this.handleContext(plugins, e)) return true
-      if (!e.isDevice && !plugins.some(p => p.bypassThrottle === true)) {
+      if (!e.isDevice && !plugins.some((p: any) => p.bypassThrottle === true)) {
         this.setLimit(e)
       }
 
@@ -284,7 +285,7 @@ export const dealMethods: any = {
     }
   },
 
-  async initPlugins(e: any, isExtended: any = false, filterFn: any = null) {
+  async initPlugins(this: any, e: any, isExtended: any = false, filterFn: any = null) {
     if (!e) return []
     
     const pluginList = isExtended ? this.extended : this.priority
@@ -321,13 +322,13 @@ export const dealMethods: any = {
     return activePlugins
   },
 
-  async processPlugins(plugins: any, e: any, isExtended: any) {
+  async processPlugins(this: any, plugins: any, e: any, isExtended: any) {
     if (!Array.isArray(plugins) || !plugins.length) return false
 
     if (isExtended) return await this.processRules(plugins, e)
 
     // 按优先级分组
-    const pluginsByPriority = {}
+    const pluginsByPriority: any = {}
     for (const p of plugins) {
       const priority = p.priority || 50
       if (!pluginsByPriority[priority]) {
@@ -347,7 +348,7 @@ export const dealMethods: any = {
     return await this.processDefaultHandlers(e)
   },
 
-  async processRules(plugins: any, e: any) {
+  async processRules(this: any, plugins: any, e: any) {
     if (!Array.isArray(plugins) || !e) return false
 
     for (const plugin of plugins) {
@@ -404,14 +405,14 @@ export const dealMethods: any = {
     return false
   },
 
-  async processDefaultHandlers(e: any) {
+  async processDefaultHandlers(this: any, e: any) {
     if (e.isDevice) return false
 
     for (const handler of this.defaultMsgHandlers) {
       try {
         const plugin = new handler.class(e)
         plugin.e = e
-        if (typeof PluginBase.handleNonMatchMsg === 'function') {
+        if (typeof (PluginBase as any).handleNonMatchMsg === 'function') {
           const res = await plugin.handleNonMatchMsg(e)
           if (res === 'return' || res) return true
         }
@@ -423,7 +424,7 @@ export const dealMethods: any = {
     return false
   },
 
-  async handleContext(plugins: any) {
+  async handleContext(this: any, plugins: any) {
     if (!Array.isArray(plugins)) return false
 
     for (const plugin of plugins) {
@@ -447,19 +448,19 @@ export const dealMethods: any = {
     return false
   },
 
-  initEvent(e: any) {
+  initEvent(this: any, e: any) {
     if (!e) return
     
     // 确保 self_id 存在
     if (!e.self_id) {
-      e.self_id = e.device_id || (e.tasker && e.tasker !== 'unknown' ? e.tasker : AgentRuntime.uin?.[0])
+      e.self_id = e.device_id || (e.tasker && e.tasker !== 'unknown' ? e.tasker : gAgentRuntime().uin?.[0])
     }
 
     // 确保 bot 对象存在
     if (!e.bot) {
       const identity = e.device_id || e.self_id
       Object.defineProperty(e, 'bot', {
-        value: identity && AgentRuntime[identity] ? AgentRuntime[identity] : AgentRuntime,
+        value: identity && gAgentRuntime()[identity] ? gAgentRuntime()[identity] : gAgentRuntime(),
         writable: false,
         configurable: false
       })
@@ -476,7 +477,7 @@ export const dealMethods: any = {
     this.count(e, 'receive')
   },
 
-  async preCheck(e: any, hasBypassPlugin: any = false) {
+  async preCheck(this: any, e: any, hasBypassPlugin: any = false) {
     if (!e) return false
     
     try {
@@ -485,7 +486,7 @@ export const dealMethods: any = {
         return true
       }
 
-      const botUin = e.self_id || AgentRuntime.uin?.[0]
+      const botUin = e.self_id || gAgentRuntime().uin?.[0]
       
       // 检查是否忽略自己发送的消息
       if (runtimeConfig.agt?.system?.ignoreSelf !== false) {
@@ -503,7 +504,7 @@ export const dealMethods: any = {
       }
 
       // 热关机：进程仍在，仅忽略业务消息（#开机 仍放行）
-      const shutdownStatus = await redis.get(`AGT:shutdown:${botUin}`)
+      const shutdownStatus = await gRedis()?.get(`AGT:shutdown:${botUin}`)
       if (shutdownStatus === 'true') {
         gLogger()?.debug(`[热关机] 忽略消息: ${e.plainText || ''}`)
         return false
@@ -539,7 +540,7 @@ export const dealMethods: any = {
     }
   },
 
-  async checkBypassPlugins(e: any) {
+  async checkBypassPlugins(this: any, e: any) {
     const text = e.plainText || ''
     if (!text) return false
 
@@ -548,7 +549,7 @@ export const dealMethods: any = {
       if (!this.isTaskerAllowed(p.taskers, e)) continue
 
       try {
-        if (p.bypassRules.some(rule => rule.reg?.test(text))) {
+        if (p.bypassRules.some((rule: any) => rule.reg?.test(text))) {
           return true
         }
       } catch (error: any) {
@@ -560,14 +561,14 @@ export const dealMethods: any = {
     return false
   },
 
-  extractMessageText(e: any) {
+  extractMessageText(this: any, e: any) {
     if (e.raw_message) return this.dealText(e.raw_message)
     const messages = Array.isArray(e.message) ? e.message : (e.message ? [e.message] : [])
-    const text = messages.filter(msg => msg.type === 'text').map(msg => msg.text || '').join('')
+    const text = messages.filter((msg: any) => msg.type === 'text').map((msg: any) => msg.text || '').join('')
     return this.dealText(text)
   },
 
-  addUtilMethods(e: any) {
+  addUtilMethods(this: any, e: any) {
     e.getSendableMedia = async (media: any) => {
       if (!media) return null
 
@@ -589,7 +590,7 @@ export const dealMethods: any = {
       return null
     }
 
-    e.throttle = (key, duration = 1000) => {
+    e.throttle = (key: any, duration: any = 1000) => {
       const userId = e.user_id || e.device_id
       const throttleKey = `${userId}:${key}`
       if (this.eventThrottle.has(throttleKey)) return false
@@ -606,16 +607,16 @@ export const dealMethods: any = {
     }
   },
 
-  filtEvent(e: any, v: any) {
+  filtEvent(this: any, e: any, v: any) {
     if (!v?.event) return true
     return matchPluginEvent(v.event, e, (pattern: any, event: any) => this.matchEventPattern(pattern, event))
   },
 
-  matchEventPattern(pattern: any, event: any) {
+  matchEventPattern(this: any, pattern: any, event: any) {
     return matchEventPatternFn(pattern, event)
   },
 
-  filtPermission(e: any, v: any) {
+  filtPermission(this: any, e: any, v: any) {
     if (e.isDevice) return true
     if (!v.permission || v.permission === 'all' || e.isMaster) return true
 
@@ -648,7 +649,7 @@ export const dealMethods: any = {
     }
   },
 
-  checkLimit(e: any) {
+  checkLimit(this: any, e: any) {
     if (e.isDevice) return true
 
     if (!e.message || !e.group_id || ['cmd'].includes(e.tasker)) {
@@ -676,7 +677,7 @@ export const dealMethods: any = {
     return true
   },
 
-  setLimit(e: any) {
+  setLimit(this: any, e: any) {
     if (e.isDevice || !e.message || !e.group_id || ['cmd'].includes(e.tasker)) return
 
     const config = runtimeConfig.getGroup(e.group_id) || {}
@@ -695,7 +696,7 @@ export const dealMethods: any = {
     }
   },
 
-  checkDisable(p: any) {
+  checkDisable(this: any, p: any) {
     if (!p) return false
     
     // 如果没有事件对象，直接返回插件本身的有效性
@@ -720,7 +721,7 @@ export const dealMethods: any = {
    * @param {string} text - 文本内容
    * @returns {string}
    */
-  dealText(text: any = '') {
+  dealText(this: any, text: any = '') {
     text = String(text ?? '')
     if (runtimeConfig.agt?.system?.['/→#']) text = text.replace(/^\s*\/\s*/, '#')
     return text
@@ -729,7 +730,7 @@ export const dealMethods: any = {
       .trim()
   },
 
-  initEventSystem() {
+  initEventSystem(this: any) {
     if (this.cleanupTimer) clearInterval(this.cleanupTimer)
 
     this.cleanupTimer = setInterval(() => {
@@ -745,7 +746,7 @@ export const dealMethods: any = {
   /**
    * 统一的节流清理
    */
-  cleanupThrottles() {
+  cleanupThrottles(this: any) {
     const now = Date.now()
     for (const [key, time] of this.eventThrottle) {
       if (now - time > 60000) this.eventThrottle.delete(key)
@@ -758,7 +759,7 @@ export const dealMethods: any = {
   /**
    * 统一的冷却清理
    */
-  cleanupCooldowns() {
+  cleanupCooldowns(this: any) {
     const now = Date.now()
     for (const cooldownType of ['group', 'single']) {
       const cooldownMap = this.cooldowns[cooldownType]
@@ -772,11 +773,11 @@ export const dealMethods: any = {
     }
   },
 
-  async count(e: any, type: any, msg: any) {
+  async count(this: any, e: any, type: any, msg: any) {
     if (e.isDevice) return
 
     try {
-      const checkImg = item => {
+      const checkImg = (item: any) => {
         if (item?.type === 'image' && item.file && Buffer.isBuffer(item.file)) {
           this.saveCount('screenshot', e.group_id)
         }
@@ -788,7 +789,7 @@ export const dealMethods: any = {
     }
   },
 
-  async saveCount(type: any, groupId: any = '') {
+  async saveCount(this: any, type: any, groupId: any = '') {
     try {
       const base = groupId ? `AGT:count:group:${groupId}:` : 'AGT:count:'
       const dayKey = `${base}${type}:day:${moment().format('MMDD')}`
@@ -800,9 +801,9 @@ export const dealMethods: any = {
       }
 
       for (const key of keys) {
-        await redis.incr(key)
+        await gRedis()?.incr(key)
         if (key.includes(':day:') || key.includes(':month:')) {
-          await redis.expire(key, 3600 * 24 * 30)
+          await gRedis()?.expire(key, 3600 * 24 * 30)
         }
       }
     } catch (error: any) {
@@ -813,11 +814,11 @@ export const dealMethods: any = {
   /**
    * 删除计数
    */
-  async delCount() {
+  async delCount(this: any) {
     try {
       await Promise.all([
-        redis.set('AGT:count:sendMsg:total', '0'),
-        redis.set('AGT:count:screenshot:total', '0')
+        gRedis()?.set('AGT:count:sendMsg:total', '0'),
+        gRedis()?.set('AGT:count:screenshot:total', '0')
       ])
     } catch (error: any) {
       gLogger()?.debug(`删除计数失败: ${error.message}`)

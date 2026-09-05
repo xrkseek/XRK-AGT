@@ -1,4 +1,3 @@
-// @ts-nocheck — PluginLoader mixin（this 绑定在 Object.assign 之后）
 import path from 'path'
 import fs from 'node:fs'
 import paths from '#utils/paths.js'
@@ -18,7 +17,7 @@ import { coerceTaskerId, resolveTaskerId } from '#utils/event-keys.js'
 const gLogger = (): any => (globalThis as any).logger
 
 export const discoveryMethods: any = {
-  async load(isRefresh: any = false) {
+  async load(this: any, isRefresh: any = false) {
     try {
       if (!isRefresh && this.priority.length) return
 
@@ -33,7 +32,7 @@ export const discoveryMethods: any = {
 
       const files = await this.getPlugins()
       this.pluginCount = 0
-      const packageErr = []
+      const packageErr: any[] = []
 
       await FileLoader.forEachBatch(files, LOADER_BATCH_SIZE, async (file: any) => {
         const pluginStartTime = Date.now()
@@ -76,19 +75,19 @@ export const discoveryMethods: any = {
     }
   },
 
-  _rebuildPluginGraph() {
+  _rebuildPluginGraph(this: any) {
     this.createTask()
     this.sortPlugins()
     this.identifyDefaultMsgHandlers()
   },
 
   /** 插件文件短键名（不含 .js） */
-  _pluginFileKey(nameOrPath: any) {
+  _pluginFileKey(this: any, nameOrPath: any) {
     return moduleFileKey(nameOrPath);
   },
 
   /** 多 Core 限定键：`system-Core/ai`；已是 `core/name` 则原样返回 */
-  _pluginQualifiedKey(filePathOrKey: any, coreLabel: any = null) {
+  _pluginQualifiedKey(this: any, filePathOrKey: any, coreLabel: any = null) {
     const s = String(filePathOrKey ?? '');
     if (s.includes('/') && !/\.[cm]?[jt]s$/i.test(s) && !s.includes('\\')) {
       return s.replace(/\\/g, '/');
@@ -100,7 +99,7 @@ export const discoveryMethods: any = {
     return label ? `${label}/${base}` : base;
   },
 
-  async getPlugins() {
+  async getPlugins(this: any) {
     const ret = []
 
     try {
@@ -145,17 +144,17 @@ export const discoveryMethods: any = {
     return ret
   },
 
-  prepareRuleTemplates(ruleList: any = []) {
+  prepareRuleTemplates(this: any, ruleList: any = []) {
     if (!Array.isArray(ruleList) || !ruleList.length) return []
-    return ruleList.map(rule => rule?.reg ? { ...rule, reg: this.createRegExp(rule.reg) } : rule)
+    return ruleList.map((rule: any) => rule?.reg ? { ...rule, reg: this.createRegExp(rule.reg) } : rule)
   },
 
-  applyRuleTemplates(plugin: any, templates: any = []) {
+  applyRuleTemplates(this: any, plugin: any, templates: any = []) {
     if (templates.length) plugin.rule = templates
   },
 
-  collectBypassRules(ruleTemplates: any = []) {
-    return ruleTemplates.filter(rule => rule?.reg).map(rule => ({ reg: rule.reg }))
+  collectBypassRules(this: any, ruleTemplates: any = []) {
+    return ruleTemplates.filter((rule: any) => rule?.reg).map((rule: any) => ({ reg: rule.reg }))
   },
 
   /**
@@ -164,7 +163,7 @@ export const discoveryMethods: any = {
    * @param {Array} packageErr - 包错误收集数组
    * @returns {Promise<Object>} 导入的插件模块
    */
-  async importPluginModule(file: any, packageErr: any) {
+  async importPluginModule(this: any, file: any, packageErr: any) {
     try {
       const app = await FileLoader.importFresh(file.path)
       // 优化：简化返回逻辑
@@ -191,7 +190,7 @@ export const discoveryMethods: any = {
    * @param {Object} plugin - 插件实例
    * @returns {Promise<boolean>} 是否初始化成功
    */
-  async initializePlugin(plugin: any) {
+  async initializePlugin(this: any, plugin: any) {
     if (!plugin?.init) return true
 
     // 只发起一次 init；超时后勿再次调用（否则会双初始化）
@@ -223,7 +222,7 @@ export const discoveryMethods: any = {
    * @param {Array} ruleTemplates - 已准备的规则模板（必须传入）
    * @returns {Object} 插件元数据
    */
-  buildPluginMetadata(file: any, PluginClass: any, plugin: any, ruleTemplates: any) {
+  buildPluginMetadata(this: any, file: any, PluginClass: any, plugin: any, ruleTemplates: any) {
     // 优化：删除await，同步返回
     return {
       class: PluginClass,
@@ -245,9 +244,9 @@ export const discoveryMethods: any = {
    * @param {Object} plugin - 插件实例
    * @param {string} fileKey - 文件键名
    */
-  registerPluginHandlers(plugin: any, fileKey: any) {
+  registerPluginHandlers(this: any, plugin: any, fileKey: any) {
     if (plugin.handler) {
-      Object.values(plugin.handler).forEach(handler => {
+      Object.values(plugin.handler).forEach((handler: any) => {
         if (!handler) return
         const { fn, key, priority } = handler
         Handler.add({
@@ -278,7 +277,7 @@ export const discoveryMethods: any = {
    * @param {boolean} skipInit - 是否跳过初始化（用于热加载）
    * @returns {Promise<Object|null>} 插件元数据或null
    */
-  async loadPlugin(file: any, PluginClass: any, skipInit: any = false) {
+  async loadPlugin(this: any, file: any, PluginClass: any, skipInit: any = false) {
     try {
       if (typeof PluginClass !== 'function' || !PluginClass.prototype) return null
 
@@ -323,13 +322,13 @@ export const discoveryMethods: any = {
    * @param {boolean} skipInit - 是否跳过初始化
    * @returns {Promise<Array>} 加载的插件元数据数组
    */
-  async importPlugin(file: any, packageErr: any, skipInit: any = false) {
+  async importPlugin(this: any, file: any, packageErr: any, skipInit: any = false) {
     const app = await this.importPluginModule(file, packageErr)
     if (!app || Object.keys(app).length === 0) return []
 
     // 优化：并行加载多个插件类
     const loadPromises = Object.entries(app).map(([key, PluginClass]: any) =>
-      this.loadPlugin(file, PluginClass, skipInit).catch(err => {
+      this.loadPlugin(file, PluginClass, skipInit).catch((err: any) => {
         gLogger()?.debug(`加载插件类失败: ${file.name}.${key}`, err.message)
         return null
       })
@@ -339,8 +338,8 @@ export const discoveryMethods: any = {
     return results.filter(Boolean)
   },
 
-  identifyDefaultMsgHandlers() {
-    this.defaultMsgHandlers = this.priority.filter(p => {
+  identifyDefaultMsgHandlers(this: any) {
+    this.defaultMsgHandlers = this.priority.filter((p: any) => {
       if (!p?.class) return false
       try {
         return typeof new p.class().handleNonMatchMsg === 'function'
@@ -350,7 +349,7 @@ export const discoveryMethods: any = {
     })
   },
 
-  packageTips(packageErr: any) {
+  packageTips(this: any, packageErr: any) {
     if (!packageErr?.length) return
     gLogger()?.error('--------- 插件缺少 npm 依赖 ---------')
     packageErr.forEach(({ error, file }: any) => {
@@ -362,13 +361,13 @@ export const discoveryMethods: any = {
     gLogger()?.error('--------------------------------')
   },
 
-  sortPlugins() {
+  sortPlugins(this: any) {
     // 按优先级排序
     this.priority.sort((a: any, b: any) => (a.priority || 50) - (b.priority || 50))
     this.extended.sort((a: any, b: any) => (a.priority || 50) - (b.priority || 50))
   },
 
-  createRegExp(pattern: any) {
+  createRegExp(this: any, pattern: any) {
     if (pattern instanceof RegExp) return pattern
     if (typeof pattern !== 'string') return false
     if (pattern === 'null' || pattern === '') return /.*/
@@ -380,25 +379,25 @@ export const discoveryMethods: any = {
     }
   },
 
-  normalizeTaskerList(taskers: any) {
+  normalizeTaskerList(this: any, taskers: any) {
     if (!taskers) return []
     return (Array.isArray(taskers) ? taskers : [taskers])
       .map(item => coerceTaskerId(item))
       .filter(Boolean)
   },
 
-  buildTaskerSet(plugin: any) {
+  buildTaskerSet(this: any, plugin: any) {
     const taskers = this.normalizeTaskerList(plugin.taskers || plugin.tasker)
     return taskers.length ? new Set(taskers) : null
   },
 
-  isTaskerAllowed(taskerSet: any, event: any) {
+  isTaskerAllowed(this: any, taskerSet: any, event: any) {
     if (!taskerSet?.size) return true
     const id = resolveTaskerId(event) || String(event?.tasker || '').toLowerCase()
     return taskerSet.has(id)
   },
 
-  wrapPluginAccept(plugin: any, meta: any) {
+  wrapPluginAccept(this: any, plugin: any, meta: any) {
     // 必须取「实例」上的 accept（Enhancer/插件覆盖）；PluginBase.accept 是类静态、恒为 undefined
     const accept =
       typeof plugin.accept === 'function'
@@ -411,15 +410,15 @@ export const discoveryMethods: any = {
   /**
    * 分析插件加载性能（优化：简化逻辑）
    */
-  analyzePluginPerformance() {
+  analyzePluginPerformance(this: any) {
     try {
       const plugins = this.pluginLoadStats.plugins
       if (!plugins.length) return
 
-      const slowPlugins = plugins.filter(p => p.loadTime > 1000).sort((a: any, b: any) => b.loadTime - a.loadTime)
+      const slowPlugins = plugins.filter((p: any) => p.loadTime > 1000).sort((a: any, b: any) => b.loadTime - a.loadTime)
       if (slowPlugins.length > 0) {
         gLogger()?.warn(`发现 ${slowPlugins.length} 个加载较慢的插件:`)
-        slowPlugins.slice(0, 5).forEach(p => gLogger()?.warn(`  - ${p.name}: ${p.loadTime}ms`))
+        slowPlugins.slice(0, 5).forEach((p: any) => gLogger()?.warn(`  - ${p.name}: ${p.loadTime}ms`))
       }
 
       const avgLoadTime = plugins.reduce((sum: any, p: any) => sum + p.loadTime, 0) / plugins.length
