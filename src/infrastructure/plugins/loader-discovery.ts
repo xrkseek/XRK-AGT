@@ -1,3 +1,4 @@
+// @ts-nocheck — PluginLoader mixin（this 绑定在 Object.assign 之后）
 import path from 'path'
 import fs from 'node:fs'
 import paths from '#utils/paths.js'
@@ -5,7 +6,7 @@ import PluginBase from './plugin-base.js'
 import Handler from './handler.js'
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
 import { resolvePluginCoreLabel } from '#utils/core-fs.js'
-import { resolveModuleInDir, moduleFileKey } from '#utils/module-ext.ts'
+import { resolveModuleInDir, moduleFileKey } from '#utils/module-ext.js'
 import { FileLoader } from '#utils/file-loader.js'
 import {
   classifyModuleImportError,
@@ -14,8 +15,10 @@ import {
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js'
 import { coerceTaskerId, resolveTaskerId } from '#utils/event-keys.js'
 
-export const discoveryMethods = {
-  async load(isRefresh = false) {
+const gLogger = (): any => (globalThis as any).logger
+
+export const discoveryMethods: any = {
+  async load(isRefresh: any = false) {
     try {
       if (!isRefresh && this.priority.length) return
 
@@ -25,20 +28,20 @@ export const discoveryMethods = {
       this.extended = []
       this.delCount()
 
-      logger.info('--------------------------------')
-      logger.title('开始加载插件', 'yellow')
+      gLogger()?.info('--------------------------------')
+      gLogger()?.title('开始加载插件', 'yellow')
 
       const files = await this.getPlugins()
       this.pluginCount = 0
       const packageErr = []
 
-      await FileLoader.forEachBatch(files, LOADER_BATCH_SIZE, async (file) => {
+      await FileLoader.forEachBatch(files, LOADER_BATCH_SIZE, async (file: any) => {
         const pluginStartTime = Date.now()
         try {
           await this.importPlugin(file, packageErr, false)
           const loadTime = Date.now() - pluginStartTime
           this.pluginLoadStats.plugins.push({ name: file.name, loadTime, success: true })
-        } catch (err) {
+        } catch (err: any) {
           const loadTime = Date.now() - pluginStartTime
           this.pluginLoadStats.plugins.push({
             name: file.name,
@@ -47,7 +50,7 @@ export const discoveryMethods = {
             error: err.message
           })
           errorHandler.handle(err, { context: 'loadPlugin', pluginName: file.name }, true)
-          logger.error(`插件加载失败: ${file.name}`, err)
+          gLogger()?.error(`插件加载失败: ${file.name}`, err)
         }
       })
 
@@ -60,15 +63,15 @@ export const discoveryMethods = {
       this._rebuildPluginGraph()
       this.initEventSystem()
 
-      logger.info(`加载定时任务[${this.task.length}个]`)
-      logger.info(`加载插件[${this.pluginCount}个]`)
-      logger.info(`加载扩展插件[${this.extended.length}个]`)
-      logger.info(`总加载耗时: ${(this.pluginLoadStats.totalLoadTime / 1000).toFixed(4)}秒`)
+      gLogger()?.info(`加载定时任务[${this.task.length}个]`)
+      gLogger()?.info(`加载插件[${this.pluginCount}个]`)
+      gLogger()?.info(`加载扩展插件[${this.extended.length}个]`)
+      gLogger()?.info(`总加载耗时: ${(this.pluginLoadStats.totalLoadTime / 1000).toFixed(4)}秒`)
       
       this.analyzePluginPerformance()
-    } catch (error) {
+    } catch (error: any) {
       const botError = errorHandler.handle(error, { context: 'load', code: ErrorCodes.PLUGIN_LOAD_FAILED }, true)
-      logger.error('插件加载器初始化失败', botError)
+      gLogger()?.error('插件加载器初始化失败', botError)
       throw botError
     }
   },
@@ -80,12 +83,12 @@ export const discoveryMethods = {
   },
 
   /** 插件文件短键名（不含 .js） */
-  _pluginFileKey(nameOrPath) {
+  _pluginFileKey(nameOrPath: any) {
     return moduleFileKey(nameOrPath);
   },
 
   /** 多 Core 限定键：`system-Core/ai`；已是 `core/name` 则原样返回 */
-  _pluginQualifiedKey(filePathOrKey, coreLabel = null) {
+  _pluginQualifiedKey(filePathOrKey: any, coreLabel: any = null) {
     const s = String(filePathOrKey ?? '');
     if (s.includes('/') && !/\.[cm]?[jt]s$/i.test(s) && !s.includes('\\')) {
       return s.replace(/\\/g, '/');
@@ -113,13 +116,13 @@ export const discoveryMethods = {
           core
         })
       }
-    } catch (error) {
-      logger.error('获取插件文件列表失败', error)
+    } catch (error: any) {
+      gLogger()?.error('获取插件文件列表失败', error)
     }
 
     const allCoreDirs = await paths.getCoreDirs()
-    const indexPaths = allCoreDirs.map((coreDir) =>
-      resolveModuleInDir(coreDir, 'index', (p) => fs.existsSync(p))
+    const indexPaths = allCoreDirs.map((coreDir: any) =>
+      resolveModuleInDir(coreDir, 'index', (p: any) => fs.existsSync(p))
     )
 
     for (let i = 0; i < allCoreDirs.length; i++) {
@@ -134,24 +137,24 @@ export const discoveryMethods = {
           path: indexPath,
           core: path.basename(coreDir)
         })
-      } catch (error) {
-        logger.error(`加载 core 根目录 index 失败: ${coreDir}`, error)
+      } catch (error: any) {
+        gLogger()?.error(`加载 core 根目录 index 失败: ${coreDir}`, error)
       }
     }
 
     return ret
   },
 
-  prepareRuleTemplates(ruleList = []) {
+  prepareRuleTemplates(ruleList: any = []) {
     if (!Array.isArray(ruleList) || !ruleList.length) return []
     return ruleList.map(rule => rule?.reg ? { ...rule, reg: this.createRegExp(rule.reg) } : rule)
   },
 
-  applyRuleTemplates(plugin, templates = []) {
+  applyRuleTemplates(plugin: any, templates: any = []) {
     if (templates.length) plugin.rule = templates
   },
 
-  collectBypassRules(ruleTemplates = []) {
+  collectBypassRules(ruleTemplates: any = []) {
     return ruleTemplates.filter(rule => rule?.reg).map(rule => ({ reg: rule.reg }))
   },
 
@@ -161,22 +164,22 @@ export const discoveryMethods = {
    * @param {Array} packageErr - 包错误收集数组
    * @returns {Promise<Object>} 导入的插件模块
    */
-  async importPluginModule(file, packageErr) {
+  async importPluginModule(file: any, packageErr: any) {
     try {
       const app = await FileLoader.importFresh(file.path)
       // 优化：简化返回逻辑
       return app.apps || app
-    } catch (error) {
+    } catch (error: any) {
       if (isMissingPackageError(error)) {
         packageErr.push({ error, file })
       } else {
         const classified = classifyModuleImportError(error)
         if (classified.kind === 'missing_export') {
-          logger.warn(
+          gLogger()?.warn(
             `${file.name} 导出不匹配: 缺少 ${classified.exportName}（${classified.packageName || 'unknown'}）`
           )
         } else {
-          logger.debug(`加载插件模块错误: ${file.name}`, error.message)
+          gLogger()?.debug(`加载插件模块错误: ${file.name}`, error.message)
         }
       }
       return {}
@@ -188,7 +191,7 @@ export const discoveryMethods = {
    * @param {Object} plugin - 插件实例
    * @returns {Promise<boolean>} 是否初始化成功
    */
-  async initializePlugin(plugin) {
+  async initializePlugin(plugin: any) {
     if (!plugin?.init) return true
 
     // 只发起一次 init；超时后勿再次调用（否则会双初始化）
@@ -196,18 +199,18 @@ export const discoveryMethods = {
     try {
       const initRes = await Promise.race([
         initPromise,
-        new Promise((resolve, reject) => setTimeout(() => reject(new Error('init_timeout')), 1500))
+        new Promise((resolve: any, reject: any) => setTimeout(() => reject(new Error('init_timeout')), 1500))
       ])
       return initRes !== 'return'
-    } catch (err) {
+    } catch (err: any) {
       if (err.message === 'init_timeout') {
-        logger.debug(`插件 ${plugin.name} 初始化超时，将在后台继续（不重复 init）`)
-        initPromise.catch((e) => {
-          logger.error(`插件 ${plugin.name} 后台初始化错误: ${e?.message || e}`)
+        gLogger()?.debug(`插件 ${plugin.name} 初始化超时，将在后台继续（不重复 init）`)
+        initPromise.catch((e: any) => {
+          gLogger()?.error(`插件 ${plugin.name} 后台初始化错误: ${e?.message || e}`)
         })
         return true
       }
-      logger.error(`插件 ${plugin.name} 初始化错误: ${err.message}`)
+      gLogger()?.error(`插件 ${plugin.name} 初始化错误: ${err.message}`)
       return false
     }
   },
@@ -220,7 +223,7 @@ export const discoveryMethods = {
    * @param {Array} ruleTemplates - 已准备的规则模板（必须传入）
    * @returns {Object} 插件元数据
    */
-  buildPluginMetadata(file, PluginClass, plugin, ruleTemplates) {
+  buildPluginMetadata(file: any, PluginClass: any, plugin: any, ruleTemplates: any) {
     // 优化：删除await，同步返回
     return {
       class: PluginClass,
@@ -242,7 +245,7 @@ export const discoveryMethods = {
    * @param {Object} plugin - 插件实例
    * @param {string} fileKey - 文件键名
    */
-  registerPluginHandlers(plugin, fileKey) {
+  registerPluginHandlers(plugin: any, fileKey: any) {
     if (plugin.handler) {
       Object.values(plugin.handler).forEach(handler => {
         if (!handler) return
@@ -258,7 +261,7 @@ export const discoveryMethods = {
     }
 
     if (plugin.eventSubscribe) {
-      Object.entries(plugin.eventSubscribe).forEach(([eventType, handler]) => {
+      Object.entries(plugin.eventSubscribe).forEach(([eventType, handler]: any) => {
         if (typeof handler === 'function') {
           const boundHandler = handler.bind(plugin)
           boundHandler._pluginKey = fileKey // 标记插件键名，用于卸载时清理
@@ -275,7 +278,7 @@ export const discoveryMethods = {
    * @param {boolean} skipInit - 是否跳过初始化（用于热加载）
    * @returns {Promise<Object|null>} 插件元数据或null
    */
-  async loadPlugin(file, PluginClass, skipInit = false) {
+  async loadPlugin(file: any, PluginClass: any, skipInit: any = false) {
     try {
       if (typeof PluginClass !== 'function' || !PluginClass.prototype) return null
 
@@ -307,8 +310,8 @@ export const discoveryMethods = {
       targetArray.push(pluginData)
 
       return pluginData
-    } catch (error) {
-      logger.error(`加载插件 ${file.name} 失败`, error)
+    } catch (error: any) {
+      gLogger()?.error(`加载插件 ${file.name} 失败`, error)
       return null
     }
   },
@@ -320,14 +323,14 @@ export const discoveryMethods = {
    * @param {boolean} skipInit - 是否跳过初始化
    * @returns {Promise<Array>} 加载的插件元数据数组
    */
-  async importPlugin(file, packageErr, skipInit = false) {
+  async importPlugin(file: any, packageErr: any, skipInit: any = false) {
     const app = await this.importPluginModule(file, packageErr)
     if (!app || Object.keys(app).length === 0) return []
 
     // 优化：并行加载多个插件类
-    const loadPromises = Object.entries(app).map(([key, PluginClass]) =>
+    const loadPromises = Object.entries(app).map(([key, PluginClass]: any) =>
       this.loadPlugin(file, PluginClass, skipInit).catch(err => {
-        logger.debug(`加载插件类失败: ${file.name}.${key}`, err.message)
+        gLogger()?.debug(`加载插件类失败: ${file.name}.${key}`, err.message)
         return null
       })
     )
@@ -347,61 +350,61 @@ export const discoveryMethods = {
     })
   },
 
-  packageTips(packageErr) {
+  packageTips(packageErr: any) {
     if (!packageErr?.length) return
-    logger.error('--------- 插件缺少 npm 依赖 ---------')
-    packageErr.forEach(({ error, file }) => {
+    gLogger()?.error('--------- 插件缺少 npm 依赖 ---------')
+    packageErr.forEach(({ error, file }: any) => {
       const classified = classifyModuleImportError(error)
       const pack = classified.packageName || '未知依赖'
-      logger.warn(`${file.name} 缺少依赖: ${pack}`)
+      gLogger()?.warn(`${file.name} 缺少依赖: ${pack}`)
     })
-    logger.error('请在仓库根目录执行: pnpm add <依赖名> 后重启')
-    logger.error('--------------------------------')
+    gLogger()?.error('请在仓库根目录执行: pnpm add <依赖名> 后重启')
+    gLogger()?.error('--------------------------------')
   },
 
   sortPlugins() {
     // 按优先级排序
-    this.priority.sort((a, b) => (a.priority || 50) - (b.priority || 50))
-    this.extended.sort((a, b) => (a.priority || 50) - (b.priority || 50))
+    this.priority.sort((a: any, b: any) => (a.priority || 50) - (b.priority || 50))
+    this.extended.sort((a: any, b: any) => (a.priority || 50) - (b.priority || 50))
   },
 
-  createRegExp(pattern) {
+  createRegExp(pattern: any) {
     if (pattern instanceof RegExp) return pattern
     if (typeof pattern !== 'string') return false
     if (pattern === 'null' || pattern === '') return /.*/
     try {
       return new RegExp(pattern)
-    } catch (e) {
-      logger.error(`正则表达式创建失败: ${pattern}`, e)
+    } catch (e: any) {
+      gLogger()?.error(`正则表达式创建失败: ${pattern}`, e)
       return false
     }
   },
 
-  normalizeTaskerList(taskers) {
+  normalizeTaskerList(taskers: any) {
     if (!taskers) return []
     return (Array.isArray(taskers) ? taskers : [taskers])
       .map(item => coerceTaskerId(item))
       .filter(Boolean)
   },
 
-  buildTaskerSet(plugin) {
+  buildTaskerSet(plugin: any) {
     const taskers = this.normalizeTaskerList(plugin.taskers || plugin.tasker)
     return taskers.length ? new Set(taskers) : null
   },
 
-  isTaskerAllowed(taskerSet, event) {
+  isTaskerAllowed(taskerSet: any, event: any) {
     if (!taskerSet?.size) return true
     const id = resolveTaskerId(event) || String(event?.tasker || '').toLowerCase()
     return taskerSet.has(id)
   },
 
-  wrapPluginAccept(plugin, meta) {
+  wrapPluginAccept(plugin: any, meta: any) {
     // 必须取「实例」上的 accept（Enhancer/插件覆盖）；PluginBase.accept 是类静态、恒为 undefined
     const accept =
       typeof plugin.accept === 'function'
         ? plugin.accept.bind(plugin)
         : async () => true
-    return async (event) =>
+    return async (event: any) =>
       this.isTaskerAllowed(meta?.taskers, event) ? await accept(event) : false
   },
 
@@ -413,16 +416,16 @@ export const discoveryMethods = {
       const plugins = this.pluginLoadStats.plugins
       if (!plugins.length) return
 
-      const slowPlugins = plugins.filter(p => p.loadTime > 1000).sort((a, b) => b.loadTime - a.loadTime)
+      const slowPlugins = plugins.filter(p => p.loadTime > 1000).sort((a: any, b: any) => b.loadTime - a.loadTime)
       if (slowPlugins.length > 0) {
-        logger.warn(`发现 ${slowPlugins.length} 个加载较慢的插件:`)
-        slowPlugins.slice(0, 5).forEach(p => logger.warn(`  - ${p.name}: ${p.loadTime}ms`))
+        gLogger()?.warn(`发现 ${slowPlugins.length} 个加载较慢的插件:`)
+        slowPlugins.slice(0, 5).forEach(p => gLogger()?.warn(`  - ${p.name}: ${p.loadTime}ms`))
       }
 
-      const avgLoadTime = plugins.reduce((sum, p) => sum + p.loadTime, 0) / plugins.length
-      logger.debug(`平均插件加载时间: ${avgLoadTime.toFixed(2)}ms`)
-    } catch (error) {
-      logger.debug(`性能分析失败: ${error.message}`)
+      const avgLoadTime = plugins.reduce((sum: any, p: any) => sum + p.loadTime, 0) / plugins.length
+      gLogger()?.debug(`平均插件加载时间: ${avgLoadTime.toFixed(2)}ms`)
+    } catch (error: any) {
+      gLogger()?.debug(`性能分析失败: ${error.message}`)
     }
   }
 }

@@ -73,7 +73,7 @@ export async function setupStaticServing(runtime: any) {
     if (apps && apps.size > 0) {
       const devApps = Array.from(apps.values()).filter((app: any) => app && app.config);
 
-      for (const appInfo of devApps) {
+      for (const appInfo of devApps as any[]) {
         const cfgApp = appInfo.config;
         const appId = cfgApp.id;
         const mountPath = (cfgApp.mountPath && String(cfgApp.mountPath).trim()) || `/${appId}`;

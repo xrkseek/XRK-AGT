@@ -19,9 +19,9 @@ class FrontendLauncher {
   static #apps = new Map();
 
   static #discovered = false;
-  static #discovering = null;
+  static #discovering: any = null;
   static #started = false;
-  static #starting = null;
+  static #starting: any = null;
 
   /** 子进程 stdout/stderr 中可忽略的进度行 */
   static #OUTPUT_NOISE = /^(?:>|$|vite v[\d.]+\s+building|transforming\.{3}|rendering chunks\.{3}|computing gzip size\.{3}|dist\/|✓ \d+ modules transformed|\(\!\)\s+Some chunks|- Using dynamic import|- Use build\.rollupOptions|- Adjust chunk size limit)/i;
@@ -32,7 +32,7 @@ class FrontendLauncher {
   static #LOCAL_URL = /(?:Local:|Network:)\s*(https?:\/\/\S+)/i;
 
   /** AgentRuntime 代理读取实际监听端口（Vite 端口漂移时） */
-  static getRuntimePort(id) {
+  static getRuntimePort(id: any) {
     const app = this.#apps.get(id);
     return app?.runtimePort ?? app?.config?.port;
   }
@@ -84,7 +84,7 @@ class FrontendLauncher {
     return this.#starting;
   }
 
-  static #spawnChildProcess(cmd, args, { cwd, env }) {
+  static #spawnChildProcess(cmd: any, args: any, { cwd, env }: any) {
     // Windows 下 `pnpm`/`npm` 常为 .cmd，裸 spawn 会 ENOENT；统一走 command-spawn
     const spawnSpec = resolveCommandSpawn(cmd, args, cwd);
     return spawn(spawnSpec.command, spawnSpec.args, {
@@ -96,10 +96,10 @@ class FrontendLauncher {
     });
   }
 
-  static #attachProcessOutput(child, appInfo) {
+  static #attachProcessOutput(child: any, appInfo: any) {
     const appId = appInfo.config.id;
     let pending = '';
-    const flushLine = (raw) => {
+    const flushLine = (raw: any) => {
       const line = raw.replace(/\r$/, '').trim();
       if (!line || this.#OUTPUT_NOISE.test(line)) return;
 
@@ -122,7 +122,7 @@ class FrontendLauncher {
       RuntimeUtil.makeLog(verbose ? 'debug' : level, `[${appId}] ${line}`, 'Frontend');
     };
 
-    const onChunk = (chunk) => {
+    const onChunk = (chunk: any) => {
       pending += chunk?.toString?.() ?? '';
       const lines = pending.split(/\r?\n/);
       pending = lines.pop() ?? '';
@@ -133,15 +133,15 @@ class FrontendLauncher {
     child.stderr?.on('data', onChunk);
   }
 
-  static #wireChild(child, appInfo, config) {
+  static #wireChild(child: any, appInfo: any, config: any) {
     this.#attachProcessOutput(child, appInfo);
-    child.on('error', (err) => {
+    child.on('error', (err: any) => {
       appInfo.status = 'error';
       RuntimeUtil.makeLog('error', `前端项目进程错误: ${config.id} - ${err.message}`, 'Frontend');
     });
   }
 
-  static async #killChildTree(child) {
+  static async #killChildTree(child: any) {
     if (!child?.pid || child.killed) return;
     try {
       if (process.platform === 'win32') {
@@ -153,7 +153,7 @@ class FrontendLauncher {
   }
 
   /** Vite dev/preview 追加 strictPort，避免端口漂移导致代理失效 */
-  static #viteRuntimeArgs(args, port) {
+  static #viteRuntimeArgs(args: any, port: any) {
     const list = [...(args || [])];
     if (!list.some((a) => /^(dev|preview|serve)$/i.test(String(a)))) return list;
     if (list.some((a) => String(a).includes('strictPort'))) return list;
@@ -164,7 +164,7 @@ class FrontendLauncher {
    * @param {number} port
    * @param {{ force?: boolean }} [opts] force=true 时才强杀占用进程；默认只检测并抛错
    */
-  static async #ensurePortFree(port, opts = {}) {
+  static async #ensurePortFree(port: any, opts: any = {}) {
     if (!Number.isFinite(port) || port <= 0) return;
     const killPids = new Set();
     try {
@@ -190,7 +190,7 @@ class FrontendLauncher {
     }
 
     const self = String(process.pid);
-    const foreign = [...killPids].filter((pid) => pid !== self);
+    const foreign = [...killPids].filter((pid: any) => pid !== self);
     if (!foreign.length) return;
 
     if (!opts.force) {
@@ -201,9 +201,9 @@ class FrontendLauncher {
 
     for (const pid of foreign) {
       if (process.platform === 'win32') {
-        await execFile('taskkill', ['/PID', pid, '/T', '/F']).catch(() => {});
+        await execFile('taskkill', ['/PID', String(pid), '/T', '/F']).catch(() => {});
       } else {
-        await execFile('kill', ['-9', pid]).catch(() => {});
+        await execFile('kill', ['-9', String(pid)]).catch(() => {});
       }
     }
     await RuntimeUtil.sleep(400).catch(() => {});
@@ -241,17 +241,17 @@ class FrontendLauncher {
     this.#started = false;
   }
 
-  static #getAppMode(json) {
+  static #getAppMode(json: any) {
     const raw = json?.mode ? String(json.mode).toLowerCase() : 'auto';
     if (raw === 'dev' || raw === 'prod' || raw === 'auto') return raw;
     return 'auto';
   }
 
-  static #normalizeCommandSpec(spec, fallbackCwd) {
+  static #normalizeCommandSpec(spec: any, fallbackCwd: any) {
     if (!spec || typeof spec !== 'object') return null;
     const command = spec.command && String(spec.command).trim();
     if (!command) return null;
-    const args = Array.isArray(spec.args) ? spec.args.map(a => String(a)) : [];
+    const args = Array.isArray(spec.args) ? spec.args.map((a: any) => String(a)) : [];
     const cwd = spec.cwd ? path.resolve(paths.root, String(spec.cwd)) : fallbackCwd;
     const env = (spec.env && typeof spec.env === 'object') ? spec.env : {};
     return { command, args, cwd, env };
@@ -356,7 +356,7 @@ class FrontendLauncher {
           continue;
         }
         if (json && Array.isArray(json.modes) && json.modes.length > 0) {
-          const modes = json.modes.map(m => String(m).toLowerCase());
+          const modes = json.modes.map((m: any) => String(m).toLowerCase());
           const required = isProd ? 'prod' : 'dev';
           if (!modes.includes(required)) {
             RuntimeUtil.makeLog('info', `跳过 modes 不匹配的前端工程(${required}): ${file}`, 'Frontend');
@@ -433,7 +433,7 @@ class FrontendLauncher {
         };
 
         configs.push(config);
-      } catch (err) {
+      } catch (err: any) {
         RuntimeUtil.makeLog(
           'warn',
           `解析 sign.json 失败: ${file} - ${err.message}`,
@@ -450,7 +450,7 @@ class FrontendLauncher {
    * @private
    * @param {object} config
    */
-  static #registerApp(config) {
+  static #registerApp(config: any) {
     if (this.#apps.has(config.id)) return;
     this.#apps.set(config.id, {
       config,
@@ -462,7 +462,7 @@ class FrontendLauncher {
     });
   }
 
-  static #startApp(config) {
+  static #startApp(config: any) {
     const appInfo = this.#apps.get(config.id);
     if (!appInfo) return;
 
@@ -503,13 +503,13 @@ class FrontendLauncher {
       'Frontend'
     );
 
-    const spawnChild = (cmd, args, cwd, env) =>
+    const spawnChild = (cmd: any, args: any, cwd: any, env: any) =>
       this.#spawnChildProcess(cmd, args, { cwd, env });
 
     const startRuntime = async () => {
       try {
         await this.#ensurePortFree(config.port, { force: config.forceFreePort === true });
-      } catch (err) {
+      } catch (err: any) {
         appInfo.status = 'error';
         RuntimeUtil.makeLog(
           'error',
@@ -525,7 +525,7 @@ class FrontendLauncher {
       appInfo.process = child;
       this.#wireChild(child, appInfo, config);
 
-      child.on('exit', (code, signal) => {
+      child.on('exit', (code: any, signal: any) => {
         appInfo.status = 'stopped';
         appInfo.process = undefined;
         const reason = code !== null ? `退出码=${code}` : `信号=${signal || 'unknown'}`;
@@ -556,7 +556,7 @@ class FrontendLauncher {
       const buildChild = spawnChild(buildCmd, buildArgs, buildCwd, buildEnv);
       appInfo.buildProcess = buildChild;
       this.#wireChild(buildChild, appInfo, config);
-      buildChild.on('exit', (code) => {
+      buildChild.on('exit', (code: any) => {
         appInfo.buildProcess = undefined;
         if (code !== 0) {
           appInfo.status = 'error';
