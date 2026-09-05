@@ -309,7 +309,6 @@ export async function runAgentRuntime(runtime, options = {}) {
   await phase('listener', () => ListenerLoader.load(runtime));
 
   const loadTime = Date.now() - startTime;
-  runtimeConfig.enableWatching?.();
   await displayStartupSummary(runtime, loadTime, startTime, timings);
 
   runtime.emit('online', {

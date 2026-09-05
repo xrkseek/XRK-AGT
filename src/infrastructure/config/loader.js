@@ -172,7 +172,6 @@ class InitManager {
 
     this.setupEnvironment();
     await initDatabases();
-    runtimeConfig.enableWatching();
     await this.processManager.updateTitle();
     await this.startMonitoring();
 

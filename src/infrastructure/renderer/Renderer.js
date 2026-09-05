@@ -2,7 +2,6 @@ import template from 'art-template'
 import fs from 'node:fs'
 import os from 'node:os'
 import RuntimeUtil from '#utils/runtime-util.js'
-import { HotReloadBase } from '#utils/hot-reload-base.js'
 
 /**
  * 将绝对路径转为 file:// URL（Windows 下用正斜杠，避免浏览器无法加载）
@@ -23,7 +22,6 @@ export default class Renderer {
   type = 'image'
   dir = './trash/html'
   html = {}
-  _tplHotReloads = new Map()
 
   constructor(data) {
     this.id = data.id || this.id
@@ -55,8 +53,6 @@ export default class Renderer {
         RuntimeUtil.makeLog('error', `加载html错误：${tplFile}`, 'Renderer')
         return false
       }
-
-      this.watch(tplFile)
     }
 
     data.resPath = `./resources/`
@@ -68,27 +64,8 @@ export default class Renderer {
     return savePath;
   }
 
-  watch(tplFile) {
-    if (this._tplHotReloads.has(tplFile)) return
-
-    const hotReload = new HotReloadBase({ loggerName: 'Renderer' })
-    const resolved = HotReloadBase.resolveWatchPath(tplFile)
-    void hotReload.watch(true, {
-      files: [resolved],
-      shouldHandle: () => true,
-      invalidateCoreCacheOnAdd: false,
-      onChange: () => {
-        delete this.html[tplFile]
-        RuntimeUtil.makeLog('info', `[修改html模板] ${tplFile}`, 'Renderer')
-      }
-    }).then((ok) => {
-      if (ok) this._tplHotReloads.set(tplFile, hotReload)
-    })
-  }
-
   async stopAllWatchers() {
-    await Promise.all([...this._tplHotReloads.values()].map((hr) => hr.stop()));
-    this._tplHotReloads.clear();
+    // no-op: template hot-reload removed
   }
 
   async getMac() {

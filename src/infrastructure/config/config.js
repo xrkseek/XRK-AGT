@@ -3,22 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import paths from '#utils/paths.js';
 import RuntimeUtil from '#utils/runtime-util.js';
-import { HotReloadBase } from '#utils/hot-reload-base.js';
-import { normalizeError } from '#utils/normalize-error.js';
-import { isShuttingDown } from '#utils/runtime-globals.js';
 import { fileExistsSync, loadYamlFromCandidates, mergeYamlTexts, readYamlTextsBatch } from '#utils/config-yaml.js';
 import { copyFileIfMissingSync } from './config-seed.js';
 import { GLOBAL_CONFIGS, SERVER_CONFIGS, CHATBOT_FIXED_ROOT_KEYS } from './config-constants.js';
 import { seedGlobalConfigsSync } from './config-seed.js';
 
 const LOG_TAG = 'Config';
-/** @type {Promise<typeof import('#infrastructure/renderer/loader.js')['default']>|null} */
-let rendererLoaderPromise = null;
-
-function getRendererLoader() {
-  rendererLoaderPromise ??= import('#infrastructure/renderer/loader.js').then((m) => m.default);
-  return rendererLoaderPromise;
-}
 
 /**
  * 配置管理类
@@ -29,15 +19,8 @@ function getRendererLoader() {
 class RuntimeConfig {
   config = {};
   _port = null;
-  _configHotReload = null;
-  /** @type {Map<string, string>} key -> 文件路径 */
-  _hotReloads = new Map();
-  /** @type {Map<string, { name: string, key: string }>} 文件路径 -> 变更元数据 */
-  _watchHandlers = new Map();
   _renderer = null;
   _package = null;
-  _watchEnabled = false;
-  _deferredWatches = [];
   _destroying = false;
 
   PATHS = {
@@ -108,10 +91,9 @@ class RuntimeConfig {
     const defaultFile = path.join(this.PATHS.DEFAULT_CONFIG, `${name}.yaml`);
 
     try {
-      const { config, watchFile } = loadYamlFromCandidates([file, defaultFile], name);
-      // 必须先写入缓存再 watch：watch 内 makeLog 会读 runtimeConfig.agt，否则会递归 getGlobalConfig
+      const { config } = loadYamlFromCandidates([file, defaultFile], name);
+      // 必须先写入缓存：makeLog 会读 runtimeConfig.agt，否则会递归 getGlobalConfig
       this.config[key] = config;
-      if (watchFile) this.watch(watchFile, name, key);
       return this.config[key];
     } catch (error) {
       RuntimeUtil.makeLog('error', `[配置解析失败][${name}] ${error?.message || error}`, LOG_TAG, true);
@@ -148,11 +130,10 @@ class RuntimeConfig {
     }
 
     try {
-      let { config, watchFile } = loadYamlFromCandidates([file], name);
+      let { config } = loadYamlFromCandidates([file], name);
       if (name === 'ai-workflow') config = this.normalizeAiWorkflowConfigShape(config);
       if (name === 'chatbot') config = this.ensureChatbotDefaults(config, defaultFile);
       this.config[key] = config;
-      if (watchFile) this.watch(watchFile, name, key);
       return this.config[key];
     } catch (error) {
       RuntimeUtil.makeLog('error', `[服务器配置解析失败][${name}] ${error?.message || error}`, LOG_TAG, true);
@@ -270,7 +251,6 @@ class RuntimeConfig {
 
     this.config[key] = config;
     if (fileExistsSync(serverFile)) {
-      this.watch(serverFile, `renderer.${type}`, key);
       RuntimeUtil.makeLog('debug', `[渲染器] 已合并 ${type} 服务器配置: ${serverFile}`, LOG_TAG);
     } else {
       RuntimeUtil.makeLog('debug', `[渲染器] 无服务器覆盖: ${serverFile}`, LOG_TAG);
@@ -342,82 +322,6 @@ class RuntimeConfig {
     }
   }
 
-  watch(file, name, key) {
-    if (this._destroying || isShuttingDown() || this._hotReloads.has(key)) return;
-
-    if (!this._watchEnabled) {
-      this._deferredWatches.push({ file, name, key });
-      return;
-    }
-
-    this._attachWatch(file, name, key);
-  }
-
-  _attachWatch(file, name, key) {
-    const resolved = HotReloadBase.resolveWatchPath(file);
-    this._hotReloads.set(key, resolved);
-    this._watchHandlers.set(resolved, { name, key });
-
-    if (!this._configHotReload) {
-      const hotReload = new HotReloadBase({ loggerName: LOG_TAG });
-      this._configHotReload = hotReload;
-      void hotReload.watch(true, {
-        files: [resolved],
-        shouldHandle: () => true,
-        invalidateCoreCacheOnAdd: false,
-        onChange: (changedFile) => this._handleConfigChange(changedFile)
-      }).then((ok) => {
-        if (ok) return;
-        if (this._configHotReload === hotReload) {
-          this._configHotReload = null;
-        }
-        this._rollbackWatch(key, resolved);
-        RuntimeUtil.makeLog('warn', `[配置文件监视启动失败][${name}] ${resolved}`, LOG_TAG);
-      });
-      return;
-    }
-
-    if (!this._configHotReload.addTargets(resolved)) {
-      this._rollbackWatch(key, resolved);
-      RuntimeUtil.makeLog('warn', `[配置文件监视追加失败][${name}] ${resolved}`, LOG_TAG);
-    }
-  }
-
-  _rollbackWatch(key, resolved) {
-    this._hotReloads.delete(key);
-    this._watchHandlers.delete(resolved);
-  }
-
-  async _handleConfigChange(changedFile) {
-    const meta = this._watchHandlers.get(HotReloadBase.resolveWatchPath(changedFile));
-    if (!meta || this._destroying) return;
-
-    const { name, key } = meta;
-    try {
-      delete this.config[key];
-      if (key.startsWith('renderer.')) {
-        this._renderer = null;
-        const type = key.split('.').pop();
-        await getRendererLoader().then((loader) => loader.reloadRenderer(type));
-      }
-      RuntimeUtil.makeLog('mark', `[修改配置文件][${name}]`, LOG_TAG);
-      const handler = this[`change_${name}`];
-      if (handler) await handler();
-    } catch (err) {
-      const error = normalizeError(err);
-      RuntimeUtil.makeLog('error', `[配置热更新失败][${name}] ${error.message}`, LOG_TAG, error);
-    }
-  }
-
-  enableWatching() {
-    if (this._watchEnabled || this._destroying || isShuttingDown()) return;
-    this._watchEnabled = true;
-    const pending = this._deferredWatches.splice(0);
-    for (const { file, name, key } of pending) {
-      this.watch(file, name, key);
-    }
-  }
-
   async change_agt() {
     try {
       const log = await import('#infrastructure/log.js');
@@ -430,11 +334,6 @@ class RuntimeConfig {
   async destroy() {
     if (this._destroying) return;
     this._destroying = true;
-    this._deferredWatches.length = 0;
-    await this._configHotReload?.stop().catch(() => {});
-    this._configHotReload = null;
-    this._hotReloads.clear();
-    this._watchHandlers.clear();
     this.config = {};
     this._renderer = null;
   }
