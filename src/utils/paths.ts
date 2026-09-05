@@ -38,12 +38,12 @@ const _baseDirs = [
   _resources,
   _trash,
   path.join(_trash, 'screenshot'),
-  path.join(_trash, 'html')
+  path.join(_trash, 'html'),
 ];
 
-let _coreDirsCache = null;
-const _coreSubDirsCache = new Map();
-let _warmupPromise = null;
+let _coreDirsCache: string[] | null = null;
+const _coreSubDirsCache = new Map<string, string[]>();
+let _warmupPromise: Promise<void> | null = null;
 
 const DEFAULT_LOADER_SUBDIRS = [
   'plugin',
@@ -51,8 +51,8 @@ const DEFAULT_LOADER_SUBDIRS = [
   'commonconfig',
   'workflow',
   'tasker',
-  'events'
-];
+  'events',
+] as const;
 
 /** 子服 apis/<group>/core/ 与主仓 core 同结构，主服 Loader 一并扫描 */
 const SUBSERVER_PLUGIN_CORE_SUBDIRS = [
@@ -61,19 +61,19 @@ const SUBSERVER_PLUGIN_CORE_SUBDIRS = [
   'commonconfig',
   'workflow',
   'tasker',
-  'events'
-];
+  'events',
+] as const;
 
-function assertDistCoreReady() {
-  // 同步探测一次即可；缺失时给出明确构建提示
-  return fs.access(_core).catch(() => {
-    throw new Error(
-      `未找到编译后的 Core 目录: ${_core}\n请先运行: pnpm build`,
-    );
-  });
+function assertDistCoreReady(): Promise<void> {
+  return fs.access(_core).then(
+    () => undefined,
+    () => {
+      throw new Error(`未找到编译后的 Core 目录: ${_core}\n请先运行: pnpm build`);
+    },
+  );
 }
 
-function invalidateCoreCache() {
+function invalidateCoreCache(): void {
   _coreDirsCache = null;
   _coreSubDirsCache.clear();
   _warmupPromise = null;
@@ -82,7 +82,7 @@ function invalidateCoreCache() {
 /**
  * 列举 Core 名（以源码 `core/` 为准，含仅有 www 的产品），返回 `dist/core/<名>` 路径供 Loader 使用。
  */
-async function listAllCoreDirs() {
+async function listAllCoreDirs(): Promise<string[]> {
   await assertDistCoreReady();
   const entries = await fs.readdir(_coreSource, { withFileTypes: true });
   return entries
@@ -91,27 +91,28 @@ async function listAllCoreDirs() {
     .sort();
 }
 
-async function getCoreDirs() {
+async function getCoreDirs(): Promise<string[]> {
   if (_coreDirsCache) return _coreDirsCache;
   _coreDirsCache = await listAllCoreDirs();
   return _coreDirsCache;
 }
 
-async function getCoreSubDirs(subDir) {
+async function getCoreSubDirs(subDir: string): Promise<string[]> {
   if (!_coreSubDirsCache.has(subDir)) {
     await warmupCoreLayout([subDir]);
   }
-  return _coreSubDirsCache.get(subDir);
+  return _coreSubDirsCache.get(subDir) ?? [];
 }
 
-async function warmupCoreLayout(subDirNames = DEFAULT_LOADER_SUBDIRS) {
+async function warmupCoreLayout(
+  subDirNames: readonly string[] = DEFAULT_LOADER_SUBDIRS,
+): Promise<void> {
   const pending = subDirNames.filter((name) => !_coreSubDirsCache.has(name));
   if (pending.length === 0) return;
 
   if (!_warmupPromise) {
     _warmupPromise = (async () => {
       await assertDistCoreReady();
-      // Core 全量列表与 Loader 子目录扫描解耦：先保证 getCoreDirs 完整
       if (!_coreDirsCache) {
         _coreDirsCache = await listAllCoreDirs();
       }
@@ -119,8 +120,8 @@ async function warmupCoreLayout(subDirNames = DEFAULT_LOADER_SUBDIRS) {
       const discovered = await discoverAllCoreSubDirs(
         _root,
         _core,
-        DEFAULT_LOADER_SUBDIRS,
-        SUBSERVER_PLUGIN_CORE_SUBDIRS
+        [...DEFAULT_LOADER_SUBDIRS],
+        [...SUBSERVER_PLUGIN_CORE_SUBDIRS],
       );
 
       for (const name of DEFAULT_LOADER_SUBDIRS) {
@@ -138,7 +139,7 @@ async function warmupCoreLayout(subDirNames = DEFAULT_LOADER_SUBDIRS) {
   }
 }
 
-export default {
+const paths = {
   root: _root,
   dist: _dist,
   src: _src,
@@ -164,5 +165,8 @@ export default {
 
   async ensureBaseDirs() {
     await Promise.all(_baseDirs.map((dir) => fs.mkdir(dir, { recursive: true })));
-  }
+  },
 };
+
+export type Paths = typeof paths;
+export default paths;

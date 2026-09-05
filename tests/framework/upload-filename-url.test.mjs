@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { decodeMulterFilename } from '../../src/utils/multipart-filename.js';
-import { resolveClientBaseUrl } from '../../src/utils/client-base-url.js';
+import { resolveClientBaseUrl } from '#utils/client-base-url.js';
 
 describe('decodeMulterFilename', () => {
   it('纠正 UTF-8 被按 Latin-1 误读的中文名', () => {

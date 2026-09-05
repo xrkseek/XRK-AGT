@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { setRuntimeGlobal, getRuntimeGlobal } from '../../src/utils/runtime-globals.js';
+import { setRuntimeGlobal, getRuntimeGlobal } from '#utils/runtime-globals.js';
 
 export async function bootstrapTestEnv() {
   process.env.XRK_TEST = '1';

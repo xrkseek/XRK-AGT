@@ -4,7 +4,7 @@ import {
   classifyModuleImportError,
   extractMissingPackageName,
   isMissingPackageError
-} from '../../src/utils/module-import-error.js';
+} from '#utils/module-import-error.js';
 import * as database from '../../src/infrastructure/database/index.js';
 
 describe('module-import-error 分类', () => {

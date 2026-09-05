@@ -7,7 +7,7 @@ import {
   moduleFileKey,
   preferSourceModules,
   stripModuleExt,
-} from '../../src/utils/module-ext.ts';
+} from '#utils/module-ext.js';
 
 describe('module-ext', () => {
   it('preferSourceModules keeps .ts over .js for same stem', () => {

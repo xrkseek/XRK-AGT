@@ -14,7 +14,7 @@ import {
   projectAgentsAbs,
   projectAgentsRel,
 } from '../../src/utils/agent-workspace-paths.js';
-import paths from '../../src/utils/paths.js';
+import paths from '#utils/paths.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 

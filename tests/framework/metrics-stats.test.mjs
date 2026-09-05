@@ -10,7 +10,7 @@ import {
   LatencyHistogram,
   evaluateSlo
 } from '../../src/utils/metrics-stats.js';
-import { mulberry32, exponentialDelayMs } from '../../src/utils/prng.js';
+import { mulberry32, exponentialDelayMs } from '#utils/prng.js';
 
 describe('percentileR7 (Hyndman–Fan)', () => {
   it('空/单点/端点', () => {

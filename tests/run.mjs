@@ -102,6 +102,14 @@ if (missing.length) {
   process.exit(2);
 }
 
+/** `#` imports 指向 dist；无产物时先构建 */
+const distMarker = path.join(root, 'dist', 'src', 'utils', 'paths.js');
+if (!fs.existsSync(distMarker)) {
+  console.log('[tests] dist 缺失，运行 pnpm build…');
+  const build = spawnSync('pnpm', ['build'], { cwd: root, stdio: 'inherit', shell: true });
+  if ((build.status ?? 1) !== 0) process.exit(build.status ?? 1);
+}
+
 const testArgs = [
   '--experimental-strip-types',
   '--test',
