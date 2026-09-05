@@ -1,4 +1,3 @@
-// @ts-nocheck
 import pino from 'pino'
 import chalk from 'chalk'
 import runtimeConfig from './config/config.js'
@@ -6,6 +5,7 @@ import path from 'node:path'
 import util from 'node:util'
 import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
+// @ts-expect-error node-schedule 无官方类型
 import schedule from 'node-schedule'
 import { createStream } from 'rotating-file-stream'
 import paths from '#utils/paths.js'
@@ -71,7 +71,7 @@ const LOG_STYLES = {
  * @returns {Object} 全局 logger 对象
  */
 export default function setLog() {
-  if (getRuntimeGlobal('logger')?.__xrkSetLogDone) {
+  if ((getRuntimeGlobal('logger') as any)?.__xrkSetLogDone) {
     return getRuntimeGlobal('logger');
   }
 
@@ -79,8 +79,8 @@ export default function setLog() {
 
   const logDir = paths.logs || path.join(process.cwd(), 'logs')
   const logCfg = runtimeConfig.agt?.logging || {}
-  const selectedScheme = COLOR_SCHEMES[logCfg.color] || COLOR_SCHEMES.default
-  const selectedTimestampColors = TIMESTAMP_SCHEMES[logCfg.color] || TIMESTAMP_SCHEMES.default
+  const selectedScheme = (COLOR_SCHEMES as any)[logCfg.color] || COLOR_SCHEMES.default
+  const selectedTimestampColors = (TIMESTAMP_SCHEMES as any)[logCfg.color] || TIMESTAMP_SCHEMES.default
 
   const fileStream = createRotatingStream(logDir, LOGGER_CONFIG.MAIN_LOG_PREFIX, logCfg.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS)
   const traceStream = createRotatingStream(logDir, LOGGER_CONFIG.TRACE_LOG_PREFIX, logCfg.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS)
@@ -90,7 +90,7 @@ export default function setLog() {
       level: 'trace',
       timestamp: () => `,"time":"${new Date().toISOString()}"`,
       formatters: {
-        level: (label) => ({ level: label })
+        level: (label: any) => ({ level: label })
       }
     },
     pino.multistream([
@@ -100,12 +100,12 @@ export default function setLog() {
   )
 
   const timers = new Map()
-  let cleanupJob = null
+  let cleanupJob: any = null
 
-  const canLog = (level) => {
+  const canLog = (level: any) => {
     const configLevel = runtimeConfig.agt?.logging?.level || 'info'
-    const targetLevel = LOG_STYLES[level]?.level || 30
-    const configLevelValue = LOG_STYLES[configLevel]?.level || 30
+    const targetLevel = (LOG_STYLES as any)[level]?.level || 30
+    const configLevelValue = (LOG_STYLES as any)[configLevel]?.level || 30
     return targetLevel >= configLevelValue
   }
 
@@ -115,7 +115,7 @@ export default function setLog() {
    * @param {Array<string>} colors - 颜色数组
    * @returns {string} 渐变色文本
    */
-  function createGradientText(text, colors = selectedScheme) {
+  function createGradientText(text: any, colors: any = selectedScheme) {
     if (!text || text.length === 0) return text
     let result = ''
     const step = Math.max(1, Math.ceil(text.length / colors.length))
@@ -157,11 +157,11 @@ export default function setLog() {
    * @param {string} level - 日志级别
    * @returns {string} 完整的日志前缀
    */
-  function createLogPrefix(level) {
-    const style = LOG_STYLES[level] || LOG_STYLES.info
+  function createLogPrefix(level: any) {
+    const style = (LOG_STYLES as any)[level] || LOG_STYLES.info
     const header = getLogHeader()
     const timestamp = formatTimestamp()
-    const symbol = chalk[style.color](style.symbol)
+    const symbol = (chalk as any)[style.color](style.symbol)
     return `${header} ${timestamp} ${symbol} `
   }
 
@@ -170,7 +170,7 @@ export default function setLog() {
    * @param {string} str - 原始字符串
    * @returns {string} 清理后的字符串
    */
-  function stripColors(str) {
+  function stripColors(str: any) {
     if (typeof str !== 'string') return str
     return str
       .replace(/\x1b\[[0-9;]*m/g, '')
@@ -185,7 +185,7 @@ export default function setLog() {
    * @param {string} str - 原始字符串
    * @returns {string} UTF-8 编码的字符串
    */
-  function ensureUTF8(str) {
+  function ensureUTF8(str: any) {
     if (typeof str !== 'string') return str
     try {
       return Buffer.from(str, 'utf8').toString('utf8')
@@ -199,7 +199,7 @@ export default function setLog() {
    * @param {number} duration - 持续时间（毫秒）
    * @returns {string} 格式化的时间字符串
    */
-  function formatDuration(duration) {
+  function formatDuration(duration: any) {
     if (duration < 1000) return `${duration}ms`
     if (duration < 60000) return `${(duration / 1000).toFixed(3)}s`
     const minutes = Math.floor(duration / 60000)
@@ -212,12 +212,12 @@ export default function setLog() {
    * @param {string} level - 日志级别
    * @returns {Function} 日志方法
    */
-  function createLogMethod(level) {
-    return function (...args) {
+  function createLogMethod(level: any) {
+    return function (...args: any) {
       const prefix = createLogPrefix(level)
       const message = args
-        .map((arg) => {
-          if (typeof arg === 'object' && !Error.isError(arg)) {
+        .map((arg: any) => {
+          if (typeof arg === 'object' && !(Error as any).isError(arg)) {
             return util.inspect(arg, { colors: false, depth: null, maxArrayLength: null })
           }
           return ensureUTF8(String(arg))
@@ -232,16 +232,16 @@ export default function setLog() {
       const fileMessage = stripColors(message)
       const pinoLevel = level === 'mark' || level === 'success' || level === 'tip' || level === 'done' ? 'info' : level
 
-      if (Error.isError(args[0])) {
+      if ((Error as any).isError(args[0])) {
         const error = args[0]
-        pinoLogger[pinoLevel]({ err: error }, fileMessage)
+        ;(pinoLogger as any)[pinoLevel]({ err: error }, fileMessage)
       } else {
-        pinoLogger[pinoLevel](fileMessage)
+        ;(pinoLogger as any)[pinoLevel](fileMessage)
       }
     }
   }
 
-  const logger = {
+  const logger: any = {
     trace: createLogMethod('trace'),
     debug: createLogMethod('debug'),
     info: createLogMethod('info'),
@@ -251,26 +251,26 @@ export default function setLog() {
     mark: createLogMethod('mark'),
 
     chalk,
-    red: (text) => chalk.red(text),
-    green: (text) => chalk.green(text),
-    yellow: (text) => chalk.yellow(text),
-    blue: (text) => chalk.blue(text),
-    magenta: (text) => chalk.magenta(text),
-    cyan: (text) => chalk.cyan(text),
-    gray: (text) => chalk.gray(text),
-    white: (text) => chalk.white(text),
+    red: (text: any) => chalk.red(text),
+    green: (text: any) => chalk.green(text),
+    yellow: (text: any) => chalk.yellow(text),
+    blue: (text: any) => chalk.blue(text),
+    magenta: (text: any) => chalk.magenta(text),
+    cyan: (text: any) => chalk.cyan(text),
+    gray: (text: any) => chalk.gray(text),
+    white: (text: any) => chalk.white(text),
 
-    xrkagtGradient: (text) => createGradientText(text, selectedScheme),
-    rainbow: (text) => {
+    xrkagtGradient: (text: any) => createGradientText(text, selectedScheme),
+    rainbow: (text: any) => {
       const rainbowColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#9400D3']
       return createGradientText(text, rainbowColors)
     },
     gradient: createGradientText,
 
-    success: function (...args) {
+    success: function (...args: any) {
       const prefix = createLogPrefix('success')
       const message = args
-        .map((arg) => (typeof arg === 'string' ? ensureUTF8(arg) : util.inspect(arg, { colors: false })))
+        .map((arg: any) => (typeof arg === 'string' ? ensureUTF8(arg) : util.inspect(arg, { colors: false })))
         .join(' ')
 
       const consoleMessage = prefix + chalk.green(message)
@@ -281,14 +281,14 @@ export default function setLog() {
       pinoLogger.info(stripColors(message))
     },
 
-    warning: function (...args) {
+    warning: function (...args: any) {
       this.warn(...args)
     },
 
-    tip: function (...args) {
+    tip: function (...args: any) {
       const prefix = createLogPrefix('tip')
       const message = args
-        .map((arg) => (typeof arg === 'string' ? ensureUTF8(arg) : util.inspect(arg, { colors: false })))
+        .map((arg: any) => (typeof arg === 'string' ? ensureUTF8(arg) : util.inspect(arg, { colors: false })))
         .join(' ')
 
       const consoleMessage = prefix + chalk.yellow(message)
@@ -303,7 +303,7 @@ export default function setLog() {
      * 计时器开始
      * @param {string} label - 计时器标签
      */
-    time: function (label = 'default') {
+    time: function (label: any = 'default') {
       timers.set(label, Date.now())
     },
 
@@ -311,7 +311,7 @@ export default function setLog() {
      * 计时器结束
      * @param {string} label - 计时器标签
      */
-    timeEnd: function (label = 'default') {
+    timeEnd: function (label: any = 'default') {
       if (timers.has(label)) {
         const duration = Date.now() - timers.get(label)
         const timeStr = formatDuration(duration)
@@ -333,7 +333,7 @@ export default function setLog() {
      * @param {string} text - 完成消息
      * @param {string} label - 计时器标签
      */
-    done: function (text, label) {
+    done: function (text: any, label: any) {
       const prefix = createLogPrefix('done')
       let message = ensureUTF8(text || 'Operation completed')
 
@@ -358,15 +358,15 @@ export default function setLog() {
      * @param {string} text - 标题文本
      * @param {string} color - 颜色
      */
-    title: function (text, color = 'yellow') {
+    title: function (text: any, color: any = 'yellow') {
       const prefix = createLogPrefix('info')
       const processedText = ensureUTF8(text)
       const line = '═'.repeat(processedText.length + 10)
 
       if (canLog('info')) {
-        console.log(prefix + chalk[color](line))
-        console.log(prefix + chalk[color](`╔ ${processedText} ╗`))
-        console.log(prefix + chalk[color](line))
+        console.log(prefix + (chalk as any)[color](line))
+        console.log(prefix + (chalk as any)[color](`╔ ${processedText} ╗`))
+        console.log(prefix + (chalk as any)[color](line))
       }
 
       pinoLogger.info(`=== ${processedText} ===`)
@@ -377,12 +377,12 @@ export default function setLog() {
      * @param {string} text - 子标题文本
      * @param {string} color - 颜色
      */
-    subtitle: function (text, color = 'cyan') {
+    subtitle: function (text: any, color: any = 'cyan') {
       const prefix = createLogPrefix('info')
       const processedText = ensureUTF8(text)
 
       if (canLog('info')) {
-        console.log(prefix + chalk[color](`┌─── ${processedText} ───┐`))
+        console.log(prefix + (chalk as any)[color](`┌─── ${processedText} ───┐`))
       }
 
       pinoLogger.info(`--- ${processedText} ---`)
@@ -394,11 +394,11 @@ export default function setLog() {
      * @param {number} length - 长度
      * @param {string} color - 颜色
      */
-    line: function (char = '─', length = 35, color = 'gray') {
+    line: function (char: any = '─', length: any = 35, color: any = 'gray') {
       const prefix = createLogPrefix('info')
 
       if (canLog('info')) {
-        console.log(prefix + chalk[color](char.repeat(length)))
+        console.log(prefix + (chalk as any)[color](char.repeat(length)))
       }
 
       pinoLogger.info(char.repeat(length))
@@ -409,7 +409,7 @@ export default function setLog() {
      * @param {string} text - 方框文本
      * @param {string} color - 颜色
      */
-    box: function (text, color = 'blue') {
+    box: function (text: any, color: any = 'blue') {
       const prefix = createLogPrefix('info')
       const processedText = ensureUTF8(text)
       const padding = 2
@@ -417,9 +417,9 @@ export default function setLog() {
       const line = '─'.repeat(paddedText.length)
 
       if (canLog('info')) {
-        console.log(prefix + chalk[color](`┌${line}┐`))
-        console.log(prefix + chalk[color](`│${paddedText}│`))
-        console.log(prefix + chalk[color](`└${line}┘`))
+        console.log(prefix + (chalk as any)[color](`┌${line}┐`))
+        console.log(prefix + (chalk as any)[color](`│${paddedText}│`))
+        console.log(prefix + (chalk as any)[color](`└${line}┘`))
       }
 
       pinoLogger.info(`Box: ${processedText}`)
@@ -430,7 +430,7 @@ export default function setLog() {
      * @param {Object} obj - JSON 对象
      * @param {string} title - 标题
      */
-    json: function (obj, title) {
+    json: function (obj: any, title: any) {
       const prefix = createLogPrefix('info')
 
       if (title) {
@@ -451,7 +451,7 @@ export default function setLog() {
         pinoLogger.info({ data: obj }, title ? `JSON Data [${title}]` : 'JSON Data')
       } catch (err) {
         if (canLog('info')) {
-          console.log(prefix + `Cannot serialize object: ${err.message}`)
+          console.log(prefix + `Cannot serialize object: ${(err as any).message}`)
           console.log(prefix + util.inspect(obj, { depth: null, colors: true }))
         }
         pinoLogger.error({ err }, 'JSON serialization failed')
@@ -464,7 +464,7 @@ export default function setLog() {
      * @param {number} total - 总数
      * @param {number} length - 进度条长度
      */
-    progress: function (current, total, length = 30) {
+    progress: function (current: any, total: any, length: any = 30) {
       const prefix = createLogPrefix('info')
       const percent = Math.min(Math.round((current / total) * 100), 100)
       const filledLength = Math.round((current / total) * length)
@@ -484,7 +484,7 @@ export default function setLog() {
      * 重要日志
      * @param {string} text - 重要消息
      */
-    important: function (text) {
+    important: function (text: any) {
       const prefix = createLogPrefix('warn')
       const processedText = ensureUTF8(text)
 
@@ -499,7 +499,7 @@ export default function setLog() {
      * 高亮日志
      * @param {string} text - 高亮文本
      */
-    highlight: function (text) {
+    highlight: function (text: any) {
       const prefix = createLogPrefix('info')
       const processedText = ensureUTF8(text)
 
@@ -514,7 +514,7 @@ export default function setLog() {
      * 失败日志
      * @param {string} text - 失败消息
      */
-    fail: function (text) {
+    fail: function (text: any) {
       const prefix = createLogPrefix('error')
       const processedText = ensureUTF8(text)
 
@@ -529,7 +529,7 @@ export default function setLog() {
      * 系统日志
      * @param {string} text - 系统消息
      */
-    system: function (text) {
+    system: function (text: any) {
       const prefix = createLogPrefix('info')
       const processedText = ensureUTF8(text)
 
@@ -545,7 +545,7 @@ export default function setLog() {
      * @param {Array} items - 列表项
      * @param {string} title - 标题
      */
-    list: function (items, title) {
+    list: function (items: any, title: any) {
       const prefix = createLogPrefix('info')
 
       if (title) {
@@ -556,7 +556,7 @@ export default function setLog() {
         pinoLogger.info(`List: ${processedTitle}`)
       }
 
-      items.forEach((item, index) => {
+      items.forEach((item: any, index: any) => {
         const processedItem = ensureUTF8(item)
         const bullet = chalk.gray(`  ${index + 1}.`)
         if (canLog('info')) {
@@ -572,7 +572,7 @@ export default function setLog() {
      * @param {string} status - 状态
      * @param {string} statusColor - 状态颜色
      */
-    status: function (message, status, statusColor = 'green') {
+    status: function (message: any, status: any, statusColor: any = 'green') {
       const prefix = createLogPrefix('info')
       const statusIcons = {
         success: '✓',
@@ -586,9 +586,9 @@ export default function setLog() {
         blocked: '⛔',
         skipped: '↷'
       }
-      const icon = statusIcons[status.toLowerCase()] || '•'
+      const icon = (statusIcons as any)[status.toLowerCase()] || '•'
       const processedMessage = ensureUTF8(message)
-      const statusMessage = chalk[statusColor](`${icon} [${status.toUpperCase()}] `) + processedMessage
+      const statusMessage = (chalk as any)[statusColor](`${icon} [${status.toUpperCase()}] `) + processedMessage
 
       if (canLog('info')) {
         console.log(prefix + statusMessage)
@@ -603,11 +603,11 @@ export default function setLog() {
      * @param {string} tag - 标签
      * @param {string} tagColor - 标签颜色
      */
-    tag: function (text, tag, tagColor = 'blue') {
+    tag: function (text: any, tag: any, tagColor: any = 'blue') {
       const prefix = createLogPrefix('info')
       const processedText = ensureUTF8(text)
       const processedTag = ensureUTF8(tag)
-      const taggedMessage = chalk[tagColor](`[${processedTag}] `) + processedText
+      const taggedMessage = (chalk as any)[tagColor](`[${processedTag}] `) + processedText
 
       if (canLog('info')) {
         console.log(prefix + taggedMessage)
@@ -621,7 +621,7 @@ export default function setLog() {
      * @param {Object} data - 表格数据
      * @param {string} title - 标题
      */
-    table: function (data, title) {
+    table: function (data: any, title: any) {
       const prefix = createLogPrefix('info')
 
       if (title) {
@@ -646,7 +646,7 @@ export default function setLog() {
      * @param {string} char - 分隔符字符
      * @param {number} length - 长度
      */
-    gradientLine: function (char = '─', length = 50) {
+    gradientLine: function (char: any = '─', length: any = 50) {
       const prefix = createLogPrefix('info')
       const gradientLineText = this.gradient(char.repeat(length))
 
@@ -687,7 +687,7 @@ export default function setLog() {
      * @param {boolean} includeTrace - 是否包含 trace 日志
      * @returns {Promise<number>} 删除的文件数
      */
-    cleanLogs: async function (days, includeTrace = true) {
+    cleanLogs: async function (days: any, includeTrace: any = true) {
       return await cleanExpiredLogs(this, days, includeTrace)
     },
 
@@ -702,7 +702,7 @@ export default function setLog() {
           cleanupJob = null
         }
 
-        await new Promise((resolve) => {
+        await new Promise<void>((resolve) => {
           fileStream.end(() => {
             traceStream.end(() => {
               resolve()
@@ -754,9 +754,9 @@ export default function setLog() {
  * @param {number} maxDays - 最大保留天数
  * @returns {WritableStream} 轮转流
  */
-function createRotatingStream(logDir, prefix, maxDays) {
+function createRotatingStream(logDir: any, prefix: any, maxDays: any) {
   return createStream(
-    (time) => {
+    (time: any) => {
       if (!time) return `${prefix}.log`
       const date = (time instanceof Date ? time : new Date(time)).toISOString().split('T')[0]
       return `${prefix}.${date}.log`
@@ -777,7 +777,7 @@ function createRotatingStream(logDir, prefix, maxDays) {
  * @param {boolean} [includeTrace=true] - 是否包含 trace 日志
  * @returns {Promise<number>} 删除的文件数
  */
-async function cleanExpiredLogs(logger, customDays, includeTrace = true) {
+async function cleanExpiredLogs(logger: any, customDays?: any, includeTrace: any = true) {
   const logDir = paths.logs || path.join(process.cwd(), 'logs')
   const mainLogMaxAge = customDays || runtimeConfig.agt?.logging?.maxDays || LOGGER_CONFIG.DEFAULT_MAX_DAYS
   const traceLogMaxAge = runtimeConfig.agt?.logging?.traceDays || LOGGER_CONFIG.DEFAULT_TRACE_DAYS
