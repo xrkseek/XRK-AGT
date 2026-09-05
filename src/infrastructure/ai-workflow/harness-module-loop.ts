@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Embed @xrkseek/harness agent loop for AiWorkflow.callAI and /v1+MCP workflows.
  * AGT keeps chat.js / MCPServer; harness owns continueTurn, compaction, retries, adapters.
@@ -14,7 +13,7 @@ import {
   attachHarnessSessionListener,
 } from './harness-session-registry.js';
 
-function flattenContent(content) {
+function flattenContent(content: any) {
   if (content == null) return '';
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -36,7 +35,7 @@ function flattenContent(content) {
  * OpenAI multimodal parts -> harness MessageContent + resolveImage (SDK attachment store).
  * Text-only stays string; data-URL images become ContentBlock image refs.
  */
-export async function buildHarnessUserTurn(harness, rawContent) {
+export async function buildHarnessUserTurn(harness: any, rawContent: any) {
   const text = flattenContent(rawContent);
   if (!Array.isArray(rawContent)) {
     return { text, userContent: text };
@@ -49,8 +48,8 @@ export async function buildHarnessUserTurn(harness, rawContent) {
   }
 
   const store = harness.createMemoryAttachmentStore();
-  const blocks = [];
-  const pending = [];
+  const blocks: any[] = [];
+  const pending: any[] = [];
 
   for (const p of rawContent) {
     if (typeof p === 'string') {
@@ -76,7 +75,7 @@ export async function buildHarnessUserTurn(harness, rawContent) {
   }
 
   const refs = pending.length
-    ? await store.saveImages(pending.map((x) => ({ data: x.data, mediaType: x.mediaType })))
+    ? await store.saveImages(pending.map((x: any) => ({ data: x.data, mediaType: x.mediaType })))
     : [];
   const out = [];
   for (const b of blocks) {
@@ -87,7 +86,7 @@ export async function buildHarnessUserTurn(harness, rawContent) {
     }
   }
   const userContent = out.length ? out : text;
-  const resolveImage = async (attachmentId) => {
+  const resolveImage = async (attachmentId: any) => {
     const stored = await store.readImage(attachmentId);
     return {
       mediaType: stored.ref.mediaType,
@@ -108,7 +107,7 @@ export async function buildHarnessUserTurn(harness, rawContent) {
  * Session already holds prior turns — keep standing system + latest user only.
  * Avoids re-trim / re-seed of OpenAI history on reused sessionKey.
  */
-export function slimMessagesForExistingSession(messages) {
+export function slimMessagesForExistingSession(messages: any) {
   const list = Array.isArray(messages) ? messages : [];
   const systems = [];
   let lastUser = null;
@@ -123,7 +122,7 @@ export function slimMessagesForExistingSession(messages) {
 /**
  * Split AGT OpenAI-style messages -> system + prior turns + latest user.
  */
-export function splitOutboundMessages(messages) {
+export function splitOutboundMessages(messages: any) {
   const list = Array.isArray(messages) ? messages : [];
   const systems = [];
   const history = [];
@@ -164,14 +163,14 @@ export function splitOutboundMessages(messages) {
   };
 }
 
-function parseToolArguments(raw) {
+function parseToolArguments(raw: any) {
   const parsed = parseToolCallArguments(raw);
   if (parsed.ok) return parsed.args;
   return parsed.args && typeof parsed.args === 'object' ? parsed.args : { _raw: String(raw) };
 }
 
 /** OpenAI-style assistant.tool_calls -> harness ToolCall[]. */
-export function extractAssistantToolCalls(message) {
+export function extractAssistantToolCalls(message: any) {
   const raw = message?.tool_calls ?? message?.toolCalls;
   if (!Array.isArray(raw) || raw.length === 0) return undefined;
   return raw.map((tc, i) => {
@@ -190,7 +189,7 @@ export function extractAssistantToolCalls(message) {
  * Seed OpenAI-style history into harness session events so deriveMessages
  * rebuilds prior tool turns (assistant/message + tool/call + tool/result).
  */
-export function seedSessionFromHistory(store, sessionId, history) {
+export function seedSessionFromHistory(store: any, sessionId: any, history: any) {
   let turn = 0;
   let lastTurnId = 'seed_0';
   for (const m of history) {
@@ -262,7 +261,7 @@ export function seedSessionFromHistory(store, sessionId, history) {
 }
 
 /** Name heuristic: read-ish MCP tools may settle in parallel. */
-export function isLikelyReadOnlyTool(name) {
+export function isLikelyReadOnlyTool(name: any) {
   const n = String(name || '').toLowerCase();
   if (!n) return false;
   if (/(^|[._-])(write|create|update|delete|remove|send|reply|exec|run|put|post|patch|mutate)([._-]|$)/.test(n)) {
@@ -271,9 +270,9 @@ export function isLikelyReadOnlyTool(name) {
   return /(^|[._-])(read|get|list|search|query|find|fetch|stat|info|describe)([._-]|$)/.test(n);
 }
 
-function registerMcpTools(workflows, registry) {
+function registerMcpTools(workflows: any, registry: any) {
   const openAiTools = MCPToolAdapter.convertMCPToolsToOpenAI({ workflows });
-  for (const t of openAiTools) {
+  for (const t of openAiTools as any[]) {
     const name = t?.function?.name;
     if (!name) continue;
     const description = t.function.description || '';
@@ -285,7 +284,7 @@ function registerMcpTools(workflows, registry) {
       description,
       parameters,
       ...(readOnly ? { isConcurrencySafe: () => true } : {}),
-      async execute(args) {
+      async execute(args: any) {
         const rawArgs = typeof args === 'string' ? args : JSON.stringify(args ?? {});
         const rows = await MCPToolAdapter.handleToolCalls(
           [{
@@ -310,7 +309,7 @@ function registerMcpTools(workflows, registry) {
 }
 
 /** Map AGT effort -> harness DeepSeek effort identifiers. */
-export function mapHarnessReasoningEffort(value) {
+export function mapHarnessReasoningEffort(value: any) {
   if (value === undefined || value === null || value === '') return undefined;
   const v = String(value).trim().toLowerCase();
   if (v === 'off' || v === 'none' || v === 'disabled') return 'off';
@@ -320,7 +319,7 @@ export function mapHarnessReasoningEffort(value) {
   return undefined;
 }
 
-function resolveDeepSeekThinkingDefaults(config = {}) {
+function resolveDeepSeekThinkingDefaults(config: any = {}) {
   const rawType = config.thinkingType ?? config.thinking_type;
   const type = rawType == null || rawType === ''
     ? undefined
@@ -341,7 +340,7 @@ function resolveDeepSeekThinkingDefaults(config = {}) {
 }
 
 /** Attach peekRoute/ensureRoute so agent-loop can pass reasoningEffort into adapters. */
-export function withRouteReasoning(llm, reasoningEffort, model) {
+export function withRouteReasoning(llm: any, reasoningEffort: any, model: any) {
   if (!reasoningEffort || !llm) return llm;
   const basePeek = typeof llm.peekRoute === 'function' ? () => llm.peekRoute() : () => undefined;
   const baseEnsure = typeof llm.ensureRoute === 'function'
@@ -350,8 +349,8 @@ export function withRouteReasoning(llm, reasoningEffort, model) {
   return {
     id: llm.id,
     inputModalities: llm.inputModalities,
-    chat: (req) => llm.chat(req),
-    ...(typeof llm.stream === 'function' ? { stream: (req) => llm.stream(req) } : {}),
+    chat: (req: any) => llm.chat(req),
+    ...(typeof llm.stream === 'function' ? { stream: (req: any) => llm.stream(req) } : {}),
     peekRoute() {
       const prev = basePeek() || {};
       return { ...prev, reasoningEffort };
@@ -364,14 +363,14 @@ export function withRouteReasoning(llm, reasoningEffort, model) {
 }
 
 /** parallel_tool_calls -> createAgent toolSettle / maxParallelToolCalls. */
-export function resolveToolSettle(config = {}, apiConfig = {}) {
+export function resolveToolSettle(config: any = {}, apiConfig: any = {}) {
   const parallel = apiConfig.parallel_tool_calls
     ?? apiConfig.parallelToolCalls
     ?? config.parallel_tool_calls
     ?? config.parallelToolCalls;
   const maxRaw = apiConfig.maxParallelToolCalls ?? config.maxParallelToolCalls;
   const max = Number(maxRaw);
-  const out = {};
+  const out: any = {};
   if (parallel === false) out.toolSettle = 'serial';
   else if (parallel === true) out.toolSettle = 'parallel';
   if (Number.isFinite(max) && max > 0) {
@@ -382,7 +381,7 @@ export function resolveToolSettle(config = {}, apiConfig = {}) {
 }
 
 /** Map AGT provider config -> harness native adapter when possible. */
-export function createLlmFromConfig(harness, config, options = {}) {
+export function createLlmFromConfig(harness: any, config: any, options: any = {}) {
   const model = config.model || config.chatModel || '';
   const effort = mapHarnessReasoningEffort(
     config.reasoningEffort ?? config.reasoning_effort,
@@ -441,7 +440,7 @@ export function createLlmFromConfig(harness, config, options = {}) {
 }
 
 /** Provider contextWindow -> harness CompactionOptions (soft budget + auto summary). */
-export function resolveHarnessCompaction(config = {}) {
+export function resolveHarnessCompaction(config: any = {}) {
   const maxRequestTokens = resolveInputTokenBudget(config);
   if (!maxRequestTokens || maxRequestTokens < 800) return undefined;
   const keepTokens = Math.max(
@@ -456,12 +455,12 @@ export function resolveHarnessCompaction(config = {}) {
   };
 }
 
-export function resolveHarnessLlmRetry(config = {}, apiConfig = {}) {
+export function resolveHarnessLlmRetry(config: any = {}, apiConfig: any = {}) {
   const retry = apiConfig.retry ?? config.retry;
   if (retry === false || retry?.enabled === false) return false;
   if (!retry || typeof retry !== 'object') return undefined;
 
-  const out = {};
+  const out: any = {};
   // AGT maxAttempts = total tries including first; SDK maxRetries = retries after failure.
   if (retry.maxRetries != null) {
     const n = Number(retry.maxRetries);
@@ -492,7 +491,7 @@ export function resolveHarnessLlmRetry(config = {}, apiConfig = {}) {
 }
 
 /** AGT yaml retryOn -> harness retryableCodes. */
-function mapAgtRetryOnToCodes(retryOn) {
+function mapAgtRetryOnToCodes(retryOn: any) {
   const set = new Set();
   for (const raw of retryOn) {
     const v = String(raw || '').toLowerCase();
@@ -512,14 +511,14 @@ function mapAgtRetryOnToCodes(retryOn) {
  * Map AGT config -> createAgent `safety`.
  * `false` disables; object passes SessionSafetyOptions; omit -> SDK default.
  */
-export function resolveHarnessSafety(config = {}, apiConfig = {}) {
+export function resolveHarnessSafety(config: any = {}, apiConfig: any = {}) {
   const raw = apiConfig.safety
     ?? apiConfig.harnessSafety
     ?? config.safety
     ?? config.harnessSafety;
   if (raw === false) return false;
   if (!raw || typeof raw !== 'object') return undefined;
-  const out = {};
+  const out: any = {};
   if (raw.loopDetection === false) out.loopDetection = false;
   else if (raw.loopDetection && typeof raw.loopDetection === 'object') {
     out.loopDetection = raw.loopDetection;
@@ -529,7 +528,7 @@ export function resolveHarnessSafety(config = {}, apiConfig = {}) {
 }
 
 /** Denylist names from apiConfig / config (policy createPolicyToolCallGuard). */
-export function resolveDenyToolNames(config = {}, apiConfig = {}) {
+export function resolveDenyToolNames(config: any = {}, apiConfig: any = {}) {
   const raw = apiConfig.denyTools
     ?? apiConfig.denyToolNames
     ?? config.denyTools
@@ -539,7 +538,7 @@ export function resolveDenyToolNames(config = {}, apiConfig = {}) {
   return names.length ? names : undefined;
 }
 
-function resolveAbortSignal(config = {}, apiConfig = {}) {
+function resolveAbortSignal(config: any = {}, apiConfig: any = {}) {
   const outer = apiConfig.signal ?? config.signal ?? undefined;
   const timeoutMs = Number(apiConfig.timeout ?? config.timeout ?? config.timeoutMs);
   const parts = [];
@@ -562,7 +561,7 @@ function resolveAbortSignal(config = {}, apiConfig = {}) {
   return ac.signal;
 }
 
-function resolveTurnHooks(stream, config = {}, apiConfig = {}) {
+function resolveTurnHooks(stream: any, config: any = {}, apiConfig: any = {}) {
   const beforeUserMessage = apiConfig.beforeUserMessage
     ?? config.beforeUserMessage
     ?? (typeof stream?.harnessBeforeUserMessage === 'function'
@@ -581,7 +580,7 @@ function resolveTurnHooks(stream, config = {}, apiConfig = {}) {
   };
 }
 
-function isHarnessSafetyLimitError(err, harness) {
+function isHarnessSafetyLimitError(err: any, harness: any) {
   if (!err) return false;
   if (err.name === 'SessionSafetyLimitError') return true;
   if (harness?.SessionSafetyLimitError && err instanceof harness.SessionSafetyLimitError) {
@@ -590,7 +589,7 @@ function isHarnessSafetyLimitError(err, harness) {
   return false;
 }
 
-function isHarnessBusyError(err, harness) {
+function isHarnessBusyError(err: any, harness: any) {
   if (!err) return false;
   if (err.name === 'SessionBusyError') return true;
   if (harness?.SessionBusyError && err instanceof harness.SessionBusyError) return true;
@@ -601,7 +600,7 @@ function isHarnessBusyError(err, harness) {
  * Optional extension: register extra tools after MCP / client schema tools.
  * Prefer apiConfig.registerTools(registry, ctx); stream.registerHarnessTools as fallback.
  */
-function invokeRegisterToolsHook(registry, ctx) {
+function invokeRegisterToolsHook(registry: any, ctx: any) {
   const { apiConfig, stream } = ctx;
   const fn = apiConfig?.registerTools
     ?? (typeof stream?.registerHarnessTools === 'function'
@@ -617,12 +616,12 @@ function invokeRegisterToolsHook(registry, ctx) {
   return 0;
 }
 
-function hasDynamicToolHook(apiConfig = {}, stream = null) {
+function hasDynamicToolHook(apiConfig: any = {}, stream: any = null) {
   return typeof apiConfig.registerTools === 'function'
     || typeof stream?.registerHarnessTools === 'function';
 }
 
-function toolSurfaceFingerprint(workflows, clientTools) {
+function toolSurfaceFingerprint(workflows: any, clientTools: any) {
   const w = Array.isArray(workflows) ? [...workflows].map(String).sort() : [];
   const c = [];
   if (Array.isArray(clientTools)) {
@@ -638,9 +637,9 @@ function toolSurfaceFingerprint(workflows, clientTools) {
 const MAX_TOOL_SURFACES = 32;
 /** @type {Map<string, { fp: string, tools: object, pipeline: object, mcpCount: number, clientCount: number, hookCount: number }>} */
 const toolSurfaceBySession = new Map();
-const toolSurfaceOrder = [];
+const toolSurfaceOrder: any[] = [];
 
-function touchToolSurface(sessionId) {
+function touchToolSurface(sessionId: any) {
   const i = toolSurfaceOrder.indexOf(sessionId);
   if (i >= 0) toolSurfaceOrder.splice(i, 1);
   toolSurfaceOrder.push(sessionId);
@@ -671,7 +670,7 @@ function acquireToolSurface({
   apiConfig,
   stream,
   hookCtx,
-}) {
+}: any) {
   const dynamic = hasDynamicToolHook(apiConfig, stream);
   const fp = dynamic ? null : toolSurfaceFingerprint(workflows, clientTools);
   if (fp) {
@@ -719,7 +718,7 @@ function acquireToolSurface({
   };
 }
 
-function resolveMaxSteps(config = {}, apiConfig = {}, toolCount = 0) {
+function resolveMaxSteps(config: any = {}, apiConfig: any = {}, toolCount: any = 0) {
   const raw = config.maxToolRounds ?? apiConfig.maxToolRounds;
   const n = Number(raw);
   const configured = Number.isFinite(n) && n >= 1 ? Math.floor(n) : 7;
@@ -729,7 +728,7 @@ function resolveMaxSteps(config = {}, apiConfig = {}, toolCount = 0) {
 }
 
 /** @internal tests */
-export function __resolveMaxStepsForTests(config, apiConfig, toolCount) {
+export function __resolveMaxStepsForTests(config: any, apiConfig: any, toolCount: any) {
   return resolveMaxSteps(config, apiConfig, toolCount);
 }
 
@@ -738,7 +737,7 @@ export function __harnessToolSurfaceCacheSizeForTests() {
   return toolSurfaceBySession.size;
 }
 
-function attachPipelinePolicy(harness, pipeline, config, apiConfig) {
+function attachPipelinePolicy(harness: any, pipeline: any, config: any, apiConfig: any) {
   const denyNames = resolveDenyToolNames(config, apiConfig);
   if (denyNames?.length) {
     pipeline.onGuard(harness.createPolicyToolCallGuard(denyNames));
@@ -754,7 +753,7 @@ function attachPipelinePolicy(harness, pipeline, config, apiConfig) {
 }
 
 /** Sum provider usage samples from session assistant/message events. */
-export function foldUsageFromEvents(events) {
+export function foldUsageFromEvents(events: any) {
   let prompt = 0;
   let completion = 0;
   let seen = false;
@@ -777,7 +776,7 @@ export function foldUsageFromEvents(events) {
 }
 
 /** Last turn tool/call + tool/result → OpenAI-style mcp_tools (args + result). */
-export function foldMcpToolsFromEvents(events) {
+export function foldMcpToolsFromEvents(events: any) {
   const list = Array.isArray(events) ? events : [];
   let lastTurnId = null;
   for (let i = list.length - 1; i >= 0; i -= 1) {
@@ -818,7 +817,7 @@ export function foldMcpToolsFromEvents(events) {
  * OpenAI body.tools -> registry (schema only). Execute returns error -
  * server-side MCP tools take precedence on name clash.
  */
-function registerClientOpenAiTools(registry, tools) {
+function registerClientOpenAiTools(registry: any, tools: any) {
   if (!Array.isArray(tools) || !tools.length) return 0;
   let n = 0;
   for (const t of tools) {
@@ -856,8 +855,8 @@ function registerClientOpenAiTools(registry, tools) {
  * @param {object} [opts.apiConfig]
  * @returns {Promise<{ content: string, executedToolNames: string[], usedReplyTool?: boolean, toolRoundsExhausted?: boolean, compacted?: boolean, usage?: object, sessionId?: string, steps?: number, safetyLimited?: boolean }>}
  */
-export async function runHarnessModuleLoop({ stream, messages, config, apiConfig = {} }) {
-  const harness = await importHarnessSdk();
+export async function runHarnessModuleLoop({ stream, messages, config, apiConfig = {} }: any) {
+  const harness: any = await importHarnessSdk();
   const {
     createAgent,
     createToolRegistry,
@@ -966,7 +965,7 @@ export async function runHarnessModuleLoop({ stream, messages, config, apiConfig
         ...(userTurn.hasImage ? { userContent: userTurn.userContent } : {}),
         ...(signal ? { signal } : {}),
       });
-    } catch (err) {
+    } catch (err: any) {
       if (isHarnessSafetyLimitError(err, harness)) {
         safetyLimited = true;
         RuntimeUtil.makeLog(
@@ -995,7 +994,7 @@ export async function runHarnessModuleLoop({ stream, messages, config, apiConfig
     {
       const dangling = harness.listDanglingToolCalls(store.get(sessionId).events) || [];
       if (dangling.length) {
-        const names = dangling.map((d) => d?.call?.name || d?.call?.id || '?').join(',');
+        const names = dangling.map((d: any) => d?.call?.name || d?.call?.id || '?').join(',');
         RuntimeUtil.makeLog(
           'warn',
           `[harness-loop] dangling tools before settle: n=${dangling.length} [${names}]`,
@@ -1006,7 +1005,7 @@ export async function runHarnessModuleLoop({ stream, messages, config, apiConfig
     harness.settleDanglingTools(store, sessionId);
     try {
       harness.assertToolCallsSettled(store.get(sessionId).events);
-    } catch (err) {
+    } catch (err: any) {
       RuntimeUtil.makeLog(
         'warn',
         `[harness-loop] assertToolCallsSettled: ${err?.message || err}`,
@@ -1016,7 +1015,7 @@ export async function runHarnessModuleLoop({ stream, messages, config, apiConfig
 
     const events = store.get(sessionId).events || [];
     const mcpTools = foldMcpToolsFromEvents(events);
-    const executedToolNames = [];
+    const executedToolNames: any[] = [];
     let compacted = false;
     for (const tool of mcpTools) {
       if (tool?.name && !executedToolNames.includes(tool.name)) executedToolNames.push(tool.name);
@@ -1024,7 +1023,7 @@ export async function runHarnessModuleLoop({ stream, messages, config, apiConfig
     for (const ev of events) {
       if (ev?.type === 'context/compaction') compacted = true;
     }
-    const usedReplyTool = executedToolNames.some((n) => String(n).endsWith('.reply') || n === 'reply');
+    const usedReplyTool = executedToolNames.some((n: any) => String(n).endsWith('.reply') || n === 'reply');
     let content = result?.text != null ? String(result.text) : '';
     if (!content.trim()) {
       const msgs = harness.deriveMessages(events);

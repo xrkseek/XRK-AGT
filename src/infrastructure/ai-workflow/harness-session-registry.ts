@@ -12,6 +12,7 @@ const SESSIONS_DIR = path.join(paths.data, 'harness-sessions')
 type SessionStore = {
   create: (id?: string) => { id: string }
   has?: (id: string) => boolean
+  get: (id: string) => any
   append?: (sessionId: string, event: unknown) => unknown
   close?: () => void
 }
