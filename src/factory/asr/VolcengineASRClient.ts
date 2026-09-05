@@ -1,9 +1,9 @@
-// @ts-nocheck
 /**
  * 火山引擎ASR客户端
  * 实现语音识别功能，支持实时流式识别
  */
 
+// @ts-expect-error no @types/ws
 import WebSocket from 'ws';
 import zlib from 'node:zlib';
 import { v4 as uuidv4 } from 'uuid';
@@ -11,24 +11,25 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import { buildVolcengineSpeechHeaders } from '#utils/volcengine-speech-headers.js';
 
 export default class VolcengineASRClient {
-    _timeoutEmittedSet = new Set();
-    _timeoutEmittedQueue = [];
+    [key: string]: any;
+    _timeoutEmittedSet: any = new Set();
+    _timeoutEmittedQueue: any[] = [];
     _timeoutEmittedMax = 64;
-    ws = null;
-    connected = false;
-    connecting = false;
+    ws: any = null;
+    connected: any = false;
+    connecting: any = false;
     sequence = 1;
-    currentUtterance = null;
-    _lastIntermediateText = '';
-    lastMessageAt = 0;
-    lastAudioAt = 0;
-    logId = null;
-    _idleTimer = null;
-    _pingTimer = null;
-    _pongTimer = null;
-    reconnectAttempts = 0;
-    _closingForRotate = false;
-    performanceMetrics = {
+    currentUtterance: any = null;
+    _lastIntermediateText: any = '';
+    lastMessageAt: any = 0;
+    lastAudioAt: any = 0;
+    logId: any = null;
+    _idleTimer: any = null;
+    _pingTimer: any = null;
+    _pongTimer: any = null;
+    reconnectAttempts: any = 0;
+    _closingForRotate: any = false;
+    performanceMetrics: any = {
         firstResultTime: null,
         audioStartTime: null,
     };
@@ -38,7 +39,7 @@ export default class VolcengineASRClient {
      * @param {Object} config
      * @param {Object} AgentRuntime
      */
-    constructor(deviceId, config, AgentRuntime) {
+    constructor(deviceId: any, config: any, AgentRuntime: any) {
         this.deviceId = deviceId;
         this.config = config;
         this.AgentRuntime = AgentRuntime;
@@ -54,7 +55,7 @@ export default class VolcengineASRClient {
         return buildVolcengineSpeechHeaders(this.config, { connectId: this.connectId });
     }
 
-    _emitAsrTimeoutOnce(sessionId, reason = '') {
+    _emitAsrTimeoutOnce(sessionId: any, reason: any = '') {
         if (!sessionId) return;
         if (this._timeoutEmittedSet.has(sessionId)) return;
         this._timeoutEmittedSet.add(sessionId);
@@ -83,7 +84,7 @@ export default class VolcengineASRClient {
      * @returns {Buffer} 协议头Buffer
      * @private
      */
-    _protoHeader(messageType, messageFlags, serialization, compression) {
+    _protoHeader(messageType: any, messageFlags: any, serialization: any, compression: any) {
         const header = Buffer.alloc(4);
         header[0] = 0x11;
         header[1] = (messageType << 4) | messageFlags;
@@ -98,7 +99,7 @@ export default class VolcengineASRClient {
      * @returns {Buffer} 请求Buffer
      * @private
      */
-    _fullClientRequest(audioInfo) {
+    _fullClientRequest(audioInfo: any) {
         const runtimeConfig = this.config || {};
 
         // 音频参数：以外部传入为主，配置仅作为默认值，字段名对齐火山官方 audio 配置
@@ -157,7 +158,7 @@ export default class VolcengineASRClient {
      * @returns {Buffer} 请求Buffer
      * @private
      */
-    _audioOnlyRequest(audioBuf, isLast = false) {
+    _audioOnlyRequest(audioBuf: any, isLast: any = false) {
         const gz = zlib.gzipSync(audioBuf);
         const flags = isLast ? 0x2 : 0x1;
         const header = this._protoHeader(0x2, flags, 0x0, 0x1);
@@ -183,7 +184,7 @@ export default class VolcengineASRClient {
      * @returns {Object|null} 解析结果
      * @private
      */
-    _parse(data) {
+    _parse(data: any) {
         try {
             if (!data || data.length < 4) return null;
 
@@ -305,7 +306,7 @@ export default class VolcengineASRClient {
         this.connecting = true;
 
         try {
-            await new Promise((resolve, reject) => {
+            await new Promise<void>((resolve, reject) => {
                 const connectTimeout = setTimeout(() => {
                     this.connecting = false;
                     reject(new Error('连接超时'));
@@ -333,11 +334,11 @@ export default class VolcengineASRClient {
                         resolve();
                     });
 
-                    ws.on('upgrade', (response) => {
+                    ws.on('upgrade', (response: any) => {
                         this.logId = response.headers['x-tt-logid'];
                     });
 
-                    ws.on('message', (buf) => {
+                    ws.on('message', (buf: any) => {
                         this.lastMessageAt = Date.now();
                         const msg = this._parse(buf);
 
@@ -385,7 +386,7 @@ export default class VolcengineASRClient {
                         RuntimeUtil.makeLog('debug', `[ASR] 收到 Pong`, this.deviceId);
                     });
 
-                    ws.on('error', (err) => {
+                    ws.on('error', (err: any) => {
                         clearTimeout(connectTimeout);
 
                         if (err.message.includes('401')) {
@@ -409,7 +410,7 @@ export default class VolcengineASRClient {
                         reject(err);
                     });
 
-                    ws.on('close', (code) => {
+                    ws.on('close', (code: any) => {
                         if (this.ws !== ws) return;
                         RuntimeUtil.makeLog('info', `✓ [ASR] WebSocket关闭 (code=${code})`, this.deviceId);
                         this.connected = false;
@@ -441,13 +442,13 @@ export default class VolcengineASRClient {
                         }
                     });
 
-                } catch (e) {
+                } catch (e: any) {
                     clearTimeout(connectTimeout);
                     this.connecting = false;
                     reject(e);
                 }
             });
-        } catch (e) {
+        } catch (e: any) {
             this.connecting = false;
             throw e;
         }
@@ -483,7 +484,7 @@ export default class VolcengineASRClient {
      * @param {Object} msg - 错误消息
      * @private
      */
-    _handleError(msg) {
+    _handleError(msg: any) {
         const errorCode = msg.errorCode;
 
         if (errorCode === 45000081) {
@@ -529,7 +530,7 @@ export default class VolcengineASRClient {
      * @param {boolean} isLast - 是否最后一个结果
      * @private
      */
-    _handleResult(result, isLast) {
+    _handleResult(result: any, isLast: any) {
         try {
             const text = result?.result?.text || result?.text || '';
             const duration = result?.audio_info?.duration || 0;
@@ -561,7 +562,7 @@ export default class VolcengineASRClient {
                     });
                 }
             }
-        } catch (e) {
+        } catch (e: any) {
             RuntimeUtil.makeLog('error',
                 `❌ [ASR] 处理结果失败: ${e.message}`,
                 this.deviceId
@@ -602,7 +603,7 @@ export default class VolcengineASRClient {
      * @param {Object} audioInfo - 音频信息
      * @returns {Promise<void>}
      */
-    async beginUtterance(sessionId, audioInfo) {
+    async beginUtterance(sessionId: any, audioInfo: any) {
         // 对齐稳定策略：每个 utterance 使用独立 WebSocket，避免 end/close/timeout 串台
         // 先尽力结束上一轮（如果有）
         if (this.currentUtterance && !this.currentUtterance.ending) {
@@ -612,7 +613,7 @@ export default class VolcengineASRClient {
         if (this.ws) {
             this._closingForRotate = true;
             try {
-                await new Promise((resolve) => {
+                await new Promise<void>((resolve) => {
                     const w = this.ws;
                     let done = false;
                     const finish = () => {
@@ -677,7 +678,7 @@ export default class VolcengineASRClient {
      * @param {Buffer} audioBuf - 音频数据
      * @returns {boolean} 是否成功
      */
-    sendAudio(audioBuf) {
+    sendAudio(audioBuf: any) {
         if (!this.ws || !this.connected) return false;
         if (!this.currentUtterance || this.currentUtterance.ending) return false;
         if (!audioBuf || audioBuf.length === 0) return true; // 空数据不发送，但返回成功
@@ -687,7 +688,7 @@ export default class VolcengineASRClient {
             this.ws.send(frame);
             this.lastAudioAt = Date.now();
             return true;
-        } catch (e) {
+        } catch (e: any) {
             RuntimeUtil.makeLog('error', `❌ [ASR] 发送音频失败: ${e.message}`, this.deviceId);
             return false;
         }
@@ -737,7 +738,7 @@ export default class VolcengineASRClient {
             this._armIdleTimer();
             return true;
 
-        } catch (e) {
+        } catch (e: any) {
             RuntimeUtil.makeLog('error', `❌ [ASR] 结束失败: ${e.message}`, this.deviceId);
             this.currentUtterance = null;
             this._armIdleTimer();

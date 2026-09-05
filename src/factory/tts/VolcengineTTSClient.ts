@@ -1,10 +1,10 @@
-// @ts-nocheck
 /**
  * 火山引擎TTS客户端（V3双向流式协议）
  * 实现文本转语音功能，支持实时流式合成。
  * 流式/Opus 场景必须请求 format=pcm，否则服务端可能返回 wav（多次 header）或 mp3，导致下游当 PCM 处理出错。
  */
 
+// @ts-expect-error no @types/ws
 import WebSocket from 'ws';
 import zlib from 'node:zlib';
 import { v4 as uuidv4 } from 'uuid';
@@ -32,27 +32,28 @@ const TTS_EVENTS = {
 };
 
 export default class VolcengineTTSClient {
-    ws = null;
-    connected = false;
-    connecting = false;
-    connectionId = null;
-    currentSessionId = null;
-    sessionActive = false;
-    totalAudioBytes = 0;
-    audioChunkCount = 0;
-    lastChunkTime = null;
-    sessionStartTime = null;
-    _sessionResolve = null;
-    _sessionTimeout = null;
+    [key: string]: any;
+    ws: any = null;
+    connected: any = false;
+    connecting: any = false;
+    connectionId: any = null;
+    currentSessionId: any = null;
+    sessionActive: any = false;
+    totalAudioBytes: any = 0;
+    audioChunkCount: any = 0;
+    lastChunkTime: any = null;
+    sessionStartTime: any = null;
+    _sessionResolve: any = null;
+    _sessionTimeout: any = null;
     /** 串行化下发：保证多段 audio 按序送设备，避免与 xiaozhi Opus 编码/流控 乱序导致丢包 */
-    _audioSendPromise = Promise.resolve();
+    _audioSendPromise: any = Promise.resolve();
 
     /**
      * @param {string} deviceId
      * @param {Object} config
      * @param {Object} AgentRuntime
      */
-    constructor(deviceId, config, AgentRuntime) {
+    constructor(deviceId: any, config: any, AgentRuntime: any) {
         this.deviceId = deviceId;
         this.config = config;
         this.AgentRuntime = AgentRuntime;
@@ -76,7 +77,7 @@ export default class VolcengineTTSClient {
      * @returns {Buffer} 协议头Buffer
      * @private
      */
-    _protoHeader(messageType, messageFlags, serialization, compression) {
+    _protoHeader(messageType: any, messageFlags: any, serialization: any, compression: any) {
         const header = Buffer.alloc(4);
         header[0] = 0x11;
         header[1] = (messageType << 4) | messageFlags;
@@ -93,7 +94,7 @@ export default class VolcengineTTSClient {
      * @returns {Buffer} 事件帧Buffer
      * @private
      */
-    _buildEventFrame(event, sessionId = null, payload = {}) {
+    _buildEventFrame(event: any, sessionId: any = null, payload: any = {}) {
         const payloadJson = JSON.stringify(payload);
         const payloadBuf = Buffer.from(payloadJson, 'utf-8');
 
@@ -124,7 +125,7 @@ export default class VolcengineTTSClient {
      * @returns {Object|null} 解析结果
      * @private
      */
-    _parse(data) {
+    _parse(data: any) {
         try {
             if (!data || data.length < 4) return null;
 
@@ -194,7 +195,7 @@ export default class VolcengineTTSClient {
                 if (compression === 0x1 && payload.length > 0) {
                     try {
                         payload = zlib.gunzipSync(payload);
-                    } catch (gzipErr) {
+                    } catch (gzipErr: any) {
                         RuntimeUtil.makeLog('warn', 
                             `[TTS] Gzip解压失败: ${gzipErr.message}`, 
                             this.deviceId
@@ -222,13 +223,13 @@ export default class VolcengineTTSClient {
             }
 
             return null;
-        } catch (e) {
+        } catch (e: any) {
             RuntimeUtil.makeLog('error', `[TTS] 解析错误: ${e.message}`, this.deviceId);
             return null;
         }
     }
 
-    async _sendAudioToDevice(audioData) {
+    async _sendAudioToDevice(audioData: any) {
         const deviceBot = this.AgentRuntime[this.deviceId];
         if (!deviceBot || !audioData || audioData.length === 0) return;
         
@@ -252,7 +253,7 @@ export default class VolcengineTTSClient {
                 } else {
                     RuntimeUtil.makeLog('warn', `[TTS] sendAudioChunk 不可用`, this.deviceId);
                 }
-            } catch (e) {
+            } catch (e: any) {
                 RuntimeUtil.makeLog('error', `[TTS] 发送失败: ${e.message}`, this.deviceId);
             }
             if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
@@ -278,7 +279,7 @@ export default class VolcengineTTSClient {
         this.connecting = true;
 
         try {
-            await new Promise((resolve, reject) => {
+            await new Promise<void>((resolve, reject) => {
                 const connectTimeout = setTimeout(() => {
                     this.connecting = false;
                     reject(new Error('TTS连接超时'));
@@ -299,14 +300,14 @@ export default class VolcengineTTSClient {
                         ws.send(startConnFrame);
                     });
 
-                    ws.on('upgrade', (response) => {
+                    ws.on('upgrade', (response: any) => {
                         const logId = response.headers['x-tt-logid'];
                         if (logId) {
                             RuntimeUtil.makeLog('info', `[TTS] X-Tt-Logid: ${logId}`, this.deviceId);
                         }
                     });
 
-                    ws.on('message', (buf) => {
+                    ws.on('message', (buf: any) => {
                         const msg = this._parse(buf);
 
                         if (!msg) return;
@@ -331,11 +332,11 @@ export default class VolcengineTTSClient {
                             const data = msg.data;
                             this._audioSendPromise = this._audioSendPromise
                                 .then(() => this._sendAudioToDevice(data))
-                                .catch(e => RuntimeUtil.makeLog('error', `[TTS] 发送音频失败: ${e.message}`, this.deviceId));
+                                .catch((e: any) => RuntimeUtil.makeLog('error', `[TTS] 发送音频失败: ${e.message}`, this.deviceId));
                         }
                     });
 
-                    ws.on('error', (err) => {
+                    ws.on('error', (err: any) => {
                         clearTimeout(connectTimeout);
                         RuntimeUtil.makeLog('error',
                             `❌ [TTS] WebSocket错误: ${normalizeError(err).message}`,
@@ -346,20 +347,20 @@ export default class VolcengineTTSClient {
                         reject(err);
                     });
 
-                    ws.on('close', (code) => {
+                    ws.on('close', (code: any) => {
                         RuntimeUtil.makeLog('info', `✓ [TTS] WebSocket关闭 (code=${code})`, this.deviceId);
                         this.connected = false;
                         this.connecting = false;
                         this.sessionActive = false;
                     });
 
-                } catch (e) {
+                } catch (e: any) {
                     clearTimeout(connectTimeout);
                     this.connecting = false;
                     reject(e);
                 }
             });
-        } catch (e) {
+        } catch (e: any) {
             this.connecting = false;
             throw e;
         }
@@ -373,7 +374,7 @@ export default class VolcengineTTSClient {
      * @param {Function} reject - Promise reject函数
      * @private
      */
-    _handleEvent(msg, connectTimeout, resolve, reject) {
+    _handleEvent(msg: any, connectTimeout: any, resolve: any, reject: any) {
         switch (msg.event) {
             case TTS_EVENTS.CONNECTION_STARTED:
                 clearTimeout(connectTimeout);
@@ -451,7 +452,7 @@ export default class VolcengineTTSClient {
      * @param {Object} [options] - 可选参数（覆盖配置，兼容官方文档扩展字段）
      * @returns {Promise<boolean>} - 合成结果
      */
-    async synthesize(text, options = {}) {
+    async synthesize(text: any, options: any = {}) {
         if (!text || text.trim() === '') {
             RuntimeUtil.makeLog('warn', '[TTS] 文本为空', this.deviceId);
             return false;
@@ -521,7 +522,7 @@ export default class VolcengineTTSClient {
             );
             this.ws.send(finishFrame);
 
-            return new Promise((resolve) => {
+            return new Promise<void>((resolve) => {
                 this._sessionResolve = resolve;
                 this._sessionTimeout = setTimeout(() => {
                     if (this._sessionResolve) {
@@ -531,7 +532,7 @@ export default class VolcengineTTSClient {
                     this._sessionTimeout = null;
                 }, 30000);
             });
-        } catch (e) {
+        } catch (e: any) {
             RuntimeUtil.makeLog('error', `❌ [TTS] 合成失败: ${e.message}`, this.deviceId);
             return Promise.resolve();
         }
