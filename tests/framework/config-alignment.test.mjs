@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   GLOBAL_CONFIGS,
   SERVER_CONFIGS
-} from '../../src/infrastructure/config/config-constants.js';
+} from '../../dist/src/infrastructure/config/config-constants.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const defaultConfigDir = path.join(root, 'config/default_config');
@@ -21,7 +21,7 @@ function collectSystemSchemaSources(dir) {
       out.push(...collectSystemSchemaSources(full));
       continue;
     }
-    if (st.isFile() && /^system(?:-[a-z0-9-]+)?\.js$/i.test(name)) {
+    if (st.isFile() && /^system(?:-[a-z0-9-]+)?\.(js|ts)$/i.test(name)) {
       out.push(fs.readFileSync(full, 'utf8'));
     }
   }

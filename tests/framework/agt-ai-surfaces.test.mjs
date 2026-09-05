@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { shouldUseHarnessModuleLoop } from '../../src/utils/http/ai-v3-utils.js';
+import { shouldUseHarnessModuleLoop } from '../../dist/src/utils/http/ai-v3-utils.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -54,18 +54,18 @@ describe('AGT AI surface harness wiring', () => {
     );
   });
 
-  it('ai.js imports harness loop + shouldUseHarnessModuleLoop', () => {
-    const src = fs.readFileSync(path.join(root, 'core/system-Core/http/ai.js'), 'utf8');
+  it('ai.ts imports harness loop + shouldUseHarnessModuleLoop', () => {
+    const src = fs.readFileSync(path.join(root, 'core/system-Core/http/ai.ts'), 'utf8');
     assert.match(src, /runHarnessModuleLoop/);
     assert.match(src, /shouldUseHarnessModuleLoop/);
     assert.match(src, /trimMessagesToTokenBudget/);
   });
 
   it('chat workflow execute uses callAI (harness via AiWorkflow)', () => {
-    const src = fs.readFileSync(path.join(root, 'core/system-Core/workflow/chat.js'), 'utf8');
+    const src = fs.readFileSync(path.join(root, 'core/system-Core/workflow/chat.ts'), 'utf8');
     assert.match(src, /await this\.callAI\(/);
     const aw = fs.readFileSync(
-      path.join(root, 'src/infrastructure/ai-workflow/ai-workflow.js'),
+      path.join(root, 'src/infrastructure/ai-workflow/ai-workflow.ts'),
       'utf8',
     );
     assert.match(aw, /runHarnessModuleLoop/);
@@ -82,10 +82,10 @@ describe('AGT AI surface harness wiring', () => {
 
   it('runHarnessModuleLoop works for web-like no-workflow turn', async () => {
     const { importHarnessSdk } = await import(
-      '../../src/infrastructure/ai-workflow/harness-resolve.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
     );
     const { runHarnessModuleLoop } = await import(
-      '../../src/infrastructure/ai-workflow/harness-module-loop.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
     );
     let harness;
     try {

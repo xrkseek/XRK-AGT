@@ -12,8 +12,8 @@ import {
   extractVisionFromSegments,
   mergeUploadedImagesIntoMessages,
   normalizeVisionRef
-} from '../../src/utils/llm/vision-content.js';
-import { transformMessagesWithVision } from '../../src/utils/llm/message-transform.js';
+} from '../../dist/src/utils/llm/vision-content.js';
+import { transformMessagesWithVision } from '../../dist/src/utils/llm/message-transform.js';
 
 describe('vision-content 标准层', () => {
   it('decodeHtmlEntitiesInUrl 还原 QQ CDN &amp;', () => {

@@ -9,9 +9,9 @@ import {
   clearPersistenceProviders,
   probePersistenceProviders,
   listPersistenceProviders,
-} from '../../src/infrastructure/database/persistence-registry.js';
+} from '../../dist/src/infrastructure/database/persistence-registry.js';
 import { buildReadinessSnapshot } from '#utils/observability.js';
-import sqliteInit, { closeSqlite } from '../../src/infrastructure/sqlite.js';
+import sqliteInit, { closeSqlite } from '../../dist/src/infrastructure/sqlite.js';
 
 describe('persistence-registry', () => {
   beforeEach(() => clearPersistenceProviders());

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * @file debug.js
  * @description 手动调试启动脚本

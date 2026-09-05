@@ -3,8 +3,8 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { attachChaosMiddleware, chaosEnabled } from '../../src/infrastructure/http/runtime-chaos.js';
-import { isHiddenStaticPath } from '../../src/infrastructure/http/runtime-static.js';
+import { attachChaosMiddleware, chaosEnabled } from '../../dist/src/infrastructure/http/runtime-chaos.js';
+import { isHiddenStaticPath } from '../../dist/src/infrastructure/http/runtime-static.js';
 
 describe('runtime-chaos 服务端注入', () => {
   it('errorRate=1 时目标路径返回 503（mock）', async () => {

@@ -6,8 +6,8 @@ import {
   isLoopbackAuthExempt,
   isPrivateOrLoopbackAddress,
   shouldForceAuthOnLoopbackWhenToolsRun,
-} from '../../src/infrastructure/http/auth.js';
-import * as runtimeAuth from '../../src/infrastructure/http/runtime-auth.js';
+} from '../../dist/src/infrastructure/http/auth.js';
+import * as runtimeAuth from '../../dist/src/infrastructure/http/runtime-auth.js';
 
 function mockRuntime(apiKey = 'k'.repeat(32)) {
   return {

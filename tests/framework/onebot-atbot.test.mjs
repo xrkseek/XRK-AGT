@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import OneBotEnhancer from '../../core/system-Core/plugin/OneBotEnhancer.js';
+import OneBotEnhancer from '../../dist/core/system-Core/plugin/OneBotEnhancer.js';
 
 describe('OneBotEnhancer atBot（data.qq）', () => {
   it('识别 NapCat 嵌套 data.qq 的 @机器人', () => {

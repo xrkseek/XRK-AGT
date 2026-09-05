@@ -5,7 +5,7 @@ import {
   extractMissingPackageName,
   isMissingPackageError
 } from '#utils/module-import-error.js';
-import * as database from '../../src/infrastructure/database/index.js';
+import * as database from '../../dist/src/infrastructure/database/index.js';
 
 describe('module-import-error 分类', () => {
   it('识别 Cannot find package', () => {

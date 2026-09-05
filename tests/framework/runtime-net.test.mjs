@@ -6,7 +6,7 @@ import {
   getPublicServerUrl,
   getServerHost,
   isHttpsEnabled,
-} from '../../src/infrastructure/http/runtime-net.js';
+} from '../../dist/src/infrastructure/http/runtime-net.js';
 
 describe('runtime-net 配置访问', () => {
   it('getServerHost / getProxyConfig / isHttpsEnabled 返回稳定类型', () => {

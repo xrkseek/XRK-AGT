@@ -14,7 +14,7 @@ import {
   resolveDenyToolNames,
   resolveHarnessLlmRetry,
   withRouteReasoning,
-} from '../../src/infrastructure/ai-workflow/harness-module-loop.js';
+} from '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js';
 
 describe('harness-module-loop helpers', () => {
   it('splitOutboundMessages extracts system, history, latest user', () => {
@@ -123,10 +123,10 @@ describe('harness-module-loop helpers', () => {
 
   it('buildHarnessUserTurn maps data-URL image via SDK attachment store', async () => {
     const { importHarnessSdk } = await import(
-      '../../src/infrastructure/ai-workflow/harness-resolve.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
     );
     const { buildHarnessUserTurn } = await import(
-      '../../src/infrastructure/ai-workflow/harness-module-loop.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
     );
     let harness;
     try {
@@ -162,7 +162,7 @@ describe('harness SDK continueTurn smoke', () => {
     let harness;
     try {
       const { importHarnessSdk } = await import(
-        '../../src/infrastructure/ai-workflow/harness-resolve.js'
+        '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
       );
       harness = await importHarnessSdk();
     } catch (err) {
@@ -187,10 +187,10 @@ describe('harness SDK continueTurn smoke', () => {
 
   it('runHarnessModuleLoop embeds loop under callAI shape', async () => {
     const { importHarnessSdk } = await import(
-      '../../src/infrastructure/ai-workflow/harness-resolve.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
     );
     const { runHarnessModuleLoop } = await import(
-      '../../src/infrastructure/ai-workflow/harness-module-loop.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
     );
     let harness;
     try {
@@ -221,10 +221,10 @@ describe('harness SDK continueTurn smoke', () => {
 
   it('registerTools hook adds tools before continueTurn', async () => {
     const { importHarnessSdk } = await import(
-      '../../src/infrastructure/ai-workflow/harness-resolve.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
     );
     const { runHarnessModuleLoop } = await import(
-      '../../src/infrastructure/ai-workflow/harness-module-loop.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
     );
     let harness;
     try {
@@ -263,7 +263,7 @@ describe('harness SDK continueTurn smoke', () => {
 
   it('foldMcpToolsFromEvents keeps last-turn args + result', async () => {
     const { foldMcpToolsFromEvents } = await import(
-      '../../src/infrastructure/ai-workflow/harness-module-loop.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
     );
     const tools = foldMcpToolsFromEvents([
       { type: 'turn/start', turnId: 't1' },
@@ -282,17 +282,17 @@ describe('harness SDK continueTurn smoke', () => {
 
   it('reuses harness session for same sessionKey', async () => {
     const { importHarnessSdk } = await import(
-      '../../src/infrastructure/ai-workflow/harness-resolve.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
     );
     const {
       runHarnessModuleLoop,
       resetHarnessToolSurfaceCacheForTests,
       __harnessToolSurfaceCacheSizeForTests,
     } = await import(
-      '../../src/infrastructure/ai-workflow/harness-module-loop.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
     );
     const { resetHarnessSessionRegistryForTests } = await import(
-      '../../src/infrastructure/ai-workflow/harness-session-registry.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-session-registry.js'
     );
     let harness;
     try {
@@ -342,16 +342,16 @@ describe('harness SDK continueTurn smoke', () => {
 
   it('onSessionEvent observes assistant message appends', async () => {
     const { importHarnessSdk } = await import(
-      '../../src/infrastructure/ai-workflow/harness-resolve.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
     );
     const {
       runHarnessModuleLoop,
       resetHarnessToolSurfaceCacheForTests,
     } = await import(
-      '../../src/infrastructure/ai-workflow/harness-module-loop.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
     );
     const { resetHarnessSessionRegistryForTests } = await import(
-      '../../src/infrastructure/ai-workflow/harness-session-registry.js'
+      '../../dist/src/infrastructure/ai-workflow/harness-session-registry.js'
     );
     let harness;
     try {

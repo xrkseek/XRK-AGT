@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   runWithWorkflowRequestContext,
   getWorkflowRequestContext
-} from '../../src/infrastructure/ai-workflow/workflow-request-context.js';
+} from '../../dist/src/infrastructure/ai-workflow/workflow-request-context.js';
 import { createUserVisibleTurnState } from '#utils/chat-user-visible-ack.js';
 
 describe('workflow request context', () => {

@@ -3,9 +3,9 @@ import { setRuntimeGlobal, getRuntimeGlobal } from '#utils/runtime-globals.js';
 
 export async function bootstrapTestEnv() {
   process.env.XRK_TEST = '1';
-  await import('../../src/bootstrap-globals.js');
+  await import('../../dist/src/bootstrap-globals.js');
   if (!getRuntimeGlobal('logger')) {
-    const setLog = (await import('../../src/infrastructure/log.js')).default;
+    const setLog = (await import('../../dist/src/infrastructure/log.js')).default;
     setLog();
   }
   const runtime = getRuntimeGlobal('AgentRuntime');

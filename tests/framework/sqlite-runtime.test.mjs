@@ -15,7 +15,7 @@ import {
   sqliteKvSet,
   sqliteKvGet,
   sqliteKvDel,
-} from '../../src/infrastructure/sqlite.js';
+} from '../../dist/src/infrastructure/sqlite.js';
 
 describe('Runtime sqlite (node:sqlite)', () => {
   const prevMem = process.env.XRK_SQLITE_MEMORY;

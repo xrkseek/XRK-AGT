@@ -12,7 +12,7 @@ describe('加载器集成（system-Core 基准）', () => {
   before(bootstrapTestEnv);
 
   it(`HttpApiLoader 注册全部 ${SYSTEM_CORE_BASELINE.http} 个 system-Core HTTP 模块`, async () => {
-    const { default: HttpApiLoader } = await import('../../src/infrastructure/http/loader.js');
+    const { default: HttpApiLoader } = await import('../../dist/src/infrastructure/http/loader.js');
     const apis = await HttpApiLoader.load();
     const keys = systemCoreHttpApiKeys();
     assert.equal(keys.length, SYSTEM_CORE_BASELINE.http);
@@ -22,7 +22,7 @@ describe('加载器集成（system-Core 基准）', () => {
   });
 
   it(`PluginLoader 至少加载 system-Core 入库的 ${SYSTEM_CORE_BASELINE.plugin} 个插件`, async () => {
-    const { default: PluginLoader } = await import('../../src/infrastructure/plugins/loader.js');
+    const { default: PluginLoader } = await import('../../dist/src/infrastructure/plugins/loader.js');
     const officialKeys = systemCorePluginKeys();
     const listed = (await PluginLoader.getPlugins()).filter((p) => p.core === 'system-Core');
     for (const key of officialKeys) {
@@ -35,7 +35,7 @@ describe('加载器集成（system-Core 基准）', () => {
   it(`AiWorkflowLoader 加载全部 ${SYSTEM_CORE_BASELINE.workflow} 个 system-Core 工作流`, async () => {
     const basenames = systemCoreStreamBasenames();
     assert.equal(basenames.length, SYSTEM_CORE_BASELINE.workflow);
-    const { default: AiWorkflowLoader } = await import('../../src/infrastructure/ai-workflow/loader.js');
+    const { default: AiWorkflowLoader } = await import('../../dist/src/infrastructure/ai-workflow/loader.js');
     await AiWorkflowLoader.load(true);
     const loaded = new Set(AiWorkflowLoader.workflows.keys());
     for (const name of basenames) {

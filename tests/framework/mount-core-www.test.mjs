@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { RESERVED_ROOT_SEGMENTS } from '../../src/infrastructure/http/mount-core-www.js';
+import { RESERVED_ROOT_SEGMENTS } from '../../dist/src/infrastructure/http/mount-core-www.js';
 import {
   isActiveFrontendSign,
   isWwwSignedStaticRootOk,
@@ -13,12 +13,12 @@ import {
   resolveWwwPublicMountPath,
   resolveWwwStaticRoot,
   shouldProxyFrontend,
-} from '../../src/infrastructure/http/www-app-resolve.js';
+} from '../../dist/src/infrastructure/http/www-app-resolve.js';
 import {
   mergePreferDefined,
   resolveWwwMountOverlays,
   applyWwwStaticOverlay,
-} from '../../src/infrastructure/http/www-sign-merge.js';
+} from '../../dist/src/infrastructure/http/www-sign-merge.js';
 
 describe('mount-core-www 保留根段', () => {
   it('含框架与历史冲突名 shared', () => {
@@ -237,7 +237,7 @@ describe('www-app-resolve', () => {
     const {
       resolveSignedStaticBuildSpec,
       isSignedStaticBuildStale,
-    } = await import('../../src/infrastructure/http/www-static-build.js');
+    } = await import('../../dist/src/infrastructure/http/www-static-build.js');
     const sign = { enabled: false, build: { command: 'pnpm', args: ['build'] }, staticRoot: 'dist' };
     assert.equal(resolveSignedStaticBuildSpec(sign, process.cwd())?.command, 'pnpm');
 

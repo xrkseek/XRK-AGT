@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { promises as fs } from 'node:fs';
 import fsSync from 'node:fs';
 import path from 'node:path';

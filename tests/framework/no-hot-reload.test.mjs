@@ -12,6 +12,10 @@ describe('no hot-reload', () => {
       fs.existsSync(path.join(root, 'src/utils/hot-reload-base.js')),
       false,
     );
+    assert.equal(
+      fs.existsSync(path.join(root, 'src/utils/hot-reload-base.ts')),
+      false,
+    );
   });
 
   it('does not depend on chokidar', () => {
@@ -22,7 +26,7 @@ describe('no hot-reload', () => {
 
   it('runtime-boot does not enable loader watches', () => {
     const boot = fs.readFileSync(
-      path.join(root, 'src/infrastructure/http/runtime-boot.js'),
+      path.join(root, 'src/infrastructure/http/runtime-boot.ts'),
       'utf8',
     );
     assert.equal(/\bPluginLoader\.watch\s*\(/.test(boot), false);

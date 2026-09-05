@@ -9,7 +9,7 @@ import {
   decodeHtmlEntitiesInUrl,
   extractVisionFromSegments,
   normalizeVisionRef
-} from '../../src/utils/llm/vision-content.js';
+} from '../../dist/src/utils/llm/vision-content.js';
 
 describe('vision 模糊 / 属性', () => {
   it('任意垃圾输入 normalizeVisionRef 不抛且无有效则 null', () => {

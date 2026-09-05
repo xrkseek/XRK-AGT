@@ -17,8 +17,9 @@ export const SYSTEM_CORE_BASELINE = Object.freeze({
 
 /** @param {string} subdir http | workflow | plugin | tasker | events */
 export function listSystemCoreJs(subdir) {
-  const glob = `core/system-Core/${subdir}/*.js`;
-  const out = execFileSync('git', ['ls-files', '-z', '--', glob], {
+  const globTs = `core/system-Core/${subdir}/*.ts`;
+  const globJs = `core/system-Core/${subdir}/*.js`;
+  const out = execFileSync('git', ['ls-files', '-z', '--', globTs, globJs], {
     cwd: root,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
@@ -31,17 +32,17 @@ export function listSystemCoreJs(subdir) {
 
 /**
  * 与 HttpApiLoader.getApiKey（resolveQualifiedCoreModuleKey）一致：
- * `system-Core/<相对 http/ 路径无 .js>`
+ * `system-Core/<相对 http/ 路径无扩展名>`
  */
 export function systemCoreHttpApiKeys() {
-  return listSystemCoreJs('http').map((f) => `system-Core/${f.replace(/\.js$/, '')}`);
+  return listSystemCoreJs('http').map((f) => `system-Core/${f.replace(/\.(js|ts)$/, '')}`);
 }
 
 /** 与 PluginLoader.getPlugins().name（_pluginQualifiedKey）一致 */
 export function systemCorePluginKeys() {
-  return listSystemCoreJs('plugin').map((f) => `system-Core/${f.replace(/\.js$/, '')}`);
+  return listSystemCoreJs('plugin').map((f) => `system-Core/${f.replace(/\.(js|ts)$/, '')}`);
 }
 
 export function systemCoreStreamBasenames() {
-  return listSystemCoreJs('workflow').map((f) => f.replace(/\.js$/, ''));
+  return listSystemCoreJs('workflow').map((f) => f.replace(/\.(js|ts)$/, ''));
 }

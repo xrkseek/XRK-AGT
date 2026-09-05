@@ -22,7 +22,7 @@ import {
 import {
   buildOpenAIVisionParts,
   extractVisionFromSegments
-} from '../../src/utils/llm/vision-content.js';
+} from '../../dist/src/utils/llm/vision-content.js';
 
 const dataRoot = path.join(process.cwd(), 'data');
 

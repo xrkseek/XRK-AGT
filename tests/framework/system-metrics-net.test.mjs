@@ -7,7 +7,7 @@ import {
   buildNetworkSkipSet,
   isSkippableNetIface,
   sumNetworkBytes,
-} from '../../src/infrastructure/http/utils/system-metrics.js';
+} from '../../dist/src/infrastructure/http/utils/system-metrics.js';
 
 describe('isSkippableNetIface / buildNetworkSkipSet', () => {
   it('eth0 即使 virtual:true 也不跳过', () => {
