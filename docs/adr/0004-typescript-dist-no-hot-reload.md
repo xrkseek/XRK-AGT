@@ -1,6 +1,6 @@
 # ADR-0004: TypeScript 编译至 dist，并移除热重载
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-05
 - **Tags:** typescript, build, hot-reload, runtime
 - **Branch:** `refactor/typescript`

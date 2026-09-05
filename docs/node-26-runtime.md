@@ -28,14 +28,15 @@
 
 ---
 
-## 1b. TypeScript（迁移中 → dist）
+## 1b. TypeScript（dist 主路径）
 
 | 项 | 约定 |
 |----|------|
-| 目标运行时 | `pnpm build`（`tsc` emit）→ `node dist/app.js`；见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md) |
-| 迁移期 | 仍可能短暂保留 strip-types / 源码直跑，直至 build 链路落地 |
+| 运行时 | `pnpm build`（`tsc` + 资源拷贝）→ `node dist/app.js`；见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md) |
+| Loader Core | 扫描 `dist/core/`；www/site 仍读源码 `core/`（`paths.coreSource`） |
 | 编辑器 | 根 `tsconfig.json`（`noEmit`）；`pnpm typecheck` |
-| 热重载 | **已移除**（模块 / YAML / 模板）；改配置或代码后 **重启** |
+| 热重载 | **已移除**；改配置或代码后 **重启** |
+| 迁移 | `allowJs` 过渡期；`.js` → `.ts` 分批进行 |
 
 设计与任务：[2026-09-05-typescript-dist-design.md](superpowers/specs/2026-09-05-typescript-dist-design.md) · [计划](superpowers/plans/2026-09-05-typescript-dist.md)。
 

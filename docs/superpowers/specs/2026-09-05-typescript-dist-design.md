@@ -113,12 +113,12 @@ Docker / CI：镜像构建步骤增加 `pnpm build`；运行目录以 `dist` + �
 
 ## 9. 成功标准
 
-- [ ] 无 `--experimental-strip-types` 即可生产启动（主路径）
-- [ ] `dist/` 由 `pnpm build` 生成；仓库可不提交 `dist/`（`.gitignore`）
-- [ ] 代码库无业务热重载 / 无 `HotReloadBase` / 无必要 chokidar
-- [ ] `src/` + `core/` 业务模块以 `.ts` 为源（迁移完成时）
-- [ ] `pnpm typecheck` 与既定测试门禁通过
-- [ ] 文档与 ADR-0004 与实现一致
+| `--experimental-strip-types` 主路径 | 已改为 `pnpm build` → `node dist/app.js` |
+| `dist/` 由 `pnpm build` 生成 | 是（根 `dist/` gitignore） |
+| 无业务热重载 / 无 HotReloadBase / 无 chokidar | 是 |
+| `src/` + `core/` 以 `.ts` 为源 | 迁移中（allowJs 期仍大量 `.js`） |
+| `pnpm typecheck` 与测试门禁 | CI 已 `pnpm build` + `test:fast` |
+| 文档与 ADR-0004 | Accepted |
 
 ## 10. 开放细节（实施计划阶段定稿）
 
