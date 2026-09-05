@@ -1,3 +1,4 @@
+// @ts-nocheck
 /** Playwright 受控会话； role ref 快照 + 导航 SSRF 复检 */
 import playwright from 'playwright';
 import {

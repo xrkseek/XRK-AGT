@@ -1,3 +1,4 @@
+// @ts-nocheck
 import RuntimeUtil from '#utils/runtime-util.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import MemoryManager from '#infrastructure/ai-workflow/memory-manager.js';

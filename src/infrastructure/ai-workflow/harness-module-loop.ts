@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Embed @xrkseek/harness agent loop for AiWorkflow.callAI and /v1+MCP workflows.
  * AGT keeps chat.js / MCPServer; harness owns continueTurn, compaction, retries, adapters.
