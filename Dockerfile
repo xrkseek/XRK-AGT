@@ -31,6 +31,7 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true \
 RUN pnpm install --frozen-lockfile || pnpm install
 
 COPY . .
+RUN pnpm build
 WORKDIR /app/subserver/pyserver
 RUN /usr/local/bin/uv venv .venv && \
     /usr/local/bin/uv pip install --no-cache fastapi "uvicorn[standard]" pyyaml && \
@@ -59,6 +60,7 @@ COPY --from=builder --chown=xrk:xrk /app/node_modules ./node_modules
 COPY --from=builder --chown=xrk:xrk /app/package.json ./package.json
 COPY --from=builder --chown=xrk:xrk /app/pnpm-lock.yaml* ./
 COPY --from=builder --chown=xrk:xrk /app/pnpm-workspace.yaml* ./
+COPY --from=builder --chown=xrk:xrk /app/dist ./dist
 COPY --chown=xrk:xrk . .
 COPY --from=builder --chown=xrk:xrk /app/subserver/pyserver/.venv ./subserver/pyserver/.venv
 RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod 755 /app/docker-entrypoint.sh && \

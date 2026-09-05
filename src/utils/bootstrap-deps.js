@@ -204,7 +204,8 @@ export class DependencyManager {
   async ensureFrontendDependencies(rootDir = process.cwd()) {
     const tasks = [];
     for (const coreDir of await paths.getCoreDirs()) {
-      const wwwDir = path.join(coreDir, 'www');
+      const coreName = path.basename(coreDir);
+      const wwwDir = path.join(paths.coreSource, coreName, 'www');
       if (!statDirs([wwwDir])[0]) continue;
 
       const entries = await fs.readdir(wwwDir, { withFileTypes: true });

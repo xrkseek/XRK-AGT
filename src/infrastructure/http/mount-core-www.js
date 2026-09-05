@@ -65,16 +65,16 @@ export const RESERVED_ROOT_SEGMENTS = ['api', 'core', 'media', 'uploads', 'File'
 export async function mountCoreWwwStatic(app, staticOptions = {}) {
   const coreDirs = await paths.getCoreDirs();
   const mountedPaths = new Set();
-  const wwwDirPaths = coreDirs.map((coreDir) => path.join(coreDir, 'www'));
-  const wwwIsDir = await statDirs(wwwDirPaths);
   const serverCfg = runtimeConfig.server || {};
 
   for (let ci = 0; ci < coreDirs.length; ci++) {
     const coreDir = coreDirs[ci];
-    const wwwDir = wwwDirPaths[ci];
     const coreName = path.basename(coreDir);
+    // www 未拷入 dist：始终从源码树挂载
+    const wwwDir = path.join(paths.coreSource, coreName, 'www');
+    const [wwwOk] = await statDirs([wwwDir]);
 
-    if (!wwwIsDir[ci]) continue;
+    if (!wwwOk) continue;
 
     const coreMountPath = `/core/${coreName}`;
     if (!mountedPaths.has(coreMountPath)) {

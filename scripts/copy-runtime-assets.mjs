@@ -1,40 +1,45 @@
 /**
- * 将 core/ 下非代码资源复制到 dist/core/（yaml/json/html/…）。
- * .js/.ts 等由 tsc 产出；www/site 仍由源码树提供（paths.coreSource）。
+ * 将运行时非代码资源复制到 dist/：
+ * - core/ → dist/core/（跳过 www/site/node_modules；.js/.ts 由 tsc 产出）
+ * - src/renderers/ 下 yaml 等 → dist/src/renderers/
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const srcCore = path.join(root, 'core');
-const destCore = path.join(root, 'dist', 'core');
 const SKIP_DIR = new Set(['node_modules', '.git', 'www', 'site']);
 const CODE_EXT = new Set(['.js', '.ts', '.mjs', '.mts', '.cjs', '.cts']);
 
-async function walk(dir, rel = '') {
-  let entries;
-  try {
-    entries = await fs.readdir(dir, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  for (const ent of entries) {
-    if (SKIP_DIR.has(ent.name) || ent.name.startsWith('.')) continue;
-    const from = path.join(dir, ent.name);
-    const relPath = path.join(rel, ent.name);
-    if (ent.isDirectory()) {
-      await walk(from, relPath);
-      continue;
+async function walkCopy(srcRoot, destRoot, { skipWww = false } = {}) {
+  async function walk(dir, rel = '') {
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
     }
-    const ext = path.extname(ent.name).toLowerCase();
-    if (CODE_EXT.has(ext)) continue;
-    const to = path.join(destCore, relPath);
-    await fs.mkdir(path.dirname(to), { recursive: true });
-    await fs.copyFile(from, to);
+    for (const ent of entries) {
+      if (ent.name.startsWith('.')) continue;
+      if (skipWww && SKIP_DIR.has(ent.name)) continue;
+      if (!skipWww && (ent.name === 'node_modules' || ent.name === '.git')) continue;
+      const from = path.join(dir, ent.name);
+      const relPath = path.join(rel, ent.name);
+      if (ent.isDirectory()) {
+        await walk(from, relPath);
+        continue;
+      }
+      const ext = path.extname(ent.name).toLowerCase();
+      if (CODE_EXT.has(ext)) continue;
+      const to = path.join(destRoot, relPath);
+      await fs.mkdir(path.dirname(to), { recursive: true });
+      await fs.copyFile(from, to);
+    }
   }
+  await fs.mkdir(destRoot, { recursive: true });
+  await walk(srcRoot);
 }
 
-await fs.mkdir(destCore, { recursive: true });
-await walk(srcCore);
-console.log('copy-runtime-assets: core assets → dist/core (skipped www/site)');
+await walkCopy(path.join(root, 'core'), path.join(root, 'dist', 'core'), { skipWww: true });
+await walkCopy(path.join(root, 'src', 'renderers'), path.join(root, 'dist', 'src', 'renderers'));
+console.log('copy-runtime-assets: core + renderers assets → dist');

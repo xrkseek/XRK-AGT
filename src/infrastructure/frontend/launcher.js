@@ -366,7 +366,7 @@ class FrontendLauncher {
 
         const dir = path.dirname(file);
         const relFromCore = path
-          .relative(paths.core, dir)
+          .relative(paths.coreSource, dir)
           .replace(/\\/g, '/');
 
         const coreName = relFromCore.split('/')[0] || '';

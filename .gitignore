@@ -130,7 +130,6 @@ scripts/*
 !scripts/ensure-redis.mjs
 !scripts/ensure-redis.cmd
 !scripts/copy-runtime-assets.mjs
-!scripts/build-www-static.mjs
 *.reg
 
 # 本地 Windows 注册表/卸载项清理备份（scripts/clean-empty-shell-uninstall.ps1）

@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul 2>&1
-REM XRK-AGT Windows 启动（先确保本机 Redis 可连，再经 app.js 引导）
+REM XRK-AGT Windows 启动（先确保本机 Redis 可连，再经 dist/app.js）
 set "ENSURE=%~dp0scripts\ensure-redis.mjs"
 if not exist "%ENSURE%" (
   echo [XRK-AGT] missing scripts\ensure-redis.mjs
@@ -19,5 +19,11 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-node --experimental-strip-types app.js %*
+call pnpm build
+if errorlevel 1 (
+  echo [XRK-AGT] pnpm build 失败
+  pause
+  exit /b 1
+)
+node dist\app.js %*
 if errorlevel 1 pause

@@ -3,7 +3,7 @@
   "version": "2.0.9",
   "author": "Xrkseek",
   "description": "多平台、多Tasker、工作流驱动型智能体平台 - Multi-platform, multi-Tasker, workflow-driven intelligent agent platform",
-  "main": "app.js",
+  "main": "dist/app.js",
   "type": "module",
   "engines": {
     "node": ">=26.0.0",
@@ -22,14 +22,14 @@
     "chatbot"
   ],
   "imports": {
-    "#utils/*": "./src/utils/*",
-    "#core/*": "./core/*",
+    "#utils/*": "./dist/src/utils/*",
+    "#core/*": "./dist/core/*",
     "#config/*": "./config/*",
     "#data/*": "./data/*",
-    "#renderers/*": "./src/renderers/*",
-    "#modules/*": "./src/modules/*",
-    "#infrastructure/*": "./src/infrastructure/*",
-    "#factory/*": "./src/factory/*"
+    "#renderers/*": "./dist/src/renderers/*",
+    "#modules/*": "./dist/src/modules/*",
+    "#infrastructure/*": "./dist/src/infrastructure/*",
+    "#factory/*": "./dist/src/factory/*"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "0.61.1",
@@ -70,12 +70,14 @@
     "typescript": "^5.9.3"
   },
   "scripts": {
-    "start": "node --experimental-strip-types app.js",
-    "dev": "node --experimental-strip-types app.js",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-runtime-assets.mjs",
+    "build:watch": "tsc -p tsconfig.build.json -w",
+    "start": "pnpm build && node dist/app.js",
+    "dev": "pnpm build && node dist/app.js",
     "build:www": "node scripts/build-www-static.mjs",
-    "debug": "node --experimental-strip-types debug.js",
+    "debug": "pnpm build && node dist/debug.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "setup:browsers": "node -e \"import { installPlaywrightChromium } from '#utils/bootstrap-deps.js'; await installPlaywrightChromium();\"",
+    "setup:browsers": "pnpm build && node -e \"import { installPlaywrightChromium } from '#utils/bootstrap-deps.js'; await installPlaywrightChromium();\"",
     "start:windows": "start.bat server",
     "start:unix": "./start.sh server",
     "lint": "eslint .",

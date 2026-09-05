@@ -326,7 +326,8 @@ export async function buildSignedStaticWwwBeforeRuntime(opts = {}) {
   const coreDirs = await paths.getCoreDirs();
 
   for (const coreDir of coreDirs) {
-    const wwwDir = path.join(coreDir, 'www');
+    const coreName = path.basename(coreDir);
+    const wwwDir = path.join(paths.coreSource, coreName, 'www');
     if (!fsSync.existsSync(wwwDir)) continue;
     let entries = [];
     try {
