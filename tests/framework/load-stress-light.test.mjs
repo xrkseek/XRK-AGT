@@ -13,7 +13,7 @@ import {
   getRequestContext,
   formatPrometheusMetrics,
   buildProcessMetrics,
-} from '../../src/utils/observability.js';
+} from '#utils/observability.js';
 import { estimateTokensMixed } from '#utils/token-estimate.js';
 
 const dataRoot = path.join(process.cwd(), 'data');

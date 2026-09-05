@@ -6,15 +6,33 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import RuntimeUtil from '#utils/runtime-util.js';
 
-const requestAls = new AsyncLocalStorage();
+type RequestContext = {
+  requestId?: string;
+  path?: string;
+  method?: string;
+};
 
-const REQUEST_ID_HEADERS = ['x-request-id', 'x-correlation-id', 'x-trace-id'];
+type ErrorConstructorWithIsError = ErrorConstructor & {
+  isError?: (value: unknown) => value is Error;
+};
 
-/**
- * @param {import('express').Request} req
- * @returns {string}
- */
-export function resolveRequestId(req) {
+function errMessage(err: unknown): string {
+  const Ctor = Error as ErrorConstructorWithIsError;
+  if (typeof Ctor.isError === 'function' ? Ctor.isError(err) : err instanceof Error) {
+    return (err as Error).message;
+  }
+  return String(err ?? 'unknown');
+}
+
+const requestAls = new AsyncLocalStorage<RequestContext>();
+
+const REQUEST_ID_HEADERS = ['x-request-id', 'x-correlation-id', 'x-trace-id'] as const;
+
+type ExpressLikeReq = {
+  headers?: Record<string, string | string[] | undefined>;
+};
+
+export function resolveRequestId(req: ExpressLikeReq | null | undefined): string {
   const headers = req?.headers || {};
   for (const key of REQUEST_ID_HEADERS) {
     const raw = headers[key];
@@ -24,38 +42,24 @@ export function resolveRequestId(req) {
   return `${Date.now()}-${RuntimeUtil.shortId()}`;
 }
 
-/** @returns {{ requestId?: string, path?: string, method?: string }|undefined} */
-export function getRequestContext() {
+export function getRequestContext(): RequestContext | undefined {
   return requestAls.getStore();
 }
 
-/**
- * @param {{ requestId: string, path?: string, method?: string }} ctx
- */
-export function enterRequestContext(ctx) {
+export function enterRequestContext(ctx: RequestContext): void {
   requestAls.enterWith(ctx);
 }
 
-/**
- * @template T
- * @param {{ requestId: string, path?: string, method?: string }} ctx
- * @param {() => T} fn
- * @returns {T}
- */
-export function runWithRequestContext(ctx, fn) {
+export function runWithRequestContext<T>(ctx: RequestContext, fn: () => T): T {
   return requestAls.run(ctx, fn);
 }
 
-/**
- * @param {string} name
- * @param {Record<string, unknown>} [attrs]
- */
-export function createSpan(name, attrs = {}) {
+export function createSpan(name: string, attrs: Record<string, unknown> = {}) {
   const start = Date.now();
   const requestId = getRequestContext()?.requestId;
   const base = { ...attrs, ...(requestId ? { requestId } : {}) };
 
-  const finish = (level, extra = {}) => {
+  const finish = (level: string, extra: Record<string, unknown> = {}) => {
     const durationMs = Date.now() - start;
     const payload = { span: name, durationMs, ...base, ...extra };
     const msg = Object.entries(payload)
@@ -67,34 +71,41 @@ export function createSpan(name, attrs = {}) {
 
   return {
     name,
-    end: (extra) => finish('debug', extra),
-    fail: (err, extra = {}) =>
+    end: (extra?: Record<string, unknown>) => finish('debug', extra),
+    fail: (err: unknown, extra: Record<string, unknown> = {}) =>
       finish('warn', {
         ...extra,
-        error: (typeof Error.isError === 'function' ? Error.isError(err) : err instanceof Error)
-          ? err.message
-          : String(err ?? 'unknown'),
+        error: errMessage(err),
       }),
   };
 }
 
 /**
  * 探测已配置子服 /health（短超时；失败仅 degraded，不拖垮 Redis 就绪）
- * @param {{ timeoutMs?: number, fetchImpl?: typeof fetch }} [opts]
  */
-export async function probeSubserverHealth(opts = {}) {
+export async function probeSubserverHealth(
+  opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {},
+): Promise<
+  | {
+      status: string;
+      runtimes: Record<string, { status: string; httpStatus?: number; error?: string }>;
+    }
+  | { status: string; error: string }
+> {
   const timeoutMs = opts.timeoutMs ?? 800;
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
-  const out = {};
+  const out: Record<string, { status: string; httpStatus?: number; error?: string }> = {};
 
   try {
     const { SUBSERVER_RUNTIME_CATALOG } = await import('#utils/subserver-runtimes.js');
     const { getSubserverConfig } = await import('#utils/subserver-client.js');
-    const runtimeConfig = (await import('#infrastructure/config/config.js')).default;
+    const runtimeConfig = (await import('#infrastructure/config/config.js')).default as {
+      subserver?: { runtimes?: Record<string, { enabled?: boolean }> };
+    };
     const root = runtimeConfig.subserver ?? {};
     const runtimes = root.runtimes && typeof root.runtimes === 'object' ? root.runtimes : {};
 
-    const ids = Object.keys(SUBSERVER_RUNTIME_CATALOG).filter((id) => {
+    const ids = Object.keys(SUBSERVER_RUNTIME_CATALOG as Record<string, unknown>).filter((id) => {
       const entry = runtimes[id];
       return !(entry && entry.enabled === false);
     });
@@ -102,7 +113,7 @@ export async function probeSubserverHealth(opts = {}) {
     await Promise.all(
       ids.map(async (id) => {
         try {
-          const { baseUrl } = getSubserverConfig(id);
+          const { baseUrl } = getSubserverConfig(id) as { baseUrl: string };
           const ctrl = new AbortController();
           const timer = setTimeout(() => ctrl.abort(), timeoutMs);
           try {
@@ -120,19 +131,15 @@ export async function probeSubserverHealth(opts = {}) {
         } catch (err) {
           out[id] = {
             status: 'unavailable',
-            error: (typeof Error.isError === 'function' ? Error.isError(err) : err instanceof Error)
-              ? err.message
-              : String(err ?? 'unreachable'),
+            error: errMessage(err) === 'unknown' ? String(err ?? 'unreachable') : errMessage(err),
           };
         }
-      })
+      }),
     );
   } catch (err) {
     return {
       status: 'unavailable',
-      error: (typeof Error.isError === 'function' ? Error.isError(err) : err instanceof Error)
-        ? err.message
-        : String(err),
+      error: errMessage(err),
     };
   }
 
@@ -146,28 +153,44 @@ export async function probeSubserverHealth(opts = {}) {
 }
 
 /**
- * @param {{ agentRuntime?: object, includeLoaders?: boolean, includeMcp?: boolean, includeSubservers?: boolean, subserverFetch?: typeof fetch }} [opts]
+ * 构建就绪快照
  */
-export async function buildReadinessSnapshot(opts = {}) {
+export async function buildReadinessSnapshot(
+  opts: {
+    agentRuntime?: { uin?: unknown[] } | null;
+    includeLoaders?: boolean;
+    includeMcp?: boolean;
+    includeSubservers?: boolean;
+    subserverFetch?: typeof fetch;
+  } = {},
+): Promise<{
+  status: string;
+  timestamp: number;
+  uptime: number;
+  requestId: string | null;
+  services: Record<string, unknown>;
+}> {
   const {
     agentRuntime = null,
     includeLoaders = true,
     includeMcp = true,
     includeSubservers = true,
   } = opts;
-  const services = {};
+  const services: Record<string, unknown> = {};
   let overall = 'healthy';
 
   // Redis / SQLite：Runtime 硬依赖，失败 → unhealthy
   try {
     const { getDatabaseManager } = await import('#infrastructure/database/index.js');
-    const dm = getDatabaseManager();
+    const dm = getDatabaseManager() as {
+      checkRedis: () => Promise<boolean>;
+      checkSqlite?: () => boolean;
+    };
     const redisOk = await dm.checkRedis();
     services.redis = redisOk ? 'operational' : 'down';
     if (!redisOk) overall = 'unhealthy';
 
-    const sqliteOk =
-      typeof dm.checkSqlite === 'function' ? dm.checkSqlite() : false;
+    const sqliteOk = typeof dm.checkSqlite === 'function' ? dm.checkSqlite() : false;
     services.sqlite = sqliteOk ? 'operational' : 'down';
     if (!sqliteOk) overall = 'unhealthy';
   } catch {
@@ -187,14 +210,18 @@ export async function buildReadinessSnapshot(opts = {}) {
   if (includeLoaders) {
     try {
       const { default: AiWorkflowLoader } = await import('#infrastructure/ai-workflow/loader.js');
-      const stats = AiWorkflowLoader.getStats?.() || {};
+      const loader = AiWorkflowLoader as {
+        getStats?: () => { total?: number; enabled?: number | null };
+        workflows?: { size?: number };
+      };
+      const stats = loader.getStats?.() || {};
       services.workflows = {
         status: 'operational',
-        total: stats.total ?? AiWorkflowLoader.workflows?.size ?? 0,
+        total: stats.total ?? loader.workflows?.size ?? 0,
         enabled: stats.enabled ?? null,
       };
     } catch (err) {
-      services.workflows = { status: 'down', error: err?.message || String(err) };
+      services.workflows = { status: 'down', error: errMessage(err) };
       if (overall === 'healthy') overall = 'degraded';
     }
   }
@@ -202,7 +229,8 @@ export async function buildReadinessSnapshot(opts = {}) {
   if (includeMcp) {
     try {
       const { default: AiWorkflowLoader } = await import('#infrastructure/ai-workflow/loader.js');
-      const mcp = AiWorkflowLoader.mcpServer;
+      const mcp = (AiWorkflowLoader as { mcpServer?: { initialized?: boolean; tools?: { size?: number } } })
+        .mcpServer;
       services.mcp = mcp
         ? {
             status: mcp.initialized ? 'operational' : 'degraded',
@@ -228,7 +256,7 @@ export async function buildReadinessSnapshot(opts = {}) {
     const { probePersistenceProviders } = await import(
       '#infrastructure/database/persistence-registry.js'
     );
-    const persistence = await probePersistenceProviders();
+    const persistence = (await probePersistenceProviders()) as { status?: string };
     services.persistence = persistence;
     if (persistence.status === 'degraded' && overall === 'healthy') {
       overall = 'degraded';
@@ -248,16 +276,14 @@ export async function buildReadinessSnapshot(opts = {}) {
 
 /**
  * 将进程指标转为 Prometheus exposition（text/plain）
- * @param {object} metrics buildProcessMetrics() 结果
- * @returns {string}
  */
-export function formatPrometheusMetrics(metrics) {
-  const lines = [];
+export function formatPrometheusMetrics(metrics: Record<string, any>): string {
+  const lines: string[] = [];
   const mem = metrics.memory || {};
   const cpu = metrics.cpu || {};
   const wf = metrics.workflow?.traces || {};
 
-  const num = (name, value, help, type = 'gauge') => {
+  const num = (name: string, value: unknown, help: string, type = 'gauge') => {
     if (!Number.isFinite(Number(value))) return;
     lines.push(`# HELP ${name} ${help}`);
     lines.push(`# TYPE ${name} ${type}`);
@@ -277,7 +303,12 @@ export function formatPrometheusMetrics(metrics) {
   const http = metrics.http || {};
   const lat = http.latencyMs || {};
   num('xrk_http_requests_total', http.total, 'HTTP requests observed total', 'counter');
-  num('xrk_http_requests_failed', http.fail, 'HTTP requests failed (status>=500 or client abort)', 'counter');
+  num(
+    'xrk_http_requests_failed',
+    http.fail,
+    'HTTP requests failed (status>=500 or client abort)',
+    'counter',
+  );
   num('xrk_http_error_rate', http.errorRate, 'HTTP error rate (all-time window)');
   num('xrk_http_sliding_error_rate', http.slidingErrorRate, 'HTTP error rate (sliding window)');
   num('xrk_http_rps', http.rps, 'HTTP requests per second (since metrics start)');
@@ -290,16 +321,25 @@ export function formatPrometheusMetrics(metrics) {
   return `${lines.join('\n')}\n`;
 }
 
-/**
- * @param {{ getWebSocketStats?: () => object, getTraceSummary?: () => object, httpPort?: number, httpsPort?: number, actualPort?: number, actualHttpsPort?: number, proxyEnabled?: boolean, workflow?: object, http?: object }} [runtime]
- */
-export function buildProcessMetrics(runtime = {}) {
+export function buildProcessMetrics(
+  runtime: {
+    getWebSocketStats?: () => unknown;
+    getTraceSummary?: () => unknown;
+    httpPort?: number;
+    httpsPort?: number;
+    actualPort?: number;
+    actualHttpsPort?: number;
+    proxyEnabled?: boolean;
+    workflow?: unknown;
+    http?: unknown;
+  } = {},
+): Record<string, unknown> {
   const memUsage = process.memoryUsage();
   const cpuUsage = process.cpuUsage();
   const workflow =
     typeof runtime.getTraceSummary === 'function'
       ? runtime.getTraceSummary()
-      : runtime.workflow ?? null;
+      : (runtime.workflow ?? null);
 
   return {
     timestamp: Date.now(),

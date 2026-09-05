@@ -10,7 +10,7 @@ import {
   probePersistenceProviders,
   listPersistenceProviders,
 } from '../../src/infrastructure/database/persistence-registry.js';
-import { buildReadinessSnapshot } from '../../src/utils/observability.js';
+import { buildReadinessSnapshot } from '#utils/observability.js';
 import sqliteInit, { closeSqlite } from '../../src/infrastructure/sqlite.js';
 
 describe('persistence-registry', () => {

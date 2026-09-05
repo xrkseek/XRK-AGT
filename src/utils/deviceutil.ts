@@ -5,26 +5,24 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import RuntimeUtil from './runtime-util.js';
+import RuntimeUtil from '#utils/runtime-util.js';
 
 /**
  * 初始化目录
- * @param {string[]} directories - 需要创建的目录列表
- * @returns {Promise<void>}
  */
-export async function initializeDirectories(directories) {
-  if (!Array.isArray(directories) || directories.length === 0) return
+export async function initializeDirectories(directories: string[] | null | undefined): Promise<void> {
+  if (!Array.isArray(directories) || directories.length === 0) return;
   await Promise.all(
-    [...new Set(directories.filter(Boolean))].map(dir => RuntimeUtil.mkdir(dir))
-  )
+    [...new Set(directories.filter(Boolean))].map((dir) => RuntimeUtil.mkdir(dir)),
+  );
 }
 
 /**
  * 验证设备注册数据
- * @param {Object} deviceData - 设备注册数据
- * @returns {Object} 验证结果 { valid: boolean, error?: string }
  */
-export function validateDeviceRegistration(deviceData) {
+export function validateDeviceRegistration(
+  deviceData: { device_id?: unknown; device_type?: unknown } | null | undefined,
+): { valid: boolean; error?: string } {
   if (!deviceData?.device_id) {
     return { valid: false, error: '缺少device_id' };
   }
@@ -38,34 +36,42 @@ export function validateDeviceRegistration(deviceData) {
 
 /**
  * 生成唯一的命令ID
- * @returns {string} 命令ID
  */
-export function generateCommandId() {
+export function generateCommandId(): string {
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
  * 检查设备是否具有某个能力
- * @param {Object} device - 设备对象
- * @param {string} capability - 能力名称
- * @returns {boolean} 是否具有该能力
  */
-export function hasCapability(device, capability) {
+export function hasCapability(
+  device: { capabilities?: string[] } | null | undefined,
+  capability: string,
+): boolean {
   return Boolean(device?.capabilities?.includes(capability));
 }
 
+type AudioFileInfo = {
+  filename: string;
+  session_id: string;
+  device_id: string;
+  size: number;
+  created_at: Date;
+  path: string;
+};
+
 /**
  * 获取音频文件列表
- * @param {string} directory - 目录路径
- * @param {string|null} [deviceId=null] - 设备ID（可选）
- * @returns {Promise<Array>} 音频文件列表
  */
-export async function getAudioFileList(directory, deviceId = null) {
+export async function getAudioFileList(
+  directory: string,
+  deviceId: string | null = null,
+): Promise<AudioFileInfo[]> {
   try {
     const files = await fs.readdir(directory);
     const recordings = await Promise.all(
       files
-        .filter(filename => filename.endsWith('.wav') && (!deviceId || filename.startsWith(deviceId)))
+        .filter((filename) => filename.endsWith('.wav') && (!deviceId || filename.startsWith(deviceId)))
         .map(async (filename) => {
           const filepath = path.join(directory, filename);
           const stats = await fs.stat(filepath).catch(() => null);
@@ -75,17 +81,17 @@ export async function getAudioFileList(directory, deviceId = null) {
           return {
             filename,
             session_id: parts[1] || 'unknown',
-            device_id: parts[0],
+            device_id: parts[0]!,
             size: stats.size,
             created_at: stats.birthtime,
-            path: filepath
-          };
-        })
+            path: filepath,
+          } satisfies AudioFileInfo;
+        }),
     );
 
     return recordings
-      .filter(Boolean)
-      .sort((a, b) => b.created_at - a.created_at);
+      .filter((r): r is AudioFileInfo => Boolean(r))
+      .sort((a, b) => Number(b.created_at) - Number(a.created_at));
   } catch {
     return [];
   }

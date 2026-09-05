@@ -8,7 +8,7 @@ import { Disposables } from '#utils/disposables.js';
 import {
   runWithRequestContext,
   getRequestContext,
-} from '../../src/utils/observability.js';
+} from '#utils/observability.js';
 
 describe('Disposables 完整版', () => {
   it('dispose 逆序清理 timeout/interval/on', async () => {

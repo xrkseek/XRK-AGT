@@ -13,7 +13,7 @@ import {
 import {
   buildProcessMetrics,
   formatPrometheusMetrics,
-} from '../../src/utils/observability.js';
+} from '#utils/observability.js';
 
 function mockRes(statusCode = 200) {
   const res = new EventEmitter();

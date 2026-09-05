@@ -13,7 +13,7 @@ import {
   buildProcessMetrics,
   probeSubserverHealth,
   buildReadinessSnapshot,
-} from '../../src/utils/observability.js';
+} from '#utils/observability.js';
 
 describe('observability', () => {
   it('resolveRequestId 优先入站 X-Request-Id', () => {

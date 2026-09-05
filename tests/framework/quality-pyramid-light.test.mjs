@@ -14,7 +14,7 @@ import {
   getRequestContext,
   formatPrometheusMetrics,
   buildProcessMetrics
-} from '../../src/utils/observability.js';
+} from '#utils/observability.js';
 import {
   LatencyHistogram,
   evaluateSlo
