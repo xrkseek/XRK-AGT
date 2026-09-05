@@ -1,25 +1,32 @@
 /**
  * web_search 提供商注册表 — 元数据、凭据检测、auto-detect 顺序
  */
-import { getWebSearchProviderScope } from './crawl-config.js';
-import { runBraveSearch } from './web-search-brave.js';
-import { runDuckDuckGoSearch } from './web-search-duckduckgo.js';
-import { runPerplexitySearch } from './web-search-perplexity.js';
-import { runExaSearch } from './web-search-exa.js';
-import { runTavilySearch } from './web-search-tavily.js';
-import { runParallelSearch } from './web-search-parallel.js';
-import { runParallelFreeSearch } from './web-search-parallel-free.js';
-import { runGeminiSearch } from './web-search-gemini.js';
-import { runKimiSearch } from './web-search-kimi.js';
-import { runMiniMaxSearch } from './web-search-minimax.js';
-import { runFirecrawlSearch } from './web-search-firecrawl.js';
-import { runSearxngSearch } from './web-search-searxng.js';
-import { runOllamaSearch } from './web-search-ollama.js';
+import { getWebSearchProviderScope } from './crawl-config.js'
+import { runBraveSearch } from './web-search-brave.js'
+import { runDuckDuckGoSearch } from './web-search-duckduckgo.js'
+import { runPerplexitySearch } from './web-search-perplexity.js'
+import { runExaSearch } from './web-search-exa.js'
+import { runTavilySearch } from './web-search-tavily.js'
+import { runParallelSearch } from './web-search-parallel.js'
+import { runParallelFreeSearch } from './web-search-parallel-free.js'
+import { runGeminiSearch } from './web-search-gemini.js'
+import { runKimiSearch } from './web-search-kimi.js'
+import { runMiniMaxSearch } from './web-search-minimax.js'
+import { runFirecrawlSearch } from './web-search-firecrawl.js'
+import { runSearxngSearch } from './web-search-searxng.js'
+import { runOllamaSearch } from './web-search-ollama.js'
 
-/** @typedef {{ id: string, label: string, hint?: string, requiresCredential: boolean, credentialField?: string, autoDetectOrder: number, run: Function }} WebSearchProviderEntry */
+export type WebSearchProviderEntry = {
+  id: string
+  label: string
+  hint?: string
+  requiresCredential: boolean
+  credentialField?: string
+  autoDetectOrder: number
+  run: (...args: any[]) => any
+}
 
-/** @type {WebSearchProviderEntry[]} */
-export const WEB_SEARCH_PROVIDERS = [
+export const WEB_SEARCH_PROVIDERS: WebSearchProviderEntry[] = [
   {
     id: 'perplexity',
     label: 'Perplexity Search',
@@ -125,41 +132,43 @@ export const WEB_SEARCH_PROVIDERS = [
     autoDetectOrder: 900,
     run: runDuckDuckGoSearch
   }
-];
+]
 
-const PROVIDER_BY_ID = new Map(WEB_SEARCH_PROVIDERS.map((p) => [p.id, p]));
+const PROVIDER_BY_ID = new Map(WEB_SEARCH_PROVIDERS.map((p) => [p.id, p]))
 
-export function getWebSearchProvider(id) {
-  return PROVIDER_BY_ID.get(String(id || '').toLowerCase());
+export function getWebSearchProvider(id: unknown) {
+  return PROVIDER_BY_ID.get(String(id || '').toLowerCase())
 }
 
-/** @param {WebSearchProviderEntry} provider @param {object} [runtime] */
-export function isWebSearchProviderConfigured(provider, runtime = {}) {
-  if (!provider.requiresCredential) return true;
-  const scoped = getWebSearchProviderScope(runtime, provider.id);
+export function isWebSearchProviderConfigured(
+  provider: WebSearchProviderEntry,
+  runtime: Record<string, any> = {}
+) {
+  if (!provider.requiresCredential) return true
+  const scoped = getWebSearchProviderScope(runtime, provider.id)
   if (provider.credentialField === 'baseUrl') {
-    return Boolean(scoped?.baseUrl?.trim?.());
+    return Boolean(scoped?.baseUrl?.trim?.())
   }
-  return Boolean(scoped?.apiKey?.trim?.());
+  return Boolean(scoped?.apiKey?.trim?.())
 }
 
 /** 有凭据的提供商优先，keyless 最后 */
-export function resolveAutoDetectProviderId(runtime = {}) {
-  const explicit = runtime.provider?.trim?.() || '';
-  if (explicit && getWebSearchProvider(explicit)) return explicit;
+export function resolveAutoDetectProviderId(runtime: Record<string, any> = {}) {
+  const explicit = runtime.provider?.trim?.() || ''
+  if (explicit && getWebSearchProvider(explicit)) return explicit
 
-  const sorted = [...WEB_SEARCH_PROVIDERS].sort((a, b) => a.autoDetectOrder - b.autoDetectOrder);
+  const sorted = [...WEB_SEARCH_PROVIDERS].sort((a, b) => a.autoDetectOrder - b.autoDetectOrder)
   for (const provider of sorted) {
-    if (!provider.requiresCredential) continue;
-    if (isWebSearchProviderConfigured(provider, runtime)) return provider.id;
+    if (!provider.requiresCredential) continue
+    if (isWebSearchProviderConfigured(provider, runtime)) return provider.id
   }
   for (const provider of sorted) {
-    if (!provider.requiresCredential) return provider.id;
+    if (!provider.requiresCredential) return provider.id
   }
-  return 'parallel-free';
+  return 'parallel-free'
 }
 
-export function listWebSearchProviderMeta(runtime = {}) {
+export function listWebSearchProviderMeta(runtime: Record<string, any> = {}) {
   return WEB_SEARCH_PROVIDERS.map((p) => ({
     id: p.id,
     label: p.label,
@@ -167,5 +176,5 @@ export function listWebSearchProviderMeta(runtime = {}) {
     requiresCredential: p.requiresCredential,
     configured: isWebSearchProviderConfigured(p, runtime),
     autoDetectOrder: p.autoDetectOrder
-  }));
+  }))
 }
