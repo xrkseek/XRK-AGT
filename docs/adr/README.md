@@ -8,5 +8,6 @@
 | [0001](./0001-host-is-not-agent.md) | AgentRuntime 是 Host，不是 agent loop | Accepted |
 | [0002](./0002-harness-module-first.md) | Agent loop 用 `@xrkseek/harness` 模块 | Accepted |
 | [0003](./0003-product-vs-maintainer-inject.md) | 产品 agents/ 注入 ≠ 根 AGENTS.md | Accepted |
+| [0004](./0004-typescript-dist-no-hot-reload.md) | TypeScript → dist，移除热重载 | Proposed |
 
-能力是否可依赖见 [status.md](../status.md)。
+能力是否可依赖见 [status.md](../status.md)。详细迁移设计：[superpowers/specs/2026-09-05-typescript-dist-design.md](../superpowers/specs/2026-09-05-typescript-dist-design.md)。
