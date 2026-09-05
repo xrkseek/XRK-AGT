@@ -2,24 +2,32 @@
  * 事件处理器管理系统
  * 用于管理和调度各种事件的处理函数
  */
+
+const gLogger = (): any => (globalThis as any).logger
+
+type HandlerEntry = {
+  priority: number
+  fn: (...args: any[]) => any
+  ns: string
+  self: unknown
+  key: string
+}
+
 class HandlerManager {
-  /** @type {Map<string, Array>} 事件处理器映射 */
-  events = new Map()
-  /** @type {Map<string, boolean>} 排序状态缓存 */
-  sortedCache = new Map()
+  events = new Map<string, HandlerEntry[]>()
+  sortedCache = new Map<string, boolean>()
 
   /**
    * 添加事件处理器
-   * @param {Object} runtimeConfig - 配置对象
-   * @param {string} runtimeConfig.ns - 命名空间
-   * @param {Function} runtimeConfig.fn - 处理函数
-   * @param {Object} runtimeConfig.self - 上下文对象
-   * @param {number} [runtimeConfig.priority=500] - 优先级（数字越小优先级越高）
-   * @param {string} [runtimeConfig.key] - 事件键名
-   * @param {string} [runtimeConfig.event] - 事件名（key的别名）
-   * @returns {boolean} 是否添加成功
    */
-  add(runtimeConfig) {
+  add(runtimeConfig: {
+    ns: string
+    fn: (...args: any[]) => any
+    self?: unknown
+    priority?: number
+    key?: string
+    event?: string
+  }) {
     const { ns, fn, self, priority = 500 } = runtimeConfig
     const key = runtimeConfig.key || runtimeConfig.event || ''
 
@@ -31,13 +39,13 @@ class HandlerManager {
     // 删除同命名空间的旧处理器
     this.del(ns, key)
 
-    logger.mark(`[Handler][Reg]: [${ns}][${key}]`)
+    gLogger()?.mark?.(`[Handler][Reg]: [${ns}][${key}]`)
 
     // 获取或创建事件处理器数组
     const handlers = this._getOrCreateHandlers(key)
-    
+
     // 创建并插入处理器
-    const handler = { priority, fn, ns, self, key }
+    const handler: HandlerEntry = { priority, fn, ns, self, key }
     const insertIndex = this._findInsertIndex(handlers, priority)
     handlers.splice(insertIndex, 0, handler)
 
@@ -49,13 +57,10 @@ class HandlerManager {
 
   /**
    * 删除事件处理器
-   * @param {string} ns - 命名空间
-   * @param {string} [key=''] - 事件键名（可选）
-   * @returns {number} 删除的处理器数量
    */
-  del(ns, key = '') {
+  del(ns: string, key = '') {
     if (!ns) {
-      logger.error('[Handler][Del]: 缺少命名空间参数')
+      gLogger()?.error?.('[Handler][Del]: 缺少命名空间参数')
       return 0
     }
 
@@ -70,24 +75,19 @@ class HandlerManager {
 
   /**
    * 调用事件处理器
-   * @param {string} key - 事件键名
-   * @param {Object} e - 事件对象
-   * @param {*} args - 额外参数
-   * @param {boolean} [allHandler=false] - 是否调用所有处理器
-   * @returns {*} 处理器返回值
    */
-  async call(key, e, args, allHandler = false) {
+  async call(key: string, e: unknown, args?: unknown, allHandler = false) {
     const handlers = this.events.get(key)
-    
+
     if (!handlers?.length) {
-      logger.debug(`[Handler][Call]: 没有找到 [${key}] 的处理器`)
+      gLogger()?.debug?.(`[Handler][Call]: 没有找到 [${key}] 的处理器`)
       return
     }
 
     // 遍历执行处理器
     for (const handler of handlers) {
       const result = await this._executeHandler(handler, e, args)
-      
+
       if (result.done && !allHandler) {
         return result.value
       }
@@ -96,9 +96,6 @@ class HandlerManager {
 
   /**
    * 调用所有处理器
-   * @param {string} key - 事件键名
-   * @param {Object} e - 事件对象
-   * @param {*} args - 额外参数
    */
   async callAll() {
     // 功能暂时禁用
@@ -107,25 +104,20 @@ class HandlerManager {
 
   /**
    * 检查是否存在处理器
-   * @param {string} key - 事件键名
-   * @returns {boolean}
    */
-  has(key) {
-    return this.events.has(key) && this.events.get(key).length > 0
+  has(key: string) {
+    return this.events.has(key) && (this.events.get(key)?.length || 0) > 0
   }
 
   /**
    * 获取处理器数量
-   * @param {string} key - 事件键名
-   * @returns {number}
    */
-  count(key) {
+  count(key: string) {
     return this.events.get(key)?.length || 0
   }
 
   /**
    * 获取所有事件键名
-   * @returns {string[]}
    */
   getKeys() {
     return Array.from(this.events.keys())
@@ -137,50 +129,38 @@ class HandlerManager {
   clear() {
     this.events.clear()
     this.sortedCache.clear()
-    logger.mark('[Handler][Clear]: 已清空所有处理器')
+    gLogger()?.mark?.('[Handler][Clear]: 已清空所有处理器')
   }
 
   // ========== 私有方法 ==========
 
-  /**
-   * 验证参数
-   * @private
-   */
-  _validateParams(key, fn, ns) {
+  _validateParams(key: string, fn: unknown, ns: string) {
     if (!key || typeof key !== 'string') {
-      logger.error('[Handler][Add]: 事件键名无效')
+      gLogger()?.error?.('[Handler][Add]: 事件键名无效')
       return false
     }
 
     if (typeof fn !== 'function') {
-      logger.error(`[Handler][Add]: [${ns}][${key}] 处理函数必须是函数类型`)
+      gLogger()?.error?.(`[Handler][Add]: [${ns}][${key}] 处理函数必须是函数类型`)
       return false
     }
 
     if (!ns) {
-      logger.error(`[Handler][Add]: [${key}] 缺少命名空间`)
+      gLogger()?.error?.(`[Handler][Add]: [${key}] 缺少命名空间`)
       return false
     }
 
     return true
   }
 
-  /**
-   * 获取或创建处理器数组
-   * @private
-   */
-  _getOrCreateHandlers(key) {
+  _getOrCreateHandlers(key: string) {
     if (!this.events.has(key)) {
       this.events.set(key, [])
     }
-    return this.events.get(key)
+    return this.events.get(key)!
   }
 
-  /**
-   * 删除命名空间下所有处理器
-   * @private
-   */
-  _deleteAllInNamespace(ns) {
+  _deleteAllInNamespace(ns: string) {
     let deletedCount = 0
     for (const [eventKey] of this.events) {
       deletedCount += this.del(ns, eventKey)
@@ -188,18 +168,14 @@ class HandlerManager {
     return deletedCount
   }
 
-  /**
-   * 删除指定处理器
-   * @private
-   */
-  _deleteHandler(ns, key) {
+  _deleteHandler(ns: string, key: string) {
     const handlers = this.events.get(key)
     if (!handlers?.length) return 0
 
     const originalLength = handlers.length
-    const filteredHandlers = handlers.filter(h => h.ns !== ns)
+    const filteredHandlers = handlers.filter((h) => h.ns !== ns)
     const deletedCount = originalLength - filteredHandlers.length
-    
+
     if (deletedCount > 0) {
       if (filteredHandlers.length === 0) {
         this.events.delete(key)
@@ -207,52 +183,46 @@ class HandlerManager {
       } else {
         this.events.set(key, filteredHandlers)
       }
-      
-      logger.debug(`[Handler][Del]: 删除了 [${ns}][${key}] 的 ${deletedCount} 个处理器`)
+
+      gLogger()?.debug?.(
+        `[Handler][Del]: 删除了 [${ns}][${key}] 的 ${deletedCount} 个处理器`
+      )
     }
 
     return deletedCount
   }
 
-  /**
-   * 执行单个处理器
-   * @private
-   */
-  async _executeHandler(handler, e, args) {
+  async _executeHandler(handler: HandlerEntry, e: unknown, args: unknown) {
     const { fn, self, ns, key } = handler
     let done = true
-    
+
     // reject函数用于标记处理失败
     const reject = (msg = '') => {
       if (msg) {
-        logger.mark(`[Handler][Reject]: [${ns}][${key}] ${msg}`)
+        gLogger()?.mark?.(`[Handler][Reject]: [${ns}][${key}] ${msg}`)
       }
       done = false
     }
 
     try {
       const value = await fn.call(self, e, args, reject)
-      
+
       if (done) {
-        logger.mark(`[Handler][Done]: [${ns}][${key}]`)
+        gLogger()?.mark?.(`[Handler][Done]: [${ns}][${key}]`)
       }
-      
+
       return { done, value }
-    } catch (error) {
-      logger.error(`[Handler][Error]: [${ns}][${key}] 执行出错:`)
-      logger.error(error.stack || error)
+    } catch (error: any) {
+      gLogger()?.error?.(`[Handler][Error]: [${ns}][${key}] 执行出错:`)
+      gLogger()?.error?.(error.stack || error)
       return { done: false, value: undefined }
     }
   }
 
   /**
    * 二分查找插入位置
-   * @private
-   * @param {Array} handlers - 处理器数组
-   * @param {number} priority - 优先级
-   * @returns {number} 插入位置索引
    */
-  _findInsertIndex(handlers, priority) {
+  _findInsertIndex(handlers: HandlerEntry[], priority: number) {
     let left = 0
     let right = handlers.length
 
