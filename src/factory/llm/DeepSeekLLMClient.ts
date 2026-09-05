@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
 import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '#utils/llm/openai-chat-utils.js';
@@ -13,7 +12,7 @@ import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
  * @see https://api-docs.deepseek.com/api/create-chat-completion
  * 兼容映射：medium / xhigh → high（官方兼容约定）
  */
-function normalizeDeepSeekReasoningEffort(value) {
+function normalizeDeepSeekReasoningEffort(value: any) {
   if (value === undefined || value === null || value === '') return;
   const v = String(value).trim().toLowerCase();
   if (v === 'low') return 'low';
@@ -22,14 +21,14 @@ function normalizeDeepSeekReasoningEffort(value) {
   return 'high';
 }
 
-function resolveThinkingType(overrides, config) {
+function resolveThinkingType(overrides: any, config: any) {
   const raw = overrides.thinkingType ?? overrides.thinking_type ?? config.thinkingType ?? config.thinking_type;
   if (raw === undefined || raw === null || raw === '') return 'enabled';
   const v = String(raw).trim().toLowerCase();
   return v === 'disabled' ? 'disabled' : 'enabled';
 }
 
-function applyResponseFormat(body, overrides, config) {
+function applyResponseFormat(body: any, overrides: any, config: any) {
   const rf = overrides.response_format ?? overrides.responseFormat ?? config.response_format ?? config.responseFormat;
   if (rf !== undefined) {
     const type = typeof rf === 'string' ? rf.trim() : rf?.type;
@@ -49,16 +48,17 @@ function applyResponseFormat(body, overrides, config) {
  * @see https://api-docs.deepseek.com/zh-cn/
  */
 export default class DeepSeekLLMClient {
+  [key: string]: any;
   _toolNames = createToolNameMapper();
   _timeout = 360000;
 
-  constructor(config = {}) {
+  constructor(config: any = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout ?? 360000;
   }
 
-  normalizeEndpoint(config) {
+  normalizeEndpoint(config: any) {
     const base = (config.baseUrl || 'https://api.deepseek.com').replace(/\/+$/, '');
     const path = (config.path || '/chat/completions').replace(/^\/?/, '/');
     return `${base}${path}`;
@@ -68,7 +68,7 @@ export default class DeepSeekLLMClient {
     return this._timeout ?? 360000;
   }
 
-  buildHeaders(extra = {}) {
+  buildHeaders(extra: any = {}) {
     const headers = { 'Content-Type': 'application/json', ...extra };
     if (this.config.apiKey) {
       headers.Authorization = `Bearer ${String(this.config.apiKey).trim()}`;
@@ -77,7 +77,7 @@ export default class DeepSeekLLMClient {
     return headers;
   }
 
-  buildBody(messages, overrides = {}) {
+  buildBody(messages: any, overrides: any = {}) {
     const defaultModel = this.config.model || this.config.chatModel || 'deepseek-v4-flash';
     const normalizedMessages = this._toolNames.normalizeMessages(messages);
     const body = buildOpenAIChatCompletionsBody(normalizedMessages, this.config, overrides, defaultModel);
@@ -112,32 +112,32 @@ export default class DeepSeekLLMClient {
     return body;
   }
 
-  async transformMessages(messages) {
+  async transformMessages(messages: any) {
     return await transformMessagesWithVision(messages, this.config, { mode: 'text_only' });
   }
 
-  async chat(messages, overrides = {}) {
+  async chat(messages: any, overrides: any = {}) {
     const transformedMessages = await this.transformMessages(messages);
     
     const resp = await fetch(
       this.endpoint,
-      buildFetchOptionsWithProxy(this.config, {
+      (buildFetchOptionsWithProxy(this.config, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(this.buildBody(transformedMessages, overrides)),
         signal: AbortSignal.timeout(this.timeout)
-      })
+      }) as any)
     );
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
         `DeepSeekLLMClient 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
-        { status: resp.status, headers: resp.headers }
+        { status: resp.status, headers: resp.headers as any }
       );
     }
 
-    const json = await resp.json();
+    const json: any = await resp.json();
     logPromptCacheUsage(json?.usage, 'DeepSeekLLMClient');
     const message = json?.choices?.[0]?.message;
     const content = message?.content || '';
@@ -152,17 +152,17 @@ export default class DeepSeekLLMClient {
     return content;
   }
 
-  async chatStream(messages, onDelta, overrides = {}) {
+  async chatStream(messages: any, onDelta: any, overrides: any = {}) {
     const transformedMessages = await this.transformMessages(messages);
     
     const resp = await fetch(
       this.endpoint,
-      buildFetchOptionsWithProxy(this.config, {
+      (buildFetchOptionsWithProxy(this.config, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
         signal: AbortSignal.timeout(this.timeout)
-      })
+      }) as any)
     );
 
     if (!resp.ok || !resp.body) {
@@ -176,7 +176,7 @@ export default class DeepSeekLLMClient {
     } else {
       // fallback: text-only SSE
       const { iterateSSE } = await import('#utils/llm/sse-utils.js');
-      for await (const { data } of iterateSSE(resp)) {
+      for await (const { data } of iterateSSE(resp as any)) {
         try {
           const j = JSON.parse(data);
           const delta = j?.choices?.[0]?.delta?.content;
@@ -197,9 +197,9 @@ export default class DeepSeekLLMClient {
     return collector.content;
   }
 
-  async _consumeSSEWithToolCalls(resp, onDelta, collector, options = {}) {
+  async _consumeSSEWithToolCalls(resp: any, onDelta: any, collector: any, options: any = {}) {
     const toolCallsMap = new Map();
-    for await (const { data } of iterateSSE(resp)) {
+    for await (const { data } of iterateSSE(resp as any)) {
       try {
         const json = JSON.parse(data);
         const delta = json?.choices?.[0]?.delta;

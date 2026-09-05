@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { pick } from '#utils/llm/openai-chat-utils.js';
 import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
 import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
@@ -17,7 +16,7 @@ const OPENAI_REASONING_MODES = new Set(['standard', 'pro']);
  * @param {Record<string, unknown>} overrides
  * @param {Record<string, unknown>} config
  */
-function applyOpenAIResponsesReasoning(body, overrides, config) {
+function applyOpenAIResponsesReasoning(body: any, overrides: any, config: any) {
   const rawEffort = pick(overrides, config, ['reasoningEffort', 'reasoning_effort']);
   const rawMode = pick(overrides, config, ['reasoningMode', 'reasoning_mode']);
   const rawSummary = pick(overrides, config, ['reasoningSummary', 'reasoning_summary']);
@@ -47,12 +46,12 @@ function applyOpenAIResponsesReasoning(body, overrides, config) {
   if (Object.keys(prev).length) body.reasoning = prev;
 }
 
-function isOpenAIResponsesBuiltInTool(tool) {
+function isOpenAIResponsesBuiltInTool(tool: any) {
   const type = String(tool?.type || '').trim();
   return type === 'web_search' || type === 'web_search_preview' || type === 'file_search' || type === 'code_interpreter' || type === 'computer_use_preview' || type === 'image_generation';
 }
 
-function normalizeInputPart(part) {
+function normalizeInputPart(part: any) {
   if (part.type === 'text') {
     return { type: 'input_text', text: String(part.text || '') };
   }
@@ -62,8 +61,8 @@ function normalizeInputPart(part) {
   return part;
 }
 
-function toResponsesInput(messages = []) {
-  return messages.map((m) => ({
+function toResponsesInput(messages: any = []) {
+  return messages.map((m: any) => ({
     role: m.role || 'user',
     content: Array.isArray(m.content)
       ? m.content.map(normalizeInputPart)
@@ -73,7 +72,7 @@ function toResponsesInput(messages = []) {
   }));
 }
 
-function extractResponsesText(resp) {
+function extractResponsesText(resp: any) {
   if (typeof resp?.output_text === 'string' && resp.output_text) return resp.output_text;
   const outputs = Array.isArray(resp?.output) ? resp.output : [];
   const chunks = [];
@@ -88,13 +87,13 @@ function extractResponsesText(resp) {
   return chunks.join('');
 }
 
-function extractFunctionCalls(resp) {
+function extractFunctionCalls(resp: any) {
   const outputs = Array.isArray(resp.output) ? resp.output : [];
-  return outputs.filter((item) => item.type === 'function_call' && item.name);
+  return outputs.filter((item: any) => item.type === 'function_call' && item.name);
 }
 
-function functionCallsToToolCalls(functionCalls = []) {
-  return functionCalls.map((fc, idx) => ({
+function functionCallsToToolCalls(functionCalls: any = []) {
+  return functionCalls.map((fc: any, idx: any) => ({
     id: fc.call_id || fc.id || `call_${idx}_${String(fc.name || 'tool').replace(/\W/g, '_')}`,
     type: 'function',
     function: {
@@ -105,15 +104,16 @@ function functionCallsToToolCalls(functionCalls = []) {
 }
 
 export default class OpenAIResponsesCompatibleLLMClient {
+  [key: string]: any;
   _timeout = 360000;
 
-  constructor(config = {}) {
+  constructor(config: any = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout ?? 360000;
   }
 
-  normalizeEndpoint(config) {
+  normalizeEndpoint(config: any) {
     const base = (config.baseUrl ?? '').replace(/\/+$/, '');
     const path = (config.path || '/v1/responses').replace(/^\/?/, '/');
     if (!base) {
@@ -126,7 +126,7 @@ export default class OpenAIResponsesCompatibleLLMClient {
     return this._timeout ?? 360000;
   }
 
-  buildHeaders(extra = {}) {
+  buildHeaders(extra: any = {}) {
     const headers = {
       'Content-Type': 'application/json',
       ...extra
@@ -150,12 +150,12 @@ export default class OpenAIResponsesCompatibleLLMClient {
     return headers;
   }
 
-  async transformMessages(messages) {
+  async transformMessages(messages: any) {
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
-  buildBody(input, overrides = {}, { stream = false, previousResponseId } = {}) {
-    const body = {
+  buildBody(input: any, overrides: any = {}, { stream = false, previousResponseId }: any = {}) {
+    const body: any = {
       model: pick(overrides, this.config, ['model', 'chatModel']),
       input,
       stream
@@ -187,7 +187,8 @@ export default class OpenAIResponsesCompatibleLLMClient {
 
     const textFormat = pick(overrides, this.config, ['text', 'text_format', 'textFormat']);
     if (textFormat && typeof textFormat === 'object') {
-      body.text = textFormat.format ? textFormat : { format: textFormat };
+      const tf: any = textFormat;
+      body.text = tf.format ? tf : { format: tf };
     }
 
     const responseFormat = pick(overrides, this.config, ['response_format', 'responseFormat']);
@@ -235,12 +236,12 @@ export default class OpenAIResponsesCompatibleLLMClient {
     return body;
   }
 
-  buildTools(overrides = {}) {
+  buildTools(overrides: any = {}) {
     if (Object.hasOwn(overrides, 'tools')) return overrides.tools || undefined;
 
     const customTools = Array.isArray(this.config.tools) ? this.config.tools : [];
     const merged = customTools
-      .map((tool) => {
+      .map((tool: any) => {
         if (!tool || typeof tool !== 'object') return null;
         if (isOpenAIResponsesBuiltInTool(tool)) return tool;
 
@@ -269,36 +270,36 @@ export default class OpenAIResponsesCompatibleLLMClient {
     return merged.length ? merged : undefined;
   }
 
-  async requestResponses(input, overrides = {}, opts = {}) {
+  async requestResponses(input: any, overrides: any = {}, opts: any = {}) {
     const body = this.buildBody(input, overrides, opts);
     const resp = await fetch(
       this.endpoint,
-      buildFetchOptionsWithProxy(this.config, {
+      (buildFetchOptionsWithProxy(this.config, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(this.timeout)
-      })
+      }) as any)
     );
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
         `openai_responses_compat 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
-        { status: resp.status, headers: resp.headers }
+        { status: resp.status, headers: resp.headers as any }
       );
     }
 
     return resp;
   }
 
-  async chat(messages, overrides = {}) {
+  async chat(messages: any, overrides: any = {}) {
     const transformed = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformed, { timeoutMs: this.timeout });
 
     const input = toResponsesInput(transformed);
     const resp = await this.requestResponses(input, overrides, { stream: false });
-    const json = await resp.json();
+    const json: any = await resp.json();
     const text = extractResponsesText(json);
     const functionCalls = extractFunctionCalls(json);
 
@@ -320,14 +321,14 @@ export default class OpenAIResponsesCompatibleLLMClient {
    * 消费一轮 Responses SSE：文本/推理 delta + 完成后的 response 对象。
    * @returns {Promise<object|null>} response.completed 上的 response，或 null
    */
-  async consumeResponsesStream(resp, onDelta, overrides = {}) {
+  async consumeResponsesStream(resp: any, onDelta: any, overrides: any = {}) {
     if (!resp.body) {
       throw new Error('openai_responses_compat 流式请求失败: 响应体为空');
     }
 
     let completed = null;
 
-    for await (const { data } of iterateSSE(resp)) {
+    for await (const { data } of iterateSSE(resp as any)) {
       try {
         const evt = JSON.parse(data);
         const type = evt?.type;
@@ -364,7 +365,7 @@ export default class OpenAIResponsesCompatibleLLMClient {
         if (type === 'response.completed' && evt.response) {
           completed = evt.response;
         }
-      } catch (e) {
+      } catch (e: any) {
         RuntimeUtil.makeLog('warn', `[OpenAIResponsesCompatibleLLMClient] SSE JSON解析失败: ${e.message}`, 'LLMFactory');
       }
     }
@@ -372,7 +373,7 @@ export default class OpenAIResponsesCompatibleLLMClient {
     return completed;
   }
 
-  async chatStream(messages, onDelta, overrides = {}) {
+  async chatStream(messages: any, onDelta: any, overrides: any = {}) {
     const transformed = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformed, { timeoutMs: this.timeout });
 

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
 import { fetchAsBase64 } from '#utils/llm/image-utils.js';
@@ -18,15 +17,16 @@ import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
  * - 思考：`thinkingType=adaptive` + `reasoningEffort`→`output_config.effort`（4.6+）；旧模型用 `enabled`+budget_tokens
  */
 export default class AnthropicLLMClient {
+  [key: string]: any;
   _timeout = 360000;
 
-  constructor(config = {}) {
+  constructor(config: any = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout ?? 360000;
   }
 
-  normalizeEndpoint(config) {
+  normalizeEndpoint(config: any) {
     const base = (config.baseUrl || 'https://api.anthropic.com/v1').replace(/\/+$/, '');
     const path = (config.path || '/messages').replace(/^\/?/, '/');
     return `${base}${path}`;
@@ -36,7 +36,7 @@ export default class AnthropicLLMClient {
     return this._timeout ?? 360000;
   }
 
-  buildHeaders(extra = {}) {
+  buildHeaders(extra: any = {}) {
     const headers = {
       'Content-Type': 'application/json',
       ...extra
@@ -66,12 +66,12 @@ export default class AnthropicLLMClient {
     return headers;
   }
 
-  async transformMessages(messages) {
+  async transformMessages(messages: any) {
     // 统一为 OpenAI 风格多模态 content（text + image_url），再转换为 Anthropic 的 content blocks
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
-  async _toAnthropicImageBlock(url) {
+  async _toAnthropicImageBlock(url: any) {
     const raw = String(url ?? '').trim();
     if (!raw) return null;
 
@@ -94,7 +94,7 @@ export default class AnthropicLLMClient {
    * - system: 单独提取为 system 字符串
    * - user/assistant: messages[{role, content}]
    */
-  buildBody(messages, overrides = {}) {
+  buildBody(messages: any, overrides: any = {}) {
     const systemTexts = [];
     const anthMessages = [];
 
@@ -142,7 +142,7 @@ export default class AnthropicLLMClient {
       });
     }
 
-    const body = {
+    const body: any = {
       model: overrides.model || overrides.chatModel || this.config.model || this.config.chatModel || 'claude-3-5-sonnet-latest',
       messages: anthMessages
     };
@@ -192,14 +192,14 @@ export default class AnthropicLLMClient {
     return body;
   }
 
-  extractText(json) {
+  extractText(json: any) {
     // Anthropic: content: [{type:'text', text:'...'}]
     const parts = json?.content;
     if (!Array.isArray(parts)) return '';
-    return parts.map(p => (p?.type === 'text' ? (p.text ?? '') : '')).join('');
+    return parts.map((p: any) => (p?.type === 'text' ? (p.text ?? '') : '')).join('');
   }
 
-  async _finalizeBodyImageBlocks(body) {
+  async _finalizeBodyImageBlocks(body: any) {
     for (const msg of body.messages ?? []) {
       if (!Array.isArray(msg.content)) continue;
       const newBlocks = [];
@@ -220,16 +220,16 @@ export default class AnthropicLLMClient {
     }
   }
 
-  async _postNativeBody(body, overrides = {}) {
+  async _postNativeBody(body: any, overrides: any = {}) {
     await this._finalizeBodyImageBlocks(body);
     const resp = await fetch(
       this.endpoint,
-      buildFetchOptionsWithProxy(this.config, {
+      (buildFetchOptionsWithProxy(this.config, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(this.timeout)
-      })
+      }) as any)
     );
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
@@ -239,25 +239,25 @@ export default class AnthropicLLMClient {
   }
 
   /** 原生 Anthropic content blocks（含 image / tool_use），不经 OpenAI 多模态转换 */
-  async chatNative(messages, overrides = {}) {
+  async chatNative(messages: any, overrides: any = {}) {
     const body = this.buildBody(normalizeAnthropicMessages(messages), overrides);
     ensureAnthropicMaxTokens(body, this.config, overrides);
     const resp = await this._postNativeBody(body, overrides);
-    const data = await resp.json();
+    const data: any = await resp.json();
     logPromptCacheUsage(data?.usage, 'Anthropic');
     return this.extractText(data);
   }
 
-  async chat(messages, overrides = {}) {
+  async chat(messages: any, overrides: any = {}) {
     const transformedMessages = await this.transformMessages(messages);
     const body = this.buildBody(transformedMessages, overrides);
     const resp = await this._postNativeBody(body, overrides);
-    const data = await resp.json();
+    const data: any = await resp.json();
     logPromptCacheUsage(data?.usage, 'Anthropic');
     return this.extractText(data);
   }
 
-  async chatStream(messages, onDelta, overrides = {}) {
+  async chatStream(messages: any, onDelta: any, overrides: any = {}) {
     const transformedMessages = await this.transformMessages(messages);
     const body = this.buildBody(transformedMessages, overrides);
     body.stream = true;
@@ -267,7 +267,7 @@ export default class AnthropicLLMClient {
       throw new Error('Anthropic 流式响应无 body');
     }
 
-    for await (const { data } of iterateSSE(resp, { stopOnDone: false })) {
+    for await (const { data } of iterateSSE(resp as any, { stopOnDone: false })) {
       if (!data) continue;
       try {
         const json = JSON.parse(data);

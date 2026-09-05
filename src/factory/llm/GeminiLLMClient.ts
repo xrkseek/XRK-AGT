@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
 import { fetchAsBase64 } from '#utils/llm/image-utils.js';
@@ -17,15 +16,16 @@ import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
  * - MCP tools：Gemini function calling 协议不同，默认不注入（建议 enableTools=false）
  */
 export default class GeminiLLMClient {
+  [key: string]: any;
   _timeout = 360000;
 
-  constructor(config = {}) {
+  constructor(config: any = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout ?? 360000;
   }
 
-  normalizeEndpoint(config) {
+  normalizeEndpoint(config: any) {
     const base = (config.baseUrl || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
     const model = encodeURIComponent(config.model || config.chatModel || '');
     const path = (config.path || (model ? `/v1beta/models/${model}:generateContent` : '')).replace(/^\/?/, '/');
@@ -48,7 +48,7 @@ export default class GeminiLLMClient {
     return mode === 'query' || mode === 'key' ? 'query' : 'header';
   }
 
-  buildHeaders(extra = {}) {
+  buildHeaders(extra: any = {}) {
     const headers = {
       'Content-Type': 'application/json',
       ...extra
@@ -60,18 +60,18 @@ export default class GeminiLLMClient {
     return headers;
   }
 
-  resolveUrl(url) {
+  resolveUrl(url: any) {
     if (this.authMode() !== 'query') return url;
     const u = new URL(url);
     u.searchParams.set('key', String(this.config.apiKey).trim());
     return u.toString();
   }
 
-  async transformMessages(messages) {
+  async transformMessages(messages: any) {
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
-  async _toInlineData(url) {
+  async _toInlineData(url: any) {
     const raw = String(url ?? '').trim();
     if (!raw) return null;
 
@@ -80,7 +80,7 @@ export default class GeminiLLMClient {
     return { inlineData: { mimeType: info.mimeType || 'image/png', data: info.base64 } };
   }
 
-  async buildGeminiPayload(messages, overrides = {}) {
+  async buildGeminiPayload(messages: any, overrides: any = {}) {
     const systemTexts = [];
     const contents = [];
 
@@ -121,7 +121,7 @@ export default class GeminiLLMClient {
       });
     }
 
-    const generationConfig = {};
+    const generationConfig: any = {};
 
     const temperature = overrides.temperature ?? this.config.temperature;
     if (temperature !== undefined) generationConfig.temperature = temperature;
@@ -137,7 +137,7 @@ export default class GeminiLLMClient {
     const topK = (overrides.topK ?? overrides.top_k ?? this.config.topK ?? this.config.top_k);
     if (topK !== undefined) generationConfig.topK = topK;
 
-    const payload = {
+    const payload: any = {
       contents,
       ...(Object.keys(generationConfig).length ? { generationConfig } : {})
     };
@@ -156,37 +156,37 @@ export default class GeminiLLMClient {
     return payload;
   }
 
-  extractTextFromResponse(json) {
+  extractTextFromResponse(json: any) {
     const parts = json?.candidates?.[0]?.content?.parts;
     if (!Array.isArray(parts)) return '';
     return parts.map(p => p?.text ?? '').join('');
   }
 
-  async chat(messages, overrides = {}) {
+  async chat(messages: any, overrides: any = {}) {
     const transformedMessages = await this.transformMessages(messages);
     const resp = await fetch(
       this.resolveUrl(this.endpoint),
-      buildFetchOptionsWithProxy(this.config, {
+      (buildFetchOptionsWithProxy(this.config, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(await this.buildGeminiPayload(transformedMessages, overrides)),
         signal: AbortSignal.timeout(this.timeout)
-      })
+      }) as any)
     );
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
         `Gemini 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
-        { status: resp.status, headers: resp.headers }
+        { status: resp.status, headers: resp.headers as any }
       );
     }
 
-    const data = await resp.json();
+    const data: any = await resp.json();
     return this.extractTextFromResponse(data);
   }
 
-  async chatStream(messages, onDelta, overrides = {}) {
+  async chatStream(messages: any, onDelta: any, overrides: any = {}) {
     const transformedMessages = await this.transformMessages(messages);
     const baseUrl = this.endpoint.replace(/:generateContent$/, ':streamGenerateContent');
     const url = new URL(this.resolveUrl(baseUrl));
@@ -194,23 +194,23 @@ export default class GeminiLLMClient {
 
     const resp = await fetch(
       url.toString(),
-      buildFetchOptionsWithProxy(this.config, {
+      (buildFetchOptionsWithProxy(this.config, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(await this.buildGeminiPayload(transformedMessages, overrides)),
         signal: AbortSignal.timeout(this.timeout)
-      })
+      }) as any)
     );
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
         `Gemini 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
-        { status: resp.status, headers: resp.headers }
+        { status: resp.status, headers: resp.headers as any }
       );
     }
     let emitted = '';
-    for await (const { data } of iterateSSE(resp)) {
+    for await (const { data } of iterateSSE(resp as any)) {
       if (!data) continue;
       try {
         const json = JSON.parse(data);

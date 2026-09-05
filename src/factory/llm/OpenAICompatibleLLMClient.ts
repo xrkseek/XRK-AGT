@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { buildOpenAIChatCompletionsBody, applyOpenAITools, buildOpenAICompatEndpoint } from '#utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
 import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
@@ -18,15 +17,16 @@ import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
  * - 各厂商官方 builtin（deepseek / volcengine / anthropic …）独立 *LLMClient，按各自文档 buildBody
  */
 export default class OpenAICompatibleLLMClient {
+  [key: string]: any;
   _timeout = 360000;
 
-  constructor(config = {}) {
+  constructor(config: any = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout ?? 360000;
   }
 
-  normalizeEndpoint(config) {
+  normalizeEndpoint(config: any) {
     return buildOpenAICompatEndpoint(config, {
       defaultPath: '/chat/completions',
       label: 'openai_compat',
@@ -37,7 +37,7 @@ export default class OpenAICompatibleLLMClient {
     return this._timeout ?? 360000;
   }
 
-  buildHeaders(extra = {}) {
+  buildHeaders(extra: any = {}) {
     const headers = { 'Content-Type': 'application/json', ...extra };
 
     if (this.config.apiKey) {
@@ -58,18 +58,18 @@ export default class OpenAICompatibleLLMClient {
     return headers;
   }
 
-  async transformMessages(messages) {
+  async transformMessages(messages: any) {
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
-  buildBody(messages, overrides = {}) {
+  buildBody(messages: any, overrides: any = {}) {
     const defaultModel = this.config.model || this.config.chatModel;
     const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, defaultModel);
     applyOpenAITools(body, this.config, overrides);
     return body;
   }
 
-  async _prepareMessages(messages) {
+  async _prepareMessages(messages: any) {
     const transformed = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformed, { timeoutMs: this.timeout });
     const cleaned = cleanupMessages(transformed);
@@ -90,7 +90,7 @@ export default class OpenAICompatibleLLMClient {
       .filter(Boolean);
   }
 
-  _normalizeToolCall(toolCall, index) {
+  _normalizeToolCall(toolCall: any, index: any) {
     const normalized = {
       id: toolCall?.id,
       type: toolCall?.type || 'function',
@@ -105,7 +105,7 @@ export default class OpenAICompatibleLLMClient {
     return normalized;
   }
 
-  _buildRequestOptions(messages, overrides = {}, stream = false) {
+  _buildRequestOptions(messages: any, overrides: any = {}, stream: any = false) {
     overrides.stream = stream;
     const body = this.buildBody(messages, overrides);
     const bodyStr = JSON.stringify(body);
@@ -125,22 +125,22 @@ export default class OpenAICompatibleLLMClient {
 
     RuntimeUtil.makeLog('debug', `[OpenAICompatibleLLMClient] 构建请求: ${logParts}`, 'LLMFactory');
 
-    return buildFetchOptionsWithProxy(this.config, {
+    return (buildFetchOptionsWithProxy(this.config, {
       method: 'POST',
       headers: this.buildHeaders(overrides.headers),
       body: bodyStr,
       signal: AbortSignal.timeout(this.timeout)
-    });
+    }) as any);
   }
 
-  async _fetchRound(messages, overrides = {}, stream = false) {
+  async _fetchRound(messages: any, overrides: any = {}, stream: any = false) {
     const resp = await fetch(this.endpoint, this._buildRequestOptions(messages, overrides, stream));
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       const tag = stream ? '流式请求失败' : '请求失败';
       throw createLlmHttpError(
         `openai_compat ${tag}: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
-        { status: resp.status, headers: resp.headers }
+        { status: resp.status, headers: resp.headers as any }
       );
     }
     if (stream && !resp.body) {
@@ -179,14 +179,14 @@ export default class OpenAICompatibleLLMClient {
     return resp;
   }
 
-  async _consumeSSEWithToolCalls(resp, onDelta, options = {}) {
+  async _consumeSSEWithToolCalls(resp: any, onDelta: any, options: any = {}) {
     const toolCallsMap = new Map();
-    const result = { content: '', toolCalls: [] };
+    const result: any = { content: '', toolCalls: [] };
     let sseEventCount = 0;
     let sseDataChars = 0;
     let deltaContentChars = 0;
 
-    for await (const { data } of iterateSSE(resp)) {
+    for await (const { data } of iterateSSE(resp as any)) {
       sseEventCount += 1;
       sseDataChars += data?.length || 0;
 
@@ -224,7 +224,7 @@ export default class OpenAICompatibleLLMClient {
             onDelta('', { tool_calls: delta.tool_calls });
           }
         }
-      } catch (e) {
+      } catch (e: any) {
         RuntimeUtil.makeLog('warn', `[OpenAICompatibleLLMClient] SSE JSON解析失败: ${e.message}`, 'LLMFactory');
       }
     }
@@ -248,11 +248,11 @@ export default class OpenAICompatibleLLMClient {
    * 单次补全。MCP tool 环：@xrkseek/harness（AiWorkflow.callAI / /v1）。
    * 本客户端仅透传 tool_calls，不执行工具。
    */
-  async chat(messages, overrides = {}) {
+  async chat(messages: any, overrides: any = {}) {
     const prepared = await this._prepareMessages(messages);
     const current = cleanupMessages([...prepared], { ensureUserFirst: false });
     const resp = await this._fetchRound(current, overrides, false);
-    const json = await resp.json();
+    const json: any = await resp.json();
     logPromptCacheUsage(json?.usage, 'OpenAICompatible');
     const message = json?.choices?.[0]?.message;
     const content = message?.content || '';
@@ -268,7 +268,7 @@ export default class OpenAICompatibleLLMClient {
     return content;
   }
 
-  async chatStream(messages, onDelta, overrides = {}) {
+  async chatStream(messages: any, onDelta: any, overrides: any = {}) {
     const prepared = await this._prepareMessages(messages);
     const current = cleanupMessages([...prepared], { ensureUserFirst: false });
 

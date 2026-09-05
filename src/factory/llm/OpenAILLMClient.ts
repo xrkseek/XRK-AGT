@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { buildFetchOptionsWithProxy } from '#utils/llm/proxy-utils.js';
 import { buildOpenAIChatCompletionsBody, applyOpenAITools } from '#utils/llm/openai-chat-utils.js';
 import { transformMessagesWithVision } from '#utils/llm/message-transform.js';
@@ -18,15 +17,16 @@ import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
  * - tool calling：OpenAI tools/tool_calls（单次补全；MCP 多轮在 harness）
  */
 export default class OpenAILLMClient {
+  [key: string]: any;
   _timeout = 360000;
 
-  constructor(config = {}) {
+  constructor(config: any = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout ?? 360000;
   }
 
-  normalizeEndpoint(config) {
+  normalizeEndpoint(config: any) {
     const base = (config.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
     const path = (config.path || '/chat/completions').replace(/^\/?/, '/');
     return `${base}${path}`;
@@ -36,7 +36,7 @@ export default class OpenAILLMClient {
     return this._timeout ?? 360000;
   }
 
-  buildHeaders(extra = {}) {
+  buildHeaders(extra: any = {}) {
     const headers = {
       'Content-Type': 'application/json',
       ...extra
@@ -53,40 +53,40 @@ export default class OpenAILLMClient {
     return headers;
   }
 
-  async transformMessages(messages) {
+  async transformMessages(messages: any) {
     // OpenAI 官方多模态，使用 openai 模式，允许 base64 封装为 data URL
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
-  buildBody(messages, overrides = {}) {
+  buildBody(messages: any, overrides: any = {}) {
     const defaultModel = this.config.model || this.config.chatModel;
     const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, defaultModel);
     applyOpenAITools(body, this.config, overrides);
     return body;
   }
 
-  async chat(messages, overrides = {}) {
+  async chat(messages: any, overrides: any = {}) {
     const transformedMessages = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     const resp = await fetch(
       this.endpoint,
-      buildFetchOptionsWithProxy(this.config, {
+      (buildFetchOptionsWithProxy(this.config, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(this.buildBody(transformedMessages, overrides)),
         signal: AbortSignal.timeout(this.timeout)
-      })
+      }) as any)
     );
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
         `OpenAILLMClient 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
-        { status: resp.status, headers: resp.headers }
+        { status: resp.status, headers: resp.headers as any }
       );
     }
 
-    const json = await resp.json();
+    const json: any = await resp.json();
     logPromptCacheUsage(json?.usage, 'OpenAILLMClient');
     const message = json?.choices?.[0]?.message;
     const content = message?.content || '';
@@ -101,17 +101,17 @@ export default class OpenAILLMClient {
     return content;
   }
 
-  async chatStream(messages, onDelta, overrides = {}) {
+  async chatStream(messages: any, onDelta: any, overrides: any = {}) {
     const transformedMessages = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     const resp = await fetch(
       this.endpoint,
-      buildFetchOptionsWithProxy(this.config, {
+      (buildFetchOptionsWithProxy(this.config, {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
         signal: AbortSignal.timeout(this.timeout)
-      })
+      }) as any)
     );
 
     if (!resp.ok || !resp.body) {
@@ -125,7 +125,7 @@ export default class OpenAILLMClient {
     } else {
       // fallback: text-only SSE
       const { iterateSSE } = await import('#utils/llm/sse-utils.js');
-      for await (const { data } of iterateSSE(resp)) {
+      for await (const { data } of iterateSSE(resp as any)) {
         try {
           const j = JSON.parse(data);
           const delta = j?.choices?.[0]?.delta?.content;
@@ -146,9 +146,9 @@ export default class OpenAILLMClient {
     return collector.content;
   }
 
-  async _consumeSSEWithToolCalls(resp, onDelta, collector, options = {}) {
+  async _consumeSSEWithToolCalls(resp: any, onDelta: any, collector: any, options: any = {}) {
     const toolCallsMap = new Map();
-    for await (const { data } of iterateSSE(resp)) {
+    for await (const { data } of iterateSSE(resp as any)) {
       try {
         const json = JSON.parse(data);
         const delta = json?.choices?.[0]?.delta;
