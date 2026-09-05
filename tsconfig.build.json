@@ -1,0 +1,40 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowJs": true,
+    "checkJs": false,
+    "outDir": "dist",
+    "rootDir": ".",
+    "declaration": false,
+    "sourceMap": true,
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": [
+    "app.js",
+    "app.ts",
+    "start.js",
+    "start.ts",
+    "debug.js",
+    "debug.ts",
+    "src/**/*",
+    "core/**/*.js",
+    "core/**/*.ts",
+    "core/**/*.mjs",
+    "core/**/*.mts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/www/**",
+    "**/site/**",
+    "core/**/node_modules/**",
+    "tests",
+    "subserver",
+    "scripts",
+    "resources",
+    "data",
+    "trash",
+    "logs"
+  ]
+}

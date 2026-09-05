@@ -24,9 +24,16 @@
     }
   },
   "include": [
-    "src/utils/module-ext.ts",
+    "app.js",
+    "app.ts",
+    "start.js",
+    "start.ts",
+    "debug.js",
+    "src/**/*",
     "core/**/*.ts",
-    "tests/framework/**/*.ts"
+    "core/**/*.js",
+    "tests/framework/**/*.ts",
+    "tests/framework/**/*.mjs"
   ],
-  "exclude": ["node_modules", "**/dist/**", "**/www/**"]
+  "exclude": ["node_modules", "**/dist/**", "**/www/**", "**/site/**"]
 }
