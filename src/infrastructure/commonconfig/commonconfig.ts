@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
@@ -6,6 +5,8 @@ import yaml from 'yaml';
 import RuntimeUtil from '#utils/runtime-util.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
+
+const gLogger = (): any => (globalThis as any).logger;
 
 /**
  * 配置文件管理基类
@@ -36,8 +37,9 @@ import paths from '#utils/paths.js';
  * await config.write({ key: 'value' });
  */
 export default class ConfigBase {
-  _cache = null;
-  _cacheTime = 0;
+  [key: string]: any;
+  _cache: any = null;
+  _cacheTime: any = 0;
   _cacheTTL = 5000;
 
   /**
@@ -53,7 +55,7 @@ export default class ConfigBase {
    * @param {string} metadata.fileType - 文件类型：'yaml' 或 'json'（默认'yaml'）
    * @param {Object} metadata.schema - 配置结构定义（用于验证）
    */
-  constructor(metadata = {}) {
+  constructor(metadata: any = {}) {
     this.name = metadata.name ?? 'config';
     this.displayName = metadata.displayName ?? this.name;
     this.description = metadata.description ?? '';
@@ -101,10 +103,10 @@ export default class ConfigBase {
    * - array 的 itemType 与 default 数组元素类型一致（若提供）
    * - object 的 fields 递归校验
    */
-  _assertSchemaStrict(schema) {
+  _assertSchemaStrict(schema: any) {
     if (!schema?.fields) return;
-    const check = (fields) => {
-      for (const [key, fs] of Object.entries(fields)) {
+    const check = (fields: any) => {
+      for (const [key, fs] of Object.entries(fields) as [string, any][]) {
         // 校验 default 与 type
         if (fs.default !== undefined) {
           const def = fs.default;
@@ -230,7 +232,7 @@ export default class ConfigBase {
    * @param {boolean} useCache - 是否使用缓存
    * @returns {Promise<Object>}
    */
-  async read(useCache = true) {
+  async read(useCache: any = true) {
     // 检查缓存
     if (useCache && this._cache && (Date.now() - this._cacheTime < this._cacheTTL)) {
       return this._cache;
@@ -287,7 +289,7 @@ export default class ConfigBase {
       this._cacheTime = Date.now();
 
       return data;
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `读取配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
       throw error;
     }
@@ -304,7 +306,7 @@ export default class ConfigBase {
       throw new Error(`多文件配置定义不完整: ${this.name}`);
     }
 
-    const result = {};
+    const result: any = {};
 
     for (const key of keys) {
       const filePath = getFilePath(key);
@@ -317,7 +319,7 @@ export default class ConfigBase {
         try {
           const content = await fs.readFile(defaultFilePath, 'utf8');
           config = this.fileType === 'yaml' ? yaml.parse(content) : JSON.parse(content);
-        } catch (error) {
+        } catch (error: any) {
           RuntimeUtil.makeLog('warn', `读取默认配置失败 [${this.name}/${key}]: ${error.message}`, 'ConfigBase');
         }
       }
@@ -330,13 +332,13 @@ export default class ConfigBase {
           if (fileConfig) {
             config = { ...config, ...fileConfig };
           }
-        } catch (error) {
+        } catch (error: any) {
           RuntimeUtil.makeLog('warn', `读取配置失败 [${this.name}/${key}]: ${error.message}`, 'ConfigBase');
         }
       }
       
       result[key] = config;
-      const fieldSchema = this.schema?.fields?.[key];
+      const fieldSchema: any = this.schema?.fields?.[key];
       if (fieldSchema?.fields) {
         this._fillDefaultsInPlace(config, this.buildDefaultFromSchema({ fields: fieldSchema.fields }));
       }
@@ -361,7 +363,7 @@ export default class ConfigBase {
    * @param {boolean} options.cleanEmpty - 是否清理空值（默认 false，子类可覆盖）
    * @returns {Promise<boolean>}
    */
-  async write(data, options = {}) {
+  async write(data: any, options: any = {}) {
     // 多文件配置处理
     if (this.multiFile) {
       return await this._writeMultiFile(data, options);
@@ -417,7 +419,7 @@ export default class ConfigBase {
 
       RuntimeUtil.makeLog('info', `配置已保存 [${this.name}]`, 'ConfigBase');
       return true;
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `写入配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
       throw error;
     }
@@ -430,7 +432,7 @@ export default class ConfigBase {
    * @param {Object} options - 写入选项
    * @returns {Promise<boolean>}
    */
-  async _writeMultiFile(data, options = {}) {
+  async _writeMultiFile(data: any, options: any = {}) {
     const { backup = true, validate = true } = options;
     const { keys, getFilePath } = this.multiFile;
 
@@ -484,7 +486,7 @@ export default class ConfigBase {
 
       RuntimeUtil.makeLog('info', `多文件配置已保存 [${this.name}]`, 'ConfigBase');
       return true;
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `写入多文件配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
       throw error;
     }
@@ -495,7 +497,7 @@ export default class ConfigBase {
    * @private
    * @param {string} filePath - 配置文件路径（相对则基于项目根解析）
    */
-  async _pruneBackups(filePath) {
+  async _pruneBackups(filePath: any) {
     try {
       const resolved = path.isAbsolute(filePath) ? filePath : path.join(paths.root, filePath);
       const dir = path.dirname(resolved);
@@ -508,7 +510,7 @@ export default class ConfigBase {
           RuntimeUtil.makeLog('debug', `已删除旧备份 [${this.name}]: ${e.name}`, 'ConfigBase');
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       if (err.code !== 'ENOENT') RuntimeUtil.makeLog('debug', `清理旧备份时忽略 [${this.name}]: ${err.message}`, 'ConfigBase');
     }
   }
@@ -526,7 +528,7 @@ export default class ConfigBase {
       await fs.copyFile(filePath, backupPath);
       RuntimeUtil.makeLog('debug', `配置已备份 [${this.name}]: ${backupPath}`, 'ConfigBase');
       return backupPath;
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `备份配置失败 [${this.name}]: ${error.message}`, 'ConfigBase');
       throw error;
     }
@@ -545,7 +547,7 @@ export default class ConfigBase {
    * const host = await config.get('server.host');
    * const firstDomain = await config.get('server.proxy.domains[0].domain');
    */
-  async get(keyPath) {
+  async get(keyPath: any) {
     const data = await this.read();
     return this._getValueByPath(data, keyPath);
   }
@@ -565,7 +567,7 @@ export default class ConfigBase {
    * await config.set('server.host', '0.0.0.0');
    * await config.set('server.proxy.domains[0].domain', 'example.com');
    */
-  async set(keyPath, value, options = {}) {
+  async set(keyPath: any, value: any, options: any = {}) {
     const data = await this.read();
     this._setValueByPath(data, keyPath, value);
     return await this.write(data, options);
@@ -582,7 +584,7 @@ export default class ConfigBase {
    * @example
    * await config.delete('server.proxy.domains[0]');
    */
-  async delete(keyPath, options = {}) {
+  async delete(keyPath: any, options: any = {}) {
     const data = await this.read();
     this._deleteValueByPath(data, keyPath);
     return await this.write(data, options);
@@ -601,7 +603,7 @@ export default class ConfigBase {
    * @example
    * await config.append('server.auth.allowPaths', '/new-path');
    */
-  async append(keyPath, value, options = {}) {
+  async append(keyPath: any, value: any, options: any = {}) {
     const data = await this.read();
     const current = this._getValueByPath(data, keyPath);
     
@@ -632,7 +634,7 @@ export default class ConfigBase {
    * // 按条件移除
    * await config.remove('domains', (item) => item.domain === 'old.com');
    */
-  async remove(keyPath, indexOrPredicate, options = {}) {
+  async remove(keyPath: any, indexOrPredicate: any, options: any = {}) {
     const data = await this.read();
     const current = this._getValueByPath(data, keyPath);
     
@@ -671,7 +673,7 @@ export default class ConfigBase {
    *   }
    * });
    */
-  async merge(newData, options = {}) {
+  async merge(newData: any, options: any = {}) {
     const { deep = true } = options;
     const currentData = await this.read();
     
@@ -697,7 +699,7 @@ export default class ConfigBase {
    *   console.error('验证失败:', result.errors);
    * }
    */
-  async validate(data) {
+  async validate(data: any) {
     const errors = [];
 
     try {
@@ -716,7 +718,7 @@ export default class ConfigBase {
       }
 
       if (this.schema.fields) {
-        for (const [field, fieldSchema] of Object.entries(this.schema.fields)) {
+        for (const [field, fieldSchema] of Object.entries(this.schema.fields) as [string, any][]) {
           if (!(field in data)) continue;
 
           const fieldPath = field;
@@ -758,7 +760,7 @@ export default class ConfigBase {
         }
       }
 
-    } catch (error) {
+    } catch (error: any) {
       errors.push(`验证过程出错: ${error.message}`);
     }
 
@@ -798,7 +800,7 @@ export default class ConfigBase {
    * @param {Object} options - 写入选项
    * @returns {Promise<boolean>}
    */
-  async reset(options = {}) {
+  async reset(options: any = {}) {
     if (!this.defaultConfig) {
       throw new Error('未定义默认配置');
     }
@@ -819,15 +821,15 @@ export default class ConfigBase {
    * 将 schema 默认值填入 data（仅补缺失字段，不覆盖已有值）
    * @param {object} data
    */
-  _applySchemaDefaults(data) {
+  _applySchemaDefaults(data: any) {
     if (!data || typeof data !== 'object') return;
     this._fillDefaultsInPlace(data, this.buildDefaultFromSchema());
   }
 
-  buildDefaultFromSchema(schema = this.schema) {
-    const result = {};
+  buildDefaultFromSchema(schema: any = this.schema) {
+    const result: any = {};
     if (!schema?.fields) return result;
-    for (const [key, fs] of Object.entries(schema.fields)) {
+    for (const [key, fs] of Object.entries(schema.fields) as [string, any][]) {
       if (fs.type === 'map') {
         result[key] = Object.hasOwn(fs, 'default')
           ? this._cloneDefaultValue(fs.default)
@@ -848,10 +850,10 @@ export default class ConfigBase {
    * @param {object} target
    * @param {object} defaults
    */
-  _fillDefaultsInPlace(target, defaults) {
+  _fillDefaultsInPlace(target: any, defaults: any) {
     if (!target || typeof target !== 'object' || !defaults || typeof defaults !== 'object') return;
 
-    for (const [key, defVal] of Object.entries(defaults)) {
+    for (const [key, defVal] of Object.entries(defaults) as [string, any][]) {
       const cur = target[key];
       const missing = !Object.hasOwn(target, key) || cur === null || cur === undefined;
 
@@ -870,7 +872,7 @@ export default class ConfigBase {
     }
   }
 
-  _cloneDefaultValue(value) {
+  _cloneDefaultValue(value: any) {
     if (Array.isArray(value)) return [...value];
     if (this._isObject(value)) {
       return structuredClone(value);
@@ -878,10 +880,10 @@ export default class ConfigBase {
     return value;
   }
 
-  getFlatSchema(prefix = '', schema = this.schema) {
-    const list = [];
+  getFlatSchema(prefix: any = '', schema: any = this.schema): any {
+    const list: any[] = [];
     if (!schema?.fields) return list;
-    for (const [key, fs] of Object.entries(schema.fields)) {
+    for (const [key, fs] of Object.entries(schema.fields) as [string, any][]) {
       const path = prefix ? `${prefix}.${key}` : key;
       if (fs.type === 'map') {
         // map：fields 是「每个动态键」的值模板，不能当子路径展开，否则前端只能看到空 JSON
@@ -994,7 +996,7 @@ export default class ConfigBase {
    * collections 值模板：valueTemplatePath 指向 fields 下某 object 的 fields
    * @private
    */
-  _resolveCollectionValueFields(col, schema) {
+  _resolveCollectionValueFields(col: any, schema: any) {
     if (col?.fields && typeof col.fields === 'object') return col.fields;
     if (col?.itemSchema?.fields) return col.itemSchema.fields;
     const tpl = col?.valueTemplatePath;
@@ -1003,10 +1005,10 @@ export default class ConfigBase {
     return node?.fields && typeof node.fields === 'object' ? node.fields : null;
   }
 
-  flattenData(obj, prefix = '') {
-    const out = {};
+  flattenData(obj: any, prefix: any = '') {
+    const out: any = {};
     if (typeof obj !== 'object' || obj === null) return out;
-    for (const [k, v] of Object.entries(obj)) {
+    for (const [k, v] of Object.entries(obj) as [string, any][]) {
       const path = prefix ? `${prefix}.${k}` : k;
       if (v && typeof v === 'object' && !Array.isArray(v)) {
         // 空对象需要保留自身路径，否则前端 flat 视图无法编辑（例如 headers: {}）
@@ -1023,9 +1025,9 @@ export default class ConfigBase {
     return out;
   }
 
-  expandFlatData(flat) {
+  expandFlatData(flat: any) {
     const data = {};
-    for (const [path, value] of Object.entries(flat ?? {})) {
+    for (const [path, value] of Object.entries(flat ?? {}) as [string, any][]) {
       this._setValueByPath(data, path, value);
     }
     return data;
@@ -1033,7 +1035,7 @@ export default class ConfigBase {
 
   // ==================== 私有辅助方法 ====================
 
-  _runFieldValidators(value, schema, path, errors) {
+  _runFieldValidators(value: any, schema: any, path: any, errors: any) {
     const expectedType = schema.type;
     if (expectedType === 'number') {
       if (schema.min !== undefined && value < schema.min) {
@@ -1070,13 +1072,13 @@ export default class ConfigBase {
   }
 
   /** @returns {boolean} */
-  _enumValueAllowed(value, schema) {
+  _enumValueAllowed(value: any, schema: any) {
     if (!schema?.enum) return true;
     if (value === '' && schema.required !== true) return true;
     return schema.enum.includes(value);
   }
 
-  _validateArrayField(value, schema, path, errors) {
+  _validateArrayField(value: any, schema: any, path: any, errors: any) {
     if (!Array.isArray(value)) {
       errors.push(`字段 ${path} 必须为数组`);
       return;
@@ -1106,7 +1108,7 @@ export default class ConfigBase {
     });
   }
 
-  _validateKeyedMapField(value, schema, path, errors) {
+  _validateKeyedMapField(value: any, schema: any, path: any, errors: any) {
     if (!this._isObject(value)) {
       errors.push(`字段 ${path} 必须为对象（map）`);
       return;
@@ -1115,7 +1117,7 @@ export default class ConfigBase {
       type: 'object',
       fields: schema.fields ?? schema.itemSchema?.fields ?? {},
     };
-    for (const [entryKey, entryVal] of Object.entries(value)) {
+    for (const [entryKey, entryVal] of Object.entries(value) as [string, any][]) {
       const entryPath = `${path}.${entryKey}`;
       if (!this._isObject(entryVal)) {
         errors.push(`字段 ${entryPath} 必须为对象`);
@@ -1129,7 +1131,7 @@ export default class ConfigBase {
    * meta.collections 根级动态键（如 chatbot 群号覆盖）：按值模板校验
    * @private
    */
-  _validateKeyedSiblingCollections(data, errors) {
+  _validateKeyedSiblingCollections(data: any, errors: any) {
     if (!this._isObject(data)) return;
     const collections = this.schema?.meta?.collections;
     if (!Array.isArray(collections) || !collections.length) return;
@@ -1150,7 +1152,7 @@ export default class ConfigBase {
       if (!valueFields || !Object.keys(valueFields).length) continue;
 
       const valueSchema = { type: 'object', fields: valueFields };
-      for (const [key, val] of Object.entries(data)) {
+      for (const [key, val] of Object.entries(data) as [string, any][]) {
         if (exclude.has(key)) continue;
         if (!this._isObject(val)) {
           errors.push(`字段 ${key} 必须为对象（${col.label || col.name || '动态覆盖'}）`);
@@ -1161,7 +1163,7 @@ export default class ConfigBase {
     }
   }
 
-  _validateObjectField(value, schema, path, errors) {
+  _validateObjectField(value: any, schema: any, path: any, errors: any) {
     if (!this._isObject(value)) {
       errors.push(`字段 ${path} 必须为对象`);
       return;
@@ -1169,7 +1171,7 @@ export default class ConfigBase {
 
     const fields = schema.fields ?? {};
     const requiredFields = Array.isArray(schema.required) ? schema.required : [];
-    for (const [key, childSchema] of Object.entries(fields)) {
+    for (const [key, childSchema] of Object.entries(fields) as [string, any][]) {
       const childPath = `${path}.${key}`;
       let childValue = value[key];
 
@@ -1206,7 +1208,7 @@ export default class ConfigBase {
     }
   }
 
-  _normalizeValueBySchema(value, schema = {}) {
+  _normalizeValueBySchema(value: any, schema: any = {}) {
     if (value === undefined) return;
     const expectedType = schema.type;
 
@@ -1273,7 +1275,7 @@ export default class ConfigBase {
       if (this._isObject(obj)) {
         const clone = { ...obj };
         const fields = schema.fields ?? {};
-        for (const [key, childSchema] of Object.entries(fields)) {
+        for (const [key, childSchema] of Object.entries(fields) as [string, any][]) {
           if (clone[key] !== undefined) {
             clone[key] = this._normalizeValueBySchema(clone[key], childSchema);
           }
@@ -1289,7 +1291,7 @@ export default class ConfigBase {
    * 解析数组索引键
    * @private
    */
-  _parseArrayKey(key) {
+  _parseArrayKey(key: any) {
     const match = key.match(/^(.+?)\[(\d+)\]$/);
     return match ? { arrayKey: match[1], index: parseInt(match[2]) } : null;
   }
@@ -1298,7 +1300,7 @@ export default class ConfigBase {
    * 通过路径获取值
    * @private
    */
-  _getValueByPath(obj, keyPath) {
+  _getValueByPath(obj: any, keyPath: any) {
     if (!keyPath) return obj;
     
     const keys = keyPath.split('.');
@@ -1319,7 +1321,7 @@ export default class ConfigBase {
    * 通过路径设置值
    * @private
    */
-  _setValueByPath(obj, keyPath, value) {
+  _setValueByPath(obj: any, keyPath: any, value: any) {
     const keys = keyPath.split('.');
     let current = obj;
 
@@ -1348,7 +1350,7 @@ export default class ConfigBase {
    * 通过路径删除值
    * @private
    */
-  _deleteValueByPath(obj, keyPath) {
+  _deleteValueByPath(obj: any, keyPath: any) {
     const keys = keyPath.split('.');
     let current = obj;
 
@@ -1372,7 +1374,7 @@ export default class ConfigBase {
    * 深度合并对象
    * @private
    */
-  _deepMerge(target, source) {
+  _deepMerge(target: any, source: any) {
     const output = { ...target };
 
     if (this._isObject(target) && this._isObject(source)) {
@@ -1393,28 +1395,28 @@ export default class ConfigBase {
    * @param {Object} obj - 要清理的对象
    * @returns {Object} 清理后的对象
    */
-  _cleanEmptyValues(obj) {
+  _cleanEmptyValues(obj: any): any {
     if (typeof obj !== 'object' || obj === null) {
       return obj;
     }
 
     if (Array.isArray(obj)) {
       // 过滤数组中的空值
-      return obj.filter(item => {
+      return obj.filter((item: any) => {
         if (item === undefined || item === null) return false;
         if (typeof item === 'string' && item.trim() === '') return false;
         return true;
-      }).map(item => this._cleanEmptyValues(item));
+      }).map((item: any) => this._cleanEmptyValues(item));
     }
 
-    const result = {};
-    for (const [key, value] of Object.entries(obj)) {
+    const result: any = {};
+    for (const [key, value] of Object.entries(obj) as [string, any][]) {
       // 跳过 undefined
       if (value === undefined) continue;
 
       // 跳过空字符串（根据 schema 判断是否可选）
       if (typeof value === 'string' && value.trim() === '') {
-        const fieldSchema = this.schema?.fields?.[key];
+        const fieldSchema: any = this.schema?.fields?.[key];
         if (!fieldSchema?.required && !this._isRequiredField(key)) {
           continue;
         }
@@ -1422,7 +1424,7 @@ export default class ConfigBase {
 
       // 跳过空数组（根据 schema 判断是否可选）
       if (Array.isArray(value) && value.length === 0) {
-        const fieldSchema = this.schema?.fields?.[key];
+        const fieldSchema: any = this.schema?.fields?.[key];
         if (!fieldSchema?.required && !this._isRequiredField(key)) {
           continue;
         }
@@ -1430,7 +1432,7 @@ export default class ConfigBase {
 
       // 跳过空对象（根据 schema 判断是否可选）
       if (this._isObject(value) && Object.keys(value).length === 0) {
-        const fieldSchema = this.schema?.fields?.[key];
+        const fieldSchema: any = this.schema?.fields?.[key];
         if (!fieldSchema?.required && !this._isRequiredField(key)) {
           continue;
         }
@@ -1440,7 +1442,7 @@ export default class ConfigBase {
       if (typeof value === 'object' && value !== null) {
         const cleaned = this._cleanEmptyValues(value);
         // 清理后如果变成空对象/数组且是可选字段，则跳过
-        const fieldSchema = this.schema?.fields?.[key];
+        const fieldSchema: any = this.schema?.fields?.[key];
         if (!fieldSchema?.required && !this._isRequiredField(key)) {
           if (Array.isArray(cleaned) && cleaned.length === 0) continue;
           if (this._isObject(cleaned) && Object.keys(cleaned).length === 0) continue;
@@ -1460,7 +1462,7 @@ export default class ConfigBase {
    * @param {string} key - 字段名
    * @returns {boolean}
    */
-  _isRequiredField(key) {
+  _isRequiredField(key: any) {
     // 检查 schema.required 数组
     if (this.schema?.required && Array.isArray(this.schema.required)) {
       return this.schema.required.includes(key);
@@ -1472,7 +1474,7 @@ export default class ConfigBase {
    * 检查是否为对象
    * @private
    */
-  _isObject(item) {
+  _isObject(item: any) {
     return item && typeof item === 'object' && !Array.isArray(item);
   }
 
@@ -1480,7 +1482,7 @@ export default class ConfigBase {
    * 类型检查
    * @private
    */
-  _checkType(value, expectedType) {
+  _checkType(value: any, expectedType: any) {
     switch (expectedType) {
       case 'string':
         return typeof value === 'string';
