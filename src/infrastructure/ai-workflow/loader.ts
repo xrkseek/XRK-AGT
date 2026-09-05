@@ -1,3 +1,4 @@
+// @ts-nocheck
 import path from 'node:path';
 import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
@@ -19,8 +20,8 @@ class AiWorkflowLoader {
   workflows = new Map();
   mcpPluginServers = new Map();
   loaded = false;
-  loadStats = {
-    workflows: [],
+  loadStats: any = {
+    workflows: [] as any[],
     totalLoadTime: 0,
     startTime: 0,
     totalWorkflows: 0,
@@ -28,14 +29,17 @@ class AiWorkflowLoader {
   };
   /** 文件 basename（无 .js）→ stream.name，热重载清理用 */
   fileKeyToWorkflowName = new Map();
+  _remoteMcp: any;
+  mcpServer: any;
+  _workflowDirsCache: any;
 
   constructor() {
     this._remoteMcp = new RemoteMcpController({
       getMcpServer: () => this.mcpServer,
       getMcpPluginServers: () => this.mcpPluginServers,
-      makeLog: (level, message, error) =>
+      makeLog: (level: any, message: any, error: any) =>
         RuntimeUtil.makeLog(level, message, 'AiWorkflowLoader', error),
-      registerTool: (name, def) => this.mcpServer?.registerTool?.(name, def)
+      registerTool: (name: any, def: any) => this.mcpServer?.registerTool?.(name, def)
     });
   }
 
@@ -51,7 +55,7 @@ class AiWorkflowLoader {
   /**
    * 加载所有工作流（标准化流程）
    */
-  async load(isRefresh = false) {
+  async load(isRefresh: any = false) {
     if (!isRefresh && this.loaded) {
       RuntimeUtil.makeLog('debug', '工作流已加载，跳过', 'AiWorkflowLoader');
       return;
@@ -96,7 +100,7 @@ class AiWorkflowLoader {
 
       // 显示加载结果
       this.displayLoadSummary();
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `工作流加载失败: ${error.message}`, 'AiWorkflowLoader', error);
       throw error;
     }
@@ -105,7 +109,7 @@ class AiWorkflowLoader {
   /**
    * 加载单个工作流类
    */
-  async loadWorkflowClass(file) {
+  async loadWorkflowClass(file: any) {
     const streamName = path.basename(file, '.js');
     const startTime = Date.now();
 
@@ -117,7 +121,7 @@ class AiWorkflowLoader {
         throw new Error('无效的工作流文件');
       }
 
-      const stream = new StreamClass();
+      const stream = new (StreamClass as any)();
       if (!stream.name) {
         throw new Error('工作流缺少name属性');
       }
@@ -166,7 +170,7 @@ class AiWorkflowLoader {
               }
             }
           }
-        } catch (e) {
+        } catch (e: any) {
           RuntimeUtil.makeLog('warn', `加载 MCP 插件服务器失败: ${e.message}`, 'AiWorkflowLoader');
         }
       }
@@ -184,7 +188,7 @@ class AiWorkflowLoader {
       if (getAiWorkflowConfigOptional().global?.debug) {
         RuntimeUtil.makeLog('debug', `加载工作流: ${stream.name} v${stream.version} (${loadTime}ms)`, 'AiWorkflowLoader');
       }
-    } catch (error) {
+    } catch (error: any) {
       this.loadStats.failedWorkflows++;
       const loadTime = Date.now() - startTime;
       const errorMessage = error.message || String(error);
@@ -195,7 +199,7 @@ class AiWorkflowLoader {
   }
 
   /** 将 ai-workflow.embedding 合并到各工作流 embeddingConfig（无外部向量服务初始化） */
-  applyEmbeddingConfig(embeddingConfig = null) {
+  applyEmbeddingConfig(embeddingConfig: any = null) {
     const config = embeddingConfig || getAiWorkflowConfigOptional().embedding || {};
 
     for (const stream of this.workflows.values()) {
@@ -270,7 +274,7 @@ class AiWorkflowLoader {
     RuntimeUtil.makeLog('success', '重新加载完成', 'AiWorkflowLoader');
   }
 
-  getWorkflow(name) {
+  getWorkflow(name: any) {
     return this.workflows.get(name) || null;
   }
 
@@ -315,7 +319,7 @@ class AiWorkflowLoader {
   /**
    * 创建合并工作流（主工作流 + 副工作流，仅合并 mcpTools）
    */
-  mergeWorkflows(options = {}) {
+  mergeWorkflows(options: any = {}) {
     const {
       name,
       main,
@@ -406,7 +410,7 @@ class AiWorkflowLoader {
    * 清理工作流资源（优化：统一清理逻辑）
    * @private
    */
-  async _cleanupWorkflow(streamName) {
+  async _cleanupWorkflow(streamName: any) {
     const stream = this.workflows.get(streamName)
     if (stream && typeof stream.cleanup === 'function') {
       await stream.cleanup().catch(() => {})
@@ -417,7 +421,7 @@ class AiWorkflowLoader {
     }
   }
 
-  _workflowNameForFile(filePath) {
+  _workflowNameForFile(filePath: any) {
     const fileKey = path.basename(filePath, '.js')
     const qualified = resolveQualifiedCoreModuleKey(filePath, [], 'workflow')
     return this.fileKeyToWorkflowName.get(qualified)
@@ -429,13 +433,13 @@ class AiWorkflowLoader {
    * 重新加载工作流（优化：统一重载逻辑）
    * @private
    */
-  async _reloadWorkflow(filePath) {
+  async _reloadWorkflow(filePath: any) {
     await this.loadWorkflowClass(filePath)
     this.applyEmbeddingConfig(getAiWorkflowConfigOptional().embedding || {})
     await this.initMCP()
   }
 
-  _registerTool(mcpServer, stream, toolName, tool) {
+  _registerTool(mcpServer: any, stream: any, toolName: any, tool: any) {
     if (!tool?.enabled || !mcpServer?.registerTool) return false;
     // 已是 stream.tool 或 remote 前缀则不再二次加名
     const alreadyQualified = String(toolName).includes('.');
@@ -471,19 +475,19 @@ class AiWorkflowLoader {
             try {
               const ev = context.e;
               if (ev) stream.recordToolCallResult(ev, fullToolName, normalized, args || {});
-            } catch (recErr) {
+            } catch (recErr: any) {
               RuntimeUtil.makeLog('debug', `recordToolCallResult: ${recErr.message}`, 'AiWorkflowLoader');
             }
           }
           return normalized;
-        } catch (error) {
+        } catch (error: any) {
           RuntimeUtil.makeLog('error', `MCP工具调用失败[${fullToolName}]: ${error.message}`, 'AiWorkflowLoader');
           const fail = { success: false, error: error.message };
           if (typeof stream.recordToolCallResult === 'function') {
             try {
               const ev = context.e;
               if (ev) stream.recordToolCallResult(ev, fullToolName, fail, args || {});
-            } catch (recErr) {
+            } catch (recErr: any) {
               RuntimeUtil.makeLog('debug', `recordToolCallResult on error: ${recErr.message}`, 'AiWorkflowLoader');
             }
           }
@@ -494,7 +498,7 @@ class AiWorkflowLoader {
     return true;
   }
 
-  registerMCP(mcpServer) {
+  registerMCP(mcpServer: any) {
     if (!mcpServer) return;
     const seen = new Set();
     for (const stream of this.workflows.values()) {
