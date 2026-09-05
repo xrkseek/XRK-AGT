@@ -1,4 +1,3 @@
-// @ts-nocheck
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
 import { llmFactoryConfigFiles } from './shared/llm-factory-registry.js';
 
@@ -7,6 +6,8 @@ import { llmFactoryConfigFiles } from './shared/llm-factory-registry.js';
  * 写法见 shared/llm-factory-meta.js · defineLlmFactoryMeta。
  */
 export default class LlmFactoriesConfig extends ConfigBase {
+  [key: string]: any;
+
   constructor() {
     super({
       name: 'llm_factories',
@@ -18,13 +19,15 @@ export default class LlmFactoriesConfig extends ConfigBase {
     this.configFiles = llmFactoryConfigFiles();
   }
 
-  getConfigInstance(name) {
+  getConfigInstance(name: any) {
     const configMeta = this.configFiles[name];
     if (!configMeta) throw new Error(`未知的 LLM 工厂: ${name}`);
     return new ConfigBase(configMeta);
   }
 
-  async read(name) {
+  /** 复合配置：无 name 返回目录；有 name 读子 yaml（覆盖 ConfigBase.read 签名） */
+  async read(...args: any[]) {
+    const [name] = args;
     if (!name) {
       return {
         name: this.name,
@@ -36,27 +39,30 @@ export default class LlmFactoriesConfig extends ConfigBase {
     return this.getConfigInstance(name).read();
   }
 
-  async write(name, data, options = {}) {
+  async write(...args: any[]) {
+    const [name, data, options = {}] = args;
     if (!name) throw new Error('llm_factories 写入需要指定子配置名称');
     return this.getConfigInstance(name).write(data, options);
   }
 
-  async get(name, keyPath) {
+  async get(...args: any[]) {
+    const [name, keyPath] = args;
     return this.getConfigInstance(name).get(keyPath);
   }
 
-  async set(name, keyPath, value, options = {}) {
+  async set(...args: any[]) {
+    const [name, keyPath, value, options = {}] = args;
     return this.getConfigInstance(name).set(keyPath, value, options);
   }
 
-  getStructure() {
-    const structure = {
+  getStructure(..._args: any[]): any {
+    const structure: any = {
       name: this.name,
       displayName: this.displayName,
       description: this.description,
       configs: {},
     };
-    for (const [name, meta] of Object.entries(this.configFiles)) {
+    for (const [name, meta] of Object.entries(this.configFiles) as [string, any][]) {
       structure.configs[name] = {
         ...meta,
         fields: meta.schema?.fields || {},
@@ -66,7 +72,7 @@ export default class LlmFactoriesConfig extends ConfigBase {
   }
 
   getConfigList() {
-    return Object.entries(this.configFiles).map(([name, meta]) => ({
+    return Object.entries(this.configFiles).map(([name, meta]: [string, any]) => ({
       name,
       displayName: meta.displayName,
       description: meta.description,

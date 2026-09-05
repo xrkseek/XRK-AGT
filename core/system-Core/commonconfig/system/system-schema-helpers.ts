@@ -1,9 +1,8 @@
-// @ts-nocheck
 import { GLOBAL_CONFIGS } from '#infrastructure/config/config-constants.js';
 import { SUBSERVER_RUNTIME_CATALOG } from '#utils/subserver-runtimes.js';
 
 /** 子服务单个 runtime 端点（commonconfig ↔ ai-workflow.yaml subserver.runtimes） */
-export function subserverRuntimeEndpointFields(defaultPort) {
+export function subserverRuntimeEndpointFields(defaultPort: any) {
   return {
     enabled: {
       type: 'boolean',
@@ -49,7 +48,7 @@ export function subserverRuntimeSubFormFields() {
  * @param {string} providerLabel 提供商显示名（写入 label，避免多组同名「API Key」）
  * @param {Record<string, object>} [extraFields]
  */
-export function crawlProviderApiFields(providerLabel, extraFields = {}) {
+export function crawlProviderApiFields(providerLabel: any, extraFields: any = {}) {
   // 兼容旧调用 crawlProviderApiFields({ model: … })
   if (providerLabel && typeof providerLabel === 'object' && !Array.isArray(providerLabel)) {
     extraFields = providerLabel;
@@ -79,13 +78,13 @@ export function crawlProviderApiFields(providerLabel, extraFields = {}) {
 }
 
 /** 辅助：获取端口号 */
-export function getPort(runtimeConfig) {
+export function getPort(runtimeConfig: any) {
   return runtimeConfig?.port ?? runtimeConfig?._port;
 }
 
 /** 辅助：生成配置路径（全局 vs 按端口） */
-export function getConfigPath(configName) {
-  return (runtimeConfig) => {
+export function getConfigPath(configName: any) {
+  return (runtimeConfig: any) => {
     if (GLOBAL_CONFIGS.includes(configName)) {
       return `data/server_bots/${configName}.yaml`;
     }

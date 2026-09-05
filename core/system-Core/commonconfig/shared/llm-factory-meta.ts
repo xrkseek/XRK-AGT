@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { buildLlmProvidersFromPreset } from './llm-provider-fields.js';
 
 /**
@@ -7,13 +6,13 @@ import { buildLlmProvidersFromPreset } from './llm-provider-fields.js';
  *
  * @param {{ name: string, displayName: string, description?: string, preset: string }} opts
  */
-export function defineLlmFactoryMeta({ name, displayName, description, preset }) {
+export function defineLlmFactoryMeta({ name, displayName, description, preset }: any) {
   if (!name || !preset) throw new Error('defineLlmFactoryMeta: 需要 name 与 preset');
   return {
     name,
     displayName: displayName || name,
     description: description || `${displayName || name}（providers[]）`,
-    filePath: (runtimeConfig) => {
+    filePath: (runtimeConfig: any) => {
       const port = runtimeConfig?.port ?? runtimeConfig?._port;
       if (!port) throw new Error(`${name}: 未提供端口，无法解析路径`);
       return `data/server_bots/${port}/${name}.yaml`;

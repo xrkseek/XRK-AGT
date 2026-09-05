@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { defineLlmFactoryMeta } from './llm-factory-meta.js';
 
 /** 官方 + 兼容工厂清单（侧栏「AI LLM 工厂」子配置） */
@@ -82,7 +81,7 @@ export const LLM_FACTORY_METAS = [
 ];
 
 export function llmFactoryConfigFiles() {
-  const map = {};
+  const map: any = {};
   for (const meta of LLM_FACTORY_METAS) {
     map[meta.name] = meta;
   }
