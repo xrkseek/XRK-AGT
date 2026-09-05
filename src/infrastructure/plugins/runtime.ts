@@ -2,44 +2,44 @@
  * 葵子 的 plugin 的 runtime，可通过 e.runtime 访问
  * 核心运行时，不包含游戏特定功能
  */
-import lodash from "lodash"
-import fs from "node:fs/promises"
-import path from "node:path"
-import common from "#utils/common.js"
-import runtimeConfig from "#infrastructure/config/config.js"
-import RendererLoader from "#infrastructure/renderer/loader.js"
-import Handler from "./handler.js";
+import lodash from 'lodash'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import common from '#utils/common.js'
+import runtimeConfig from '#infrastructure/config/config.js'
+import RendererLoader from '#infrastructure/renderer/loader.js'
+import Handler from './handler.js'
+
+const gLogger = (): any => (globalThis as any).logger
+const gAgentRuntime = (): any => (globalThis as any).AgentRuntime
+const gMsgSegment = (): any => (globalThis as any).msgSegment
 
 /**
  * 运行时扩展注册器
  */
 class RuntimeExtensionRegistry {
-  extensions = new Map()
+  extensions = new Map<string, any>()
 
   /**
    * 注册运行时扩展
-   * @param {string} name 扩展名称
-   * @param {Function} extension 扩展类或函数
-   * @param {Object} [options]
-   * @param {boolean} [options.replace=false] 是否允许覆盖同名扩展（用于热重载）
    */
-  register(name, extension, options = {}) {
+  register(name: string, extension: any, options: { replace?: boolean } = {}) {
     const key = String(name || '').trim()
     if (!key) return false
     const replace = options?.replace === true
     if (this.extensions.has(key) && !replace) {
-      logger.warn(`[PluginRuntime] 扩展已存在，跳过注册: ${key}`)
+      gLogger()?.warn?.(`[PluginRuntime] 扩展已存在，跳过注册: ${key}`)
       return false
     }
     this.extensions.set(key, extension)
-    logger.info(`[PluginRuntime] 注册扩展: ${key}${replace ? ' (replace)' : ''}`)
+    gLogger()?.info?.(`[PluginRuntime] 注册扩展: ${key}${replace ? ' (replace)' : ''}`)
     return true
   }
 
   /**
    * 卸载运行时扩展（用于热重载释放引用）
    */
-  unregister(name) {
+  unregister(name: string) {
     const key = String(name || '').trim()
     if (!key) return false
     return this.extensions.delete(key)
@@ -54,17 +54,15 @@ class RuntimeExtensionRegistry {
 
   /**
    * 获取扩展
-   * @param {string} name 扩展名称
    */
-  get(name) {
+  get(name: string) {
     return this.extensions.get(name)
   }
 
   /**
    * 检查扩展是否存在
-   * @param {string} name 扩展名称
    */
-  has(name) {
+  has(name: string) {
     return this.extensions.has(name)
   }
 
@@ -79,34 +77,24 @@ class RuntimeExtensionRegistry {
 const extensionRegistry = new RuntimeExtensionRegistry()
 
 /** 事件句柄放 WeakMap，避免 own 属性 `runtime.e` ↔ `e.runtime` 自指嵌套 */
-const runtimeEvents = new WeakMap()
+const runtimeEvents = new WeakMap<object, any>()
 
 /**
  * 核心运行时类
- * 
+ *
  * 提供插件运行时的核心功能，包括扩展管理、渲染、消息处理等。
  * 每个插件实例都会有一个Runtime实例，用于访问系统功能。
- * 
- * @class Runtime
- * @example
- * // 在插件中使用Runtime
- * export default class MyPlugin extends PluginBase {
- *   async test(e) {
- *     // 获取运行时实例
- *     const runtime = await Runtime.init(e);
- *     
- *     // 使用渲染功能
- *     const imagePath = await runtime.render(this, 'template', { data });
- *     
- *     // 使用扩展
- *     const ext = runtime.getExtension('myExtension');
- *   }
- * }
  */
 export default class PluginRuntime {
-  constructor(e) {
+  _extensions: Record<string, any> = {}
+  handler: {
+    has: typeof Handler.has
+    call: typeof Handler.call
+    callAll: typeof Handler.callAll
+  }
+
+  constructor(e: any) {
     runtimeEvents.set(this, e)
-    this._extensions = {}
 
     this.handler = {
       has: Handler.has,
@@ -118,7 +106,7 @@ export default class PluginRuntime {
     this._loadExtensions()
   }
 
-  /** @returns {object|undefined} 当前事件（API：e.runtime.e / this.e） */
+  /** 当前事件（API：e.runtime.e / this.e） */
   get e() {
     return runtimeEvents.get(this)
   }
@@ -144,17 +132,16 @@ export default class PluginRuntime {
           // 如果是对象，直接使用
           this._extensions[name] = Extension
         }
-      } catch (error) {
-        logger.error(`[PluginRuntime] 加载扩展 ${name} 失败: ${error.message}`)
+      } catch (error: any) {
+        gLogger()?.error?.(`[PluginRuntime] 加载扩展 ${name} 失败: ${error.message}`)
       }
     }
   }
 
   /**
    * 获取扩展实例
-   * @param {string} name 扩展名称
    */
-  getExtension(name) {
+  getExtension(name: string) {
     return this._extensions[name]
   }
 
@@ -176,29 +163,28 @@ export default class PluginRuntime {
   /**
    * 渲染方法
    * @param plugin plugin key
-   * @param path html文件路径，相对于plugin resources目录
+   * @param tplPath html文件路径，相对于plugin resources目录
    * @param data 渲染数据
-   * @param runtimeConfig 渲染配置
-   * @param runtimeConfig.retType 返回值类型
-   * * default/空：自动发送图片，返回true
-   * * msgId：自动发送图片，返回msg id
-   * * base64: 不自动发送图像，返回图像base64数据
-   * @param runtimeConfig.beforeRender({data}) 可改写渲染的data数据
-   * @returns {Promise<boolean>}
+   * @param runtimeCfg 渲染配置
    */
-  async render(plugin, tplPath, data = {}, runtimeConfig = {}) {
+  async render(
+    plugin: string,
+    tplPath: string,
+    data: Record<string, any> = {},
+    runtimeCfg: Record<string, any> = {}
+  ) {
     const cleanPath = String(tplPath || '').replace(/\.html$/, '')
-    const parts = lodash.filter(cleanPath.split("/"), Boolean)
-    const normalizedPath = parts.join("/") || "index"
-    
+    const parts = lodash.filter(cleanPath.split('/'), Boolean)
+    const normalizedPath = parts.join('/') || 'index'
+
     // 创建目录
-    await AgentRuntime.mkdir(`trash/html/${plugin}/${normalizedPath}`)
-    
+    await gAgentRuntime()?.mkdir?.(`trash/html/${plugin}/${normalizedPath}`)
+
     // 自动计算pluResPath
-    const resourcesPath = path.join("resources", plugin)
+    const resourcesPath = path.join('resources', plugin)
     const tplFile = path.join(resourcesPath, `${normalizedPath}.html`)
     const pluResPath = path.relative(path.dirname(tplFile), resourcesPath) + '/'
-    
+
     // 基础渲染data
     data = {
       sys: {
@@ -209,78 +195,81 @@ export default class PluginRuntime {
       _htmlPath: normalizedPath,
       pluResPath,
       tplFile,
-      saveId: data.saveId || data.save_id || parts[parts.length - 1] || "index",
+      saveId: data.saveId || data.save_id || parts[parts.length - 1] || 'index',
       ...data
     }
 
     // 让扩展添加自己的渲染数据
     for (const [, ext] of Object.entries(this._extensions)) {
       if (ext && typeof ext.enhanceRenderData === 'function') {
-        data = await ext.enhanceRenderData(data, plugin, path) || data
+        data = (await ext.enhanceRenderData(data, plugin, path)) || data
       }
     }
-    
+
     // 处理beforeRender
-    if (runtimeConfig.beforeRender) {
-      data = runtimeConfig.beforeRender({ data }) || data
+    if (runtimeCfg.beforeRender) {
+      data = runtimeCfg.beforeRender({ data }) || data
     }
-    
+
     // 保存模板数据（开发模式）
-    if (process.argv.includes("dev")) {
-      const saveDir = await AgentRuntime.mkdir(`trash/ViewData/${plugin}`)
-      const file = `${saveDir}/${data._htmlPath.split("/").join("_")}.json`
+    if (process.argv.includes('dev')) {
+      const saveDir = await gAgentRuntime()?.mkdir?.(`trash/ViewData/${plugin}`)
+      const file = `${saveDir}/${data._htmlPath.split('/').join('_')}.json`
       await fs.writeFile(file, JSON.stringify(data))
     }
-    
+
     await RendererLoader.ensureLoaded()
     const renderer = RendererLoader.getRenderer()
     if (!renderer || typeof renderer.render !== 'function') {
-      throw new Error('未加载到可用渲染器(puppeteer/playwright)，请检查 src/renderers 与 agt.browser.renderer')
+      throw new Error(
+        '未加载到可用渲染器(puppeteer/playwright)，请检查 src/renderers 与 agt.browser.renderer'
+      )
     }
     const img = await renderer.render(`${plugin}/${normalizedPath}`, data)
-    const base64 = img ? msgSegment.image(img) : null
-    if (runtimeConfig.retType === "base64") {
+    const base64 = img ? gMsgSegment()?.image?.(img) : null
+    if (runtimeCfg.retType === 'base64') {
       return base64
     }
-    
-    let ret = true
+
+    let ret: any = true
     if (base64) {
-      if (runtimeConfig.recallMsg) {
+      if (runtimeCfg.recallMsg) {
         ret = await this.e.reply(base64, false, {})
       } else {
         ret = await this.e.reply(base64)
       }
     }
-    return runtimeConfig.retType === "msgId" ? ret : true
+    return runtimeCfg.retType === 'msgId' ? ret : true
   }
 
   /**
    * 静态初始化方法
    */
-  static async init(e) {
+  static async init(e: any) {
     // 初始化扩展
     for (const [name, Extension] of extensionRegistry.getAll()) {
       if (Extension.initCache && typeof Extension.initCache === 'function') {
         try {
           await Extension.initCache()
-        } catch (error) {
-          logger.error(`[PluginRuntime] 扩展 ${name} 缓存初始化失败: ${error.message}`)
+        } catch (error: any) {
+          gLogger()?.error?.(`[PluginRuntime] 扩展 ${name} 缓存初始化失败: ${error.message}`)
         }
       }
     }
 
     e.runtime = new PluginRuntime(e)
-    
-    for (const [name, ext] of Object.entries(e.runtime._extensions)) {
+
+    for (const name of Object.keys(e.runtime._extensions)) {
+      const ext: any = e.runtime._extensions[name]
       if (ext && typeof ext.init === 'function') {
         try {
           await ext.init()
-        } catch (error) {
-          logger.error(`[PluginRuntime] 扩展 ${name} 初始化失败: ${error.message}`)
+        } catch (error: any) {
+          gLogger()?.error?.(`[PluginRuntime] 扩展 ${name} 初始化失败: ${error.message}`)
         }
       }
     }
-    
+
     return e.runtime
   }
 }
