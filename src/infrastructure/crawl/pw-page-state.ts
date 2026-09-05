@@ -223,7 +223,7 @@ export function getObservedBrowserStateForPage(page: any) {
   return serializeObservedBrowserState(ensurePageState(page));
 }
 
-export function createObservedDialogAbortSignalForPage(page: any, parentSignal: any) {
+export function createObservedDialogAbortSignalForPage(page: any, parentSignal?: any) {
   const state = ensurePageState(page);
   const controller = new AbortController();
   const abortForDialog = () => {

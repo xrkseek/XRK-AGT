@@ -1,4 +1,3 @@
-// @ts-nocheck
 /** Playwright 受控会话； role ref 快照 + 导航 SSRF 复检 */
 import playwright from 'playwright';
 import {
@@ -67,25 +66,26 @@ const DEFAULT_CLOSE_TIMEOUT_MS = 8_000;
  * @property {number} [crashRetries=1] 整轮回调遇 Target/Page crashed 时换新浏览器重试次数
  */
 
-function clampInt(raw, min, max, fallback) {
+function clampInt(raw: any, min: any, max: any, fallback: any) {
   const n = Math.floor(Number(raw));
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
 }
 
-function clampSnapshotTimeoutMs(raw) {
+function clampSnapshotTimeoutMs(raw: any) {
   const n = Math.floor(Number(raw) || ACT_DEFAULT_SNAPSHOT_TIMEOUT_MS);
   return Math.min(ACT_MAX_SNAPSHOT_TIMEOUT_MS, Math.max(500, n));
 }
 
 export class PlaywrightAgentSession {
+  [key: string]: any;
   /**
    * @param {import('playwright').Browser} browser
    * @param {import('playwright').BrowserContext} context
    * @param {import('playwright').Page} page
    * @param {PlaywrightAgentLaunchOptions} [launchOptions]
    */
-  constructor(browser, context, page, launchOptions = {}) {
+  constructor(browser: any, context: any, page: any, launchOptions: any = {}) {
     this.browser = browser;
     this.context = context;
     this.page = page;
@@ -121,20 +121,20 @@ export class PlaywrightAgentSession {
   }
 
   /** @param {import('playwright').Page} page */
-  #applyPageDefaults(page) {
+  #applyPageDefaults(page: any) {
     ensurePageState(page);
     page.setDefaultNavigationTimeout(this.navigationTimeoutMs);
     page.setDefaultTimeout(Math.max(this.navigationTimeoutMs, 30_000));
   }
 
   /** @param {ReturnType<import('./page-screenshot-enhance.js').createLocalFontScreenshotHelper>} helper */
-  attachScreenshotHelper(helper) {
+  attachScreenshotHelper(helper: any) {
     this.screenshotHelper = helper;
     return this;
   }
 
   /** @param {PlaywrightAgentLaunchOptions} [options] */
-  static async launch(options = {}) {
+  static async launch(options: any = {}) {
     const {
       browserType = 'chromium',
       headless = true,
@@ -153,16 +153,15 @@ export class PlaywrightAgentSession {
 
     const timeout = Math.min(Math.max(launchTimeoutMs, 5_000), 180_000);
     const browser = typeof wsEndpoint === 'string' && wsEndpoint.trim()
-      ? await connectPlaywrightBrowser(playwright, browserType, wsEndpoint.trim(), { timeout })
-      : await launchPlaywrightBrowser(playwright, browserType, {
+      ? await connectPlaywrightBrowser(playwright as any, browserType, wsEndpoint.trim(), { timeout })
+      : await launchPlaywrightBrowser(playwright as any, browserType, {
           headless,
           executablePath: executablePath || undefined,
           args: launchArgs,
           timeout
         });
 
-    /** @type {import('playwright').BrowserContextOptions} */
-    const contextOptions = {};
+        const contextOptions: any = {};
     if (extraHTTPHeaders && Object.keys(extraHTTPHeaders).length > 0) {
       contextOptions.extraHTTPHeaders = extraHTTPHeaders;
     }
@@ -172,7 +171,7 @@ export class PlaywrightAgentSession {
     if (Number.isFinite(deviceScaleFactor) && deviceScaleFactor > 0) {
       contextOptions.deviceScaleFactor = deviceScaleFactor;
     }
-    const context = await browser.newContext(contextOptions);
+    const context = await browser!.newContext(contextOptions);
     const page = await context.newPage();
     return new PlaywrightAgentSession(browser, context, page, { ...options });
   }
@@ -198,7 +197,7 @@ export class PlaywrightAgentSession {
    * @param {() => Promise<T>} op
    * @param {{ timeoutMs?: number, label?: string }} [opts]
    */
-  async withOpTimeout(op, opts = {}) {
+  async withOpTimeout(op: any, opts: any = {}) {
     const raw = opts.timeoutMs ?? this.opTimeoutMs;
     if (raw == null || raw === 0) return op();
     const ms = clampInt(raw, 1_000, 600_000, 0);
@@ -222,14 +221,14 @@ export class PlaywrightAgentSession {
    * @param {() => Promise<T>} op
    * @param {{ retries?: number, label?: string }} [opts]
    */
-  async withPageCrashRetry(op, opts = {}) {
+  async withPageCrashRetry(op: any, opts: any = {}) {
     const retries = clampInt(opts.retries ?? this.pageCrashRetries, 0, 3, 1);
     const label = opts.label || 'op';
     let lastErr;
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         return await op();
-      } catch (err) {
+      } catch (err: any) {
         lastErr = err;
         if (!isPlaywrightCrashError(err) || attempt >= retries) throw err;
         RuntimeUtil.makeLog(
@@ -243,7 +242,7 @@ export class PlaywrightAgentSession {
     throw lastErr;
   }
 
-  async guardAfterInteraction(previousUrl, ssrfPolicy = {}) {
+  async guardAfterInteraction(previousUrl: any, ssrfPolicy: any = {}) {
     await this.page.waitForTimeout(INTERACTION_NAVIGATION_GRACE_MS).catch(() => {});
     const policy = ssrfPolicy && Object.keys(ssrfPolicy).length ? ssrfPolicy : this.ssrfPolicy;
     if (didCrossDocumentUrlChange(this.page, previousUrl)) {
@@ -251,7 +250,7 @@ export class PlaywrightAgentSession {
     }
   }
 
-  async goto(url, navOptions = {}) {
+  async goto(url: any, navOptions: any = {}) {
     return this.withPageCrashRetry(() => this.#gotoOnce(url, navOptions), {
       retries: this.pageCrashRetries,
       label: 'goto'
@@ -262,7 +261,7 @@ export class PlaywrightAgentSession {
    * @param {string} url
    * @param {{ waitUntil?: string, timeoutMs?: number, skipSsrfCheck?: boolean, ssrfPolicy?: object }} [navOptions]
    */
-  async #gotoOnce(url, navOptions = {}) {
+  async #gotoOnce(url: any, navOptions: any = {}) {
     // 官方 Page.goto：默认 load；networkidle 为 DISCOURAGED，仍允许显式传入
     const waitUntil = normalizePlaywrightWaitUntil(navOptions.waitUntil, 'load');
     const timeoutMs = clampInt(
@@ -306,7 +305,7 @@ export class PlaywrightAgentSession {
     return tabs;
   }
 
-  async newTab(url = 'about:blank', opts = {}) {
+  async newTab(url = 'about:blank', opts: any = {}) {
     const page = await this.context.newPage();
     this.#applyPageDefaults(page);
     this.page = page;
@@ -320,7 +319,7 @@ export class PlaywrightAgentSession {
     return { index: this.context.pages().indexOf(page), url: page.url() };
   }
 
-  async closeTab(index) {
+  async closeTab(index: any) {
     const pages = this.context.pages();
     if (pages.length <= 1) throw new Error('Cannot close the last tab');
     const idx = typeof index === 'number' ? index : pages.indexOf(this.page);
@@ -336,7 +335,7 @@ export class PlaywrightAgentSession {
     return { closedIndex: idx, activeUrl: this.url() };
   }
 
-  async focusTab(index) {
+  async focusTab(index: any) {
     const pages = this.context.pages();
     if (index < 0 || index >= pages.length) throw new Error('Tab index out of range');
     this.page = pages[index];
@@ -344,19 +343,19 @@ export class PlaywrightAgentSession {
     return { index, url: this.url() };
   }
 
-  getConsoleMessages(limit = 50) {
+  getConsoleMessages(limit: any = 50) {
     const state = getPageState(this.page);
     if (!state) return [];
     return state.console.slice(-limit);
   }
 
-  getPageErrors(limit = 50) {
+  getPageErrors(limit: any = 50) {
     const state = getPageState(this.page);
     if (!state) return [];
     return state.errors.slice(-limit);
   }
 
-  getNetworkRequests(limit = 100) {
+  getNetworkRequests(limit: any = 100) {
     const state = getPageState(this.page);
     if (!state) return [];
     return state.requests.slice(-limit);
@@ -366,11 +365,11 @@ export class PlaywrightAgentSession {
     return getObservedBrowserStateForPage(this.page);
   }
 
-  armDialog(opts = {}) {
+  armDialog(opts: any = {}) {
     armObservedDialogResponseOnPage(this.page, opts);
   }
 
-  async respondDialog(opts = {}) {
+  async respondDialog(opts: any = {}) {
     return respondToObservedDialogOnPage(this.page, opts);
   }
 
@@ -382,11 +381,11 @@ export class PlaywrightAgentSession {
     return this.page.locator('body').innerText();
   }
 
-  async screenshot(opts) {
+  async screenshot(opts: any) {
     return this.page.screenshot({ fullPage: false, type: 'png', ...opts });
   }
 
-  async captureRegion(selector = '.content', opts = {}) {
+  async captureRegion(selector: any = '.content', opts: any = {}) {
     const { timeoutMs, ...shotRest } = opts;
     const run = async () => {
       if (this.screenshotHelper) {
@@ -408,7 +407,7 @@ export class PlaywrightAgentSession {
     });
   }
 
-  async gotoAndCapture(url, options = {}) {
+  async gotoAndCapture(url: any, options: any = {}) {
     // 整段重试：崩溃后 recreatePage 须重新 goto，不能只重截空白页
     return this.withPageCrashRetry(async () => {
       const {
@@ -424,7 +423,7 @@ export class PlaywrightAgentSession {
       const settle = clampInt(settleMs, 0, 60_000, 0);
       if (settle > 0) {
         const signal = AbortSignal.timeout(settle);
-        await new Promise((resolve) => {
+        await new Promise<void>((resolve) => {
           if (signal.aborted) {
             resolve();
             return;
@@ -436,7 +435,7 @@ export class PlaywrightAgentSession {
     }, { label: 'gotoAndCapture' });
   }
 
-  async regionText(selector = '.content') {
+  async regionText(selector: any = '.content') {
     const loc = this.page.locator(selector).first();
     if (await loc.count()) return loc.innerText();
     return this.textContent();
@@ -445,7 +444,7 @@ export class PlaywrightAgentSession {
   /**
    * @param {{ interactive?: boolean, compact?: boolean, maxDepth?: number, selector?: string, timeoutMs?: number }} [opts]
    */
-  async roleSnapshot(opts = {}) {
+  async roleSnapshot(opts: any = {}) {
     const timeout = clampSnapshotTimeoutMs(opts.timeoutMs);
     const selector = typeof opts.selector === 'string' ? opts.selector.trim() : '';
     const locator = selector ? this.page.locator(selector).first() : this.page.locator(':root');
@@ -469,13 +468,13 @@ export class PlaywrightAgentSession {
   }
 
   /** @deprecated 使用 roleSnapshot；保留兼容旧 selectorHint 列表 */
-  async interactiveSnapshot(opts = {}) {
+  async interactiveSnapshot(opts: any = {}) {
     const maxNodes = Math.min(Math.max(opts.maxNodes ?? 80, 10), 200);
     const rootSelector = typeof opts.selector === 'string' && opts.selector.trim() ? opts.selector.trim() : 'body';
-    return this.page.locator(rootSelector).first().evaluate((root, limit) => {
-      const nodes = [];
+    return this.page.locator(rootSelector).first().evaluate((root: any, limit: any) => {
+      const nodes: any[] = [];
       const seen = new Set();
-      const walk = (el, depth) => {
+      const walk = (el: any, depth: any) => {
         if (!el || nodes.length >= limit || depth > 12) return;
         if (el.nodeType !== 1) return;
         const tag = el.tagName.toLowerCase();
@@ -518,21 +517,21 @@ export class PlaywrightAgentSession {
     }, maxNodes);
   }
 
-  resolveTarget(target = {}) {
+  resolveTarget(target: any = {}) {
     return resolveInteractionTarget(target, this.page);
   }
 
-  refLocator(ref) {
+  refLocator(ref: any) {
     return refLocator(this.page, ref);
   }
 
-  async scrollIntoViewTarget(target, opts = {}) {
+  async scrollIntoViewTarget(target: any, opts: any = {}) {
     const timeout = clampInteractionTimeoutMs(opts.timeoutMs ?? 20_000);
     const { locator } = this.resolveTarget(target);
     await locator.scrollIntoViewIfNeeded({ timeout });
   }
 
-  async fillFormFields(fields = [], opts = {}) {
+  async fillFormFields(fields: any = [], opts: any = {}) {
     const timeout = clampInteractionTimeoutMs(opts.timeoutMs);
     const ssrfPolicy = opts.ssrfPolicy ?? {};
     for (const field of fields) {
@@ -556,7 +555,7 @@ export class PlaywrightAgentSession {
     }
   }
 
-  async clickTarget(target, opts = {}) {
+  async clickTarget(target: any, opts: any = {}) {
     const timeout = clampInteractionTimeoutMs(opts.timeoutMs);
     const previousUrl = this.page.url();
     const { locator } = this.resolveTarget(target);
@@ -564,7 +563,7 @@ export class PlaywrightAgentSession {
     await this.guardAfterInteraction(previousUrl, opts.ssrfPolicy ?? {});
   }
 
-  async typeTarget(target, text, opts = {}) {
+  async typeTarget(target: any, text: any, opts: any = {}) {
     const timeout = clampInteractionTimeoutMs(opts.timeoutMs);
     const previousUrl = this.page.url();
     const { locator } = this.resolveTarget(target);
@@ -574,7 +573,7 @@ export class PlaywrightAgentSession {
     await this.guardAfterInteraction(previousUrl, opts.ssrfPolicy ?? {});
   }
 
-  async pressTarget(target, key, opts = {}) {
+  async pressTarget(target: any, key: any, opts: any = {}) {
     const timeout = clampInteractionTimeoutMs(opts.timeoutMs);
     const previousUrl = this.page.url();
     const { locator } = this.resolveTarget(target);
@@ -582,13 +581,13 @@ export class PlaywrightAgentSession {
     await this.guardAfterInteraction(previousUrl, opts.ssrfPolicy ?? {});
   }
 
-  async hoverTarget(target, opts = {}) {
+  async hoverTarget(target: any, opts: any = {}) {
     const timeout = clampInteractionTimeoutMs(opts.timeoutMs);
     const { locator } = this.resolveTarget(target);
     await locator.hover({ timeout });
   }
 
-  async selectTarget(target, values, opts = {}) {
+  async selectTarget(target: any, values: any, opts: any = {}) {
     const timeout = clampInteractionTimeoutMs(opts.timeoutMs);
     const previousUrl = this.page.url();
     const { locator } = this.resolveTarget(target);
@@ -597,15 +596,15 @@ export class PlaywrightAgentSession {
     await this.guardAfterInteraction(previousUrl, opts.ssrfPolicy ?? {});
   }
 
-  async clickSelector(selector, opts = {}) {
+  async clickSelector(selector: any, opts: any = {}) {
     return this.clickTarget({ selector }, opts);
   }
 
-  async typeSelector(selector, text, opts = {}) {
+  async typeSelector(selector: any, text: any, opts: any = {}) {
     return this.typeTarget({ selector }, text, opts);
   }
 
-  async waitFor(opts = {}) {
+  async waitFor(opts: any = {}) {
     const timeout = clampWaitTimeoutMs(opts.timeoutMs);
     if (typeof opts.timeMs === 'number' && opts.timeMs > 0) {
       await this.page.waitForTimeout(clampWaitTimeMs(opts.timeMs));
@@ -643,7 +642,7 @@ export class PlaywrightAgentSession {
   /**
    * @param {object} act
    */
-  async runAct(act = {}, depth = 0) {
+  async runAct(act: any = {}, depth: any = 0) {
     const kind = String(act.kind || act.action || '').trim().toLowerCase();
     const ssrfPolicy = act.ssrfPolicy ?? {};
     const timeoutMs = act.timeoutMs;
@@ -651,7 +650,7 @@ export class PlaywrightAgentSession {
     try {
       if (dialogAbort.signal.aborted) throw dialogAbort.signal.reason;
       return await this._runActInner(act, kind, ssrfPolicy, timeoutMs, depth);
-    } catch (err) {
+    } catch (err: any) {
       if (isBrowserObservedDialogBlockedError(err)) {
         return { blockedByDialog: true, browserState: err.browserState, url: this.url() };
       }
@@ -661,7 +660,7 @@ export class PlaywrightAgentSession {
     }
   }
 
-  async _runActInner(act, kind, ssrfPolicy, timeoutMs, depth) {
+  async _runActInner(act: any, kind: any, ssrfPolicy: any, timeoutMs: any, depth: any) {
     if (depth > ACT_MAX_BATCH_DEPTH) {
       throw new Error(`Batch nesting depth exceeds maximum of ${ACT_MAX_BATCH_DEPTH}`);
     }
@@ -683,7 +682,7 @@ export class PlaywrightAgentSession {
               depth + 1
             );
             results.push({ ok: true });
-          } catch (e) {
+          } catch (e: any) {
             results.push({ ok: false, error: e?.message || String(e) });
             if (act.stopOnError !== false) break;
           }
@@ -760,7 +759,7 @@ export class PlaywrightAgentSession {
    * 在页面上下文执行表达式（返回 JSON 可序列化结果）。
    * @param {string} expression
    */
-  async evaluateExpression(expression, ref) {
+  async evaluateExpression(expression: any, ref: any) {
     const src = String(expression ?? '').trim();
     if (!src) throw new Error('expression 不能为空');
     if (src.length > 8000) throw new Error('expression 过长');
@@ -768,14 +767,14 @@ export class PlaywrightAgentSession {
       src.startsWith('(') || src.startsWith('function') || src.startsWith('async') ? src : `() => (${src})`;
     if (ref) {
       const locator = refLocator(this.page, ref);
-      return locator.evaluate((el, body) => {
+      return locator.evaluate((el: any, body: any) => {
         // eslint-disable-next-line no-eval
         const fn = eval(`(${body})`);
         if (typeof fn !== 'function') throw new Error('expression 须为函数体');
         return fn(el);
       }, fnBody);
     }
-    return this.page.evaluate((fnBody) => {
+    return this.page.evaluate((fnBody: any) => {
       // eslint-disable-next-line no-eval
       const fn = eval(`(${fnBody})`);
       if (typeof fn !== 'function') throw new Error('expression 须为函数体，如 () => document.title');
@@ -784,7 +783,7 @@ export class PlaywrightAgentSession {
   }
 
   /** @template T */
-  static async using(options, fn, usingOpts = {}) {
+  static async using(options: any, fn: any, usingOpts: any = {}) {
     const crashRetries = Math.max(
       0,
       Math.min(3, Math.floor(Number(usingOpts.crashRetries ?? DEFAULT_USING_CRASH_RETRIES)))
@@ -795,7 +794,7 @@ export class PlaywrightAgentSession {
       const session = await PlaywrightAgentSession.launch(options);
       try {
         return await fn(session);
-      } catch (err) {
+      } catch (err: any) {
         lastErr = err;
         const canRetry = isPlaywrightCrashError(err) && attempt < crashRetries;
         if (!canRetry) throw err;
