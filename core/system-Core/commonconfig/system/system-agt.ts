@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { getConfigPath } from './system-schema-helpers.js';
 export const agtConfig = {
       name: 'agt',

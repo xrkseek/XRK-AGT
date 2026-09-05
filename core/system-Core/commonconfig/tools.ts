@@ -1,10 +1,10 @@
-// @ts-nocheck
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
 
 /**
  * 工具配置 — config/cmd/tools.yaml（终端指令 / 内联 JS）
  */
 export default class ToolsConfig extends ConfigBase {
+  [key: string]: any;
   constructor() {
     super({
       name: 'tools',

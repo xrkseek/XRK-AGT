@@ -1,4 +1,3 @@
-// @ts-nocheck
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import RuntimeUtil from '#utils/runtime-util.js';
@@ -22,6 +21,8 @@ import { rendererConfig } from './system/system-renderer.js';
  *   chatbot：主人/黑白名单/私聊 + 群默认与按群号覆盖
  */
 export default class SystemConfig extends ConfigBase {
+  [key: string]: any;
+
   constructor() {
     super({
       name: 'system',
@@ -52,7 +53,7 @@ export default class SystemConfig extends ConfigBase {
    * @param {string} name - 配置名称
    * @returns {ConfigBase}
    */
-  getConfigInstance(name) {
+  getConfigInstance(name: any) {
     const configMeta = this.configFiles[name];
     if (!configMeta) {
       throw new Error(`未知的配置: ${name}`);
@@ -60,7 +61,7 @@ export default class SystemConfig extends ConfigBase {
 
     const instance = new ConfigBase(configMeta);
     if (name === 'ai-workflow') {
-      instance.prepareValidate = (data) => this._refreshDynamicSchema(data);
+      instance.prepareValidate = (data: any) => this._refreshDynamicSchema(data);
     }
     return instance;
   }
@@ -70,7 +71,8 @@ export default class SystemConfig extends ConfigBase {
    * @param {string} [name] - 子配置名称（可选，如果不提供则返回配置列表）
    * @returns {Promise<Object>}
    */
-  async read(name) {
+  async read(...args: any[]) {
+    const [name] = args;
     if (!name) {
       return {
         name: this.name,
@@ -91,7 +93,8 @@ export default class SystemConfig extends ConfigBase {
    * @param {Object} options - 写入选项
    * @returns {Promise<boolean>}
    */
-  async write(name, data, options = {}) {
+  async write(...args: any[]) {
+    const [name, data, options = {}] = args;
     if (!name) {
       throw new Error('SystemConfig 写入需要指定子配置名称');
     }
@@ -105,7 +108,8 @@ export default class SystemConfig extends ConfigBase {
    * @param {string} keyPath - 键路径
    * @returns {Promise<any>}
    */
-  async get(name, keyPath) {
+  async get(...args: any[]) {
+    const [name, keyPath] = args;
     const instance = this.getConfigInstance(name);
     return await instance.get(keyPath);
   }
@@ -118,7 +122,8 @@ export default class SystemConfig extends ConfigBase {
    * @param {Object} options - 写入选项
    * @returns {Promise<boolean>}
    */
-  async set(name, keyPath, value, options = {}) {
+  async set(...args: any[]) {
+    const [name, keyPath, value, options = {}] = args;
     const instance = this.getConfigInstance(name);
     return await instance.set(keyPath, value, options);
   }
@@ -127,18 +132,18 @@ export default class SystemConfig extends ConfigBase {
    * 获取所有配置文件的结构
    * @returns {Object}
    */
-  getStructure() {
+  getStructure(..._args: any[]): any {
     // 每次获取结构前动态刷新 schema（LLM Provider enum）
     this._refreshDynamicSchema();
 
-    const structure = {
+    const structure: any = {
       name: this.name,
       displayName: this.displayName,
       description: this.description,
       configs: {}
     };
 
-    for (const [name, meta] of Object.entries(this.configFiles)) {
+    for (const [name, meta] of Object.entries(this.configFiles) as [string, any][]) {
       structure.configs[name] = {
         ...meta,
         fields: meta.schema?.fields || {}
@@ -153,7 +158,7 @@ export default class SystemConfig extends ConfigBase {
    * @returns {Array}
    */
   getConfigList() {
-    return Object.entries(this.configFiles).map(([name, meta]) => ({
+    return Object.entries(this.configFiles).map(([name, meta]: [string, any]) => ({
       name,
       displayName: meta.displayName,
       description: meta.description,
@@ -166,25 +171,25 @@ export default class SystemConfig extends ConfigBase {
    * 动态刷新 ai-workflow 相关 schema（LLM Provider）
    * @param {object} [validateSnapshot] - 待校验/写入的配置快照；用于把已持久化的值并入 enum，避免改无关字段时误伤校验
    */
-  _refreshDynamicSchema(validateSnapshot = null) {
+  _refreshDynamicSchema(validateSnapshot: any = null) {
     try {
       const aiWorkflowSchema = this.configFiles?.['ai-workflow']?.schema?.fields;
       if (!aiWorkflowSchema) return;
 
       const snap = validateSnapshot || runtimeConfig?.aiWorkflow || {};
       this._refreshAiWorkflowLlmProviderEnum(aiWorkflowSchema.llm?.fields, snap);
-    } catch (e) {
+    } catch (e: any) {
       RuntimeUtil.makeLog('error', `[SystemConfig] 刷新动态 schema 失败: ${e.message}`, 'SystemConfig');
     }
   }
 
-  _refreshAiWorkflowLlmProviderEnum(llmFields, snap) {
+  _refreshAiWorkflowLlmProviderEnum(llmFields: any, snap: any) {
     if (!llmFields?.Provider) return;
 
-    let providers = [];
+    let providers: any[] = [];
     try {
       providers = LLMFactory.listProviders?.() || [];
-    } catch (e) {
+    } catch (e: any) {
       RuntimeUtil.makeLog('warn', `[SystemConfig] 获取 LLM Provider 列表失败: ${e.message}`, 'SystemConfig');
     }
 

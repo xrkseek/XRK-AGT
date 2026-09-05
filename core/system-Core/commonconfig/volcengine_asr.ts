@@ -1,4 +1,3 @@
-// @ts-nocheck
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
 
 /**
@@ -7,12 +6,13 @@ import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
  * 支持前端编辑，配置文件位于 data/server_bots/{port}/volcengine_asr.yaml
  */
 export default class VolcengineASRConfig extends ConfigBase {
+  [key: string]: any;
   constructor() {
     super({
       name: 'volcengine_asr',
       displayName: '火山引擎 ASR 工厂配置',
       description: '火山引擎语音转文本（ASR）配置',
-      filePath: (runtimeConfig) => {
+      filePath: (runtimeConfig: any) => {
         const port = runtimeConfig?.port ?? runtimeConfig?._port;
         if (!port) {
           throw new Error(`VolcengineASRConfig: 未提供端口，无法解析路径`);

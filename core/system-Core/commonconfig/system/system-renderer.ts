@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { getPort } from './system-schema-helpers.js';
 import path from 'path';
 import paths from '#utils/paths.js';
@@ -43,7 +42,7 @@ export const rendererConfig = {
   displayName: '渲染器配置',
   description:
     'Puppeteer/Playwright 截图；运行时 data/server_bots/{port}/renderers/{type}/config.yaml，缺省从 src/renderers/{type}/config_default.yaml 合并',
-  filePath: (runtimeConfig) => {
+  filePath: (runtimeConfig: any) => {
     const port = getPort(runtimeConfig);
     if (!port) throw new Error('SystemConfig: 渲染器配置需要端口号');
     return `data/server_bots/${port}/renderers/{type}/config.yaml`;
@@ -51,12 +50,12 @@ export const rendererConfig = {
   fileType: 'yaml',
   multiFile: {
     keys: ['puppeteer', 'playwright'],
-    getFilePath: (key) => {
+    getFilePath: (key: any) => {
       const port = getPort(runtimeConfig);
       if (!port) throw new Error('SystemConfig: 渲染器配置需要端口号');
       return path.join(paths.root, `data/server_bots/${port}/renderers/${key}/config.yaml`);
     },
-    getDefaultFilePath: (key) => path.join(paths.renderers, key, 'config_default.yaml'),
+    getDefaultFilePath: (key: any) => path.join(paths.renderers, key, 'config_default.yaml'),
   },
   schema: {
     fields: {

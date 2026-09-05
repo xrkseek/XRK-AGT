@@ -1,4 +1,3 @@
-// @ts-nocheck
 import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
 
 /**
@@ -7,12 +6,13 @@ import ConfigBase from '#infrastructure/commonconfig/commonconfig.js';
  * 支持前端编辑，配置文件位于 data/server_bots/{port}/volcengine_tts.yaml
  */
 export default class VolcengineTTSConfig extends ConfigBase {
+  [key: string]: any;
   constructor() {
     super({
       name: 'volcengine_tts',
       displayName: '火山引擎 TTS 工厂配置',
       description: '火山引擎文本转语音（TTS）配置',
-      filePath: (runtimeConfig) => {
+      filePath: (runtimeConfig: any) => {
         const port = runtimeConfig?.port ?? runtimeConfig?._port;
         if (!port) {
           throw new Error(`VolcengineTTSConfig: 未提供端口，无法解析路径`);

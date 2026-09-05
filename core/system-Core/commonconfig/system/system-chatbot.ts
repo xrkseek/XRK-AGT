@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { getConfigPath } from './system-schema-helpers.js';
 import { CHATBOT_FIXED_ROOT_KEYS } from '#infrastructure/config/config-constants.js';
 
