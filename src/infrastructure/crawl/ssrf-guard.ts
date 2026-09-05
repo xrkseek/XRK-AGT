@@ -11,15 +11,15 @@ export {
   resolveSsrFPolicyForUrl,
   matchesHostnameAllowlist,
   isPrivateNetworkAllowedByPolicy,
-  assertHostnameAllowedWithPolicy
+  assertHostnameAllowedWithPolicy,
 } from './ssrf-policy.js';
 
 import { isPrivateIpAddress, isBlockedSpecialUseIpv6Address } from './ssrf-ip-policy.js';
 
-export function isPrivateOrReservedIpv4(ip) {
+export function isPrivateOrReservedIpv4(ip: string): boolean {
   return isPrivateIpAddress(ip);
 }
 
-export function isBlockedIpv6(ip) {
+export function isBlockedIpv6(ip: string): boolean {
   return isBlockedSpecialUseIpv6Address(ip);
 }

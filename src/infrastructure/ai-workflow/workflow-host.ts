@@ -4,13 +4,13 @@
  */
 import { setRuntimeGlobal } from '#utils/runtime-globals.js';
 
-let host = null;
+let host: unknown = null;
 
-export function setAiWorkflowHost(instance) {
+export function setAiWorkflowHost(instance: unknown): void {
   host = instance || null;
   if (host) setRuntimeGlobal('AiWorkflowLoader', host);
 }
 
-export function getAiWorkflowHost() {
-  return host || globalThis.AiWorkflowLoader || null;
+export function getAiWorkflowHost(): unknown {
+  return host || (globalThis as { AiWorkflowLoader?: unknown }).AiWorkflowLoader || null;
 }

@@ -8,10 +8,10 @@
  */
 
 // 全局配置列表（不随端口变化，存储在server_bots/根目录）
-export const GLOBAL_CONFIGS = ['agt', 'device', 'monitor', 'redis', 'sqlite'];
+export const GLOBAL_CONFIGS = ['agt', 'device', 'monitor', 'redis', 'sqlite'] as const;
 
 // 服务器配置列表（随端口变化，存储在server_bots/{port}/）
-export const SERVER_CONFIGS = ['server', 'chatbot', 'ai-workflow'];
+export const SERVER_CONFIGS = ['server', 'chatbot', 'ai-workflow'] as const;
 
 /**
  * chatbot.yaml 根级固定键（其余根级键视为群号覆盖，供 getGroup / collections 排除）
@@ -24,7 +24,7 @@ export const CHATBOT_FIXED_ROOT_KEYS = [
   'blacklist',
   'guild',
   'default',
-];
+] as const;
 
 // 工厂配置名称模式（随端口变化）
 export const FACTORY_CONFIG_PATTERNS = [
@@ -38,22 +38,18 @@ export const FACTORY_CONFIG_PATTERNS = [
   'ollama_',
   'newapi_',
   'cherryin_',
-];
+] as const;
 
 /**
  * 判断配置名称是否为工厂配置
- * @param {string} configName - 配置名称
- * @returns {boolean}
  */
-export function isFactoryConfig(configName) {
-  return FACTORY_CONFIG_PATTERNS.some(pattern => configName.includes(pattern));
+export function isFactoryConfig(configName: string): boolean {
+  return FACTORY_CONFIG_PATTERNS.some((pattern) => configName.includes(pattern));
 }
 
 /**
  * 判断配置名称是否为服务器配置（包括服务器配置和工厂配置）
- * @param {string} configName - 配置名称
- * @returns {boolean}
  */
-export function isServerOrFactoryConfig(configName) {
-  return SERVER_CONFIGS.includes(configName) || isFactoryConfig(configName);
+export function isServerOrFactoryConfig(configName: string): boolean {
+  return (SERVER_CONFIGS as readonly string[]).includes(configName) || isFactoryConfig(configName);
 }

@@ -24,11 +24,11 @@
     }
   },
   "include": [
-    "app.js",
     "app.ts",
     "start.js",
     "start.ts",
     "debug.js",
+    "debug.ts",
     "src/**/*",
     "core/**/*.ts",
     "core/**/*.js",

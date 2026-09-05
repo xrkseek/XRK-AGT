@@ -1,9 +1,17 @@
-export function getApiPriority(api) {
+type ApiLike = {
+  name?: string;
+  dsc?: string;
+  priority?: number;
+  enable?: boolean;
+  routes?: unknown[];
+};
+
+export function getApiPriority(api: { priority?: unknown }): number {
   const priority = Number(api.priority);
   return Number.isFinite(priority) ? priority : 100;
 }
 
-export function validateApiInstance(api, key) {
+export function validateApiInstance(api: ApiLike, key: string): true {
   if (!api.name) api.name = key;
   if (!api.dsc) api.dsc = '';
   api.priority = getApiPriority(api);

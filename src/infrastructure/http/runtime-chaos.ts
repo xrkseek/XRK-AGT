@@ -10,19 +10,31 @@
  */
 import { createRng, exponentialDelayMs } from '#utils/prng.js';
 
-function isEnabled() {
+type ExpressLikeReq = { path?: string; requestId?: string | null };
+type ExpressLikeRes = {
+  headersSent?: boolean;
+  status: (code: number) => { json: (body: unknown) => unknown };
+};
+type ExpressLikeNext = (err?: unknown) => void;
+type ExpressLikeApp = {
+  use: (
+    handler: (req: ExpressLikeReq, res: ExpressLikeRes, next: ExpressLikeNext) => unknown,
+  ) => unknown;
+};
+
+function isEnabled(): boolean {
   return process.env.XRK_CHAOS_ENABLED === '1';
 }
 
-function parsePaths() {
+function parsePaths(): string[] {
   const raw = process.env.XRK_CHAOS_PATHS || '/health,/metrics';
-  return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
-/**
- * @param {import('express').Application} app
- */
-export function attachChaosMiddleware(app) {
+export function attachChaosMiddleware(app: ExpressLikeApp): void {
   if (!isEnabled()) return;
 
   const latencyMean = Math.max(0, Number(process.env.XRK_CHAOS_LATENCY_MS || 0) || 0);
@@ -32,7 +44,7 @@ export function attachChaosMiddleware(app) {
   const rng = createRng(process.env.XRK_CHAOS_SEED);
 
   app.use(async (req, res, next) => {
-    const hit = paths.some((p) => req.path === p || req.path.startsWith(p));
+    const hit = paths.some((p) => req.path === p || (req.path ?? '').startsWith(p));
     if (!hit) return next();
 
     if (latencyMean > 0) {
@@ -55,7 +67,6 @@ export function attachChaosMiddleware(app) {
   });
 }
 
-/** @returns {boolean} */
-export function chaosEnabled() {
+export function chaosEnabled(): boolean {
   return isEnabled();
 }
