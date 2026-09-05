@@ -6,9 +6,9 @@ import RuntimeUtil from '#utils/runtime-util.js'
 /**
  * 将绝对路径转为 file:// URL（Windows 下用正斜杠，避免浏览器无法加载）
  */
-function toFileUrl(absPath) {
-  const p = String(absPath).replace(/\\/g, '/');
-  return (p.startsWith('/') ? 'file://' : 'file:///') + p;
+function toFileUrl(absPath: string): string {
+  const p = String(absPath).replace(/\\/g, '/')
+  return (p.startsWith('/') ? 'file://' : 'file:///') + p
 }
 
 /**
@@ -16,31 +16,32 @@ function toFileUrl(absPath) {
  * 提供HTML模板渲染、图片生成等功能的统一接口。
  */
 export default class Renderer {
-  static toFileUrl = toFileUrl;
+  static toFileUrl = toFileUrl
 
   id = 'renderer'
   type = 'image'
   dir = './trash/html'
-  html = {}
+  html: Record<string, string> = {}
+  render: (...args: any[]) => any
 
-  constructor(data) {
+  constructor(data: Record<string, any> = {}) {
     this.id = data.id || this.id
     this.type = data.type || this.type
-    this.render = this[data.render || 'render']
+    this.render = (this as any)[data.render || 'render']
     this.createDir(this.dir)
   }
 
-  createDir(dirname) {
+  createDir(dirname: string): boolean {
     // 使用 recursive: true 简化递归创建逻辑
     try {
-      fs.mkdirSync(dirname, { recursive: true });
-      return true;
+      fs.mkdirSync(dirname, { recursive: true })
+      return true
     } catch {
-      return false;
+      return false
     }
   }
 
-  dealTpl(name, data) {
+  dealTpl(name: string, data: Record<string, any>): string | false {
     const { tplFile, saveId = name } = data
     const savePath = `./trash/html/${name}/${saveId}.html`
 
@@ -61,34 +62,36 @@ export default class Renderer {
 
     RuntimeUtil.makeLog('debug', `[图片生成][使用模板] ${savePath}`, 'Renderer')
 
-    return savePath;
+    return savePath
   }
 
   async stopAllWatchers() {
     // no-op: template hot-reload removed
   }
 
-  async getMac() {
-    const macAddr = "000000000000";
+  async getMac(): Promise<string> {
+    const macAddr = '000000000000'
     try {
-      const network = os.networkInterfaces();
+      const network = os.networkInterfaces()
       for (const key in network) {
-        for (const iface of network[key]) {
-          if (iface.mac && iface.mac !== "00:00:00:00:00:00") {
-            return iface.mac.replace(/:/g, "");
+        const ifaces = network[key]
+        if (!ifaces) continue
+        for (const iface of ifaces) {
+          if (iface.mac && iface.mac !== '00:00:00:00:00:00') {
+            return iface.mac.replace(/:/g, '')
           }
         }
       }
-    } catch (e) {
-      RuntimeUtil.makeLog('error', `获取MAC地址失败: ${e.message}`, 'Renderer');
+    } catch (e: any) {
+      RuntimeUtil.makeLog('error', `获取MAC地址失败: ${e.message}`, 'Renderer')
     }
-    return macAddr;
+    return macAddr
   }
 
   getInfo() {
     return {
       id: this.id,
       type: this.type
-    };
+    }
   }
 }

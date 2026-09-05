@@ -6,18 +6,20 @@ import { scheduleMethods } from './loader-schedule.js'
 import { hotReloadMethods } from './loader-hot-reload.js'
 import { neuralMethods } from './loader-neural.js'
 
+const gLogger = (): any => (globalThis as any).logger
+
 class PluginLoader {
-  priority = []
-  extended = []
-  task = []
+  priority: any[] = []
+  extended: any[] = []
+  task: any[] = []
   cooldowns = {
-    group: new Map(),
-    single: new Map()
+    group: new Map<string, unknown>(),
+    single: new Map<string, unknown>()
   }
-  msgThrottle = new Map()
-  eventThrottle = new Map()
-  defaultMsgHandlers = []
-  eventSubscribers = new Map()
+  msgThrottle = new Map<string, unknown>()
+  eventThrottle = new Map<string, unknown>()
+  defaultMsgHandlers: any[] = []
+  eventSubscribers = new Map<string, Array<(data: any) => void>>()
   pluginCount = 0
   eventHistoryCache = new IntelligentCache({ maxSize: 1000, ttl: 3600000 })
   eventDeduplicator = new EventDeduplicator({
@@ -26,9 +28,9 @@ class PluginLoader {
     maxHistory: 1000
   })
   pluginMatcher = new PluginMatcher()
-  cleanupTimer = null
+  cleanupTimer: ReturnType<typeof setInterval> | null = null
   pluginLoadStats = {
-    plugins: [],
+    plugins: [] as any[],
     totalLoadTime: 0,
     startTime: 0,
     totalPlugins: 0,
@@ -39,7 +41,7 @@ class PluginLoader {
 
   async destroy() {
     try {
-      this.task.forEach(task => task.job?.cancel())
+      this.task.forEach((task) => task.job?.cancel())
       if (this.cleanupTimer) {
         clearInterval(this.cleanupTimer)
         this.cleanupTimer = null
@@ -56,10 +58,10 @@ class PluginLoader {
       this.eventHistoryCache.stopCleanup()
       this.eventHistoryCache.clear()
 
-      logger.info('插件加载器已销毁')
+      gLogger()?.info?.('插件加载器已销毁')
     } catch (error) {
-      errorHandler.handle(error, { context: 'destroy', code: ErrorCodes.SYSTEM_ERROR }, true)
-      logger.error('销毁插件加载器失败', error)
+      errorHandler.handle(error as Error, { context: 'destroy', code: ErrorCodes.SYSTEM_ERROR }, true)
+      gLogger()?.error?.('销毁插件加载器失败', error)
     }
   }
 }

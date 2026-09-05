@@ -1,20 +1,31 @@
 import RuntimeUtil from '#utils/runtime-util.js'
 
+type NeuralHost = {
+  eventDeduplicator: { isDuplicate: (data: any) => boolean }
+  eventHistoryCache: { set: (key: string, value: unknown) => void }
+  eventSubscribers: Map<string, Array<(data: any) => void>>
+  recordEventHistory: (eventType: string, eventData: Record<string, any>) => void
+  distributeToSubscribers: (eventType: string, eventData: unknown) => void
+}
+
+const gLogger = (): any => (globalThis as any).logger
+const gAgentRuntime = (): any => (globalThis as any).AgentRuntime
+
 export const neuralMethods = {
   /**
    * 统一的事件历史过滤方法（减少冗余代码）
    */
-  filterEventHistory(history, filter = {}) {
+  filterEventHistory(history: any[], filter: Record<string, any> = {}) {
     let filtered = [...history]
 
     if (filter.event_type) {
-      filtered = filtered.filter(h => h.event_type === filter.event_type)
+      filtered = filtered.filter((h) => h.event_type === filter.event_type)
     }
     if (filter.user_id) {
-      filtered = filtered.filter(h => h.event_data?.user_id === filter.user_id)
+      filtered = filtered.filter((h) => h.event_data?.user_id === filter.user_id)
     }
     if (filter.device_id) {
-      filtered = filtered.filter(h => h.event_data?.device_id === filter.device_id)
+      filtered = filtered.filter((h) => h.event_data?.device_id === filter.device_id)
     }
     if (filter.limit && typeof filter.limit === 'number') {
       filtered = filtered.slice(0, filter.limit)
@@ -23,11 +34,11 @@ export const neuralMethods = {
     return filtered
   },
 
-  recordEventHistory(eventType, eventData) {
+  recordEventHistory(this: NeuralHost, eventType: string, eventData: Record<string, any>) {
     // 使用事件去重器检查是否重复
     if (this.eventDeduplicator.isDuplicate(eventData)) {
       // debug: 重复事件是内部技术细节
-      logger.debug(`事件去重: ${eventType} - ${eventData.event_id || 'unknown'}`)
+      gLogger()?.debug?.(`事件去重: ${eventType} - ${eventData.event_id || 'unknown'}`)
       return
     }
 
@@ -44,21 +55,21 @@ export const neuralMethods = {
     this.eventHistoryCache.set(cacheKey, historyEntry)
   },
 
-  distributeToSubscribers(eventType, eventData) {
+  distributeToSubscribers(this: NeuralHost, eventType: string, eventData: unknown) {
     const subscribers = this.eventSubscribers.get(eventType)
     if (!subscribers || subscribers.length === 0) return
 
-    subscribers.forEach(callback => {
+    subscribers.forEach((callback) => {
       try {
         callback(eventData)
       } catch (error) {
-        logger.error(`事件订阅回调执行失败 [${eventType}]`)
-        logger.error(error)
+        gLogger()?.error?.(`事件订阅回调执行失败 [${eventType}]`)
+        gLogger()?.error?.(error)
       }
     })
   },
 
-  subscribeEvent(eventType, callback) {
+  subscribeEvent(this: NeuralHost, eventType: string, callback: (data: any) => void) {
     if (typeof eventType !== 'string' || !eventType.trim() || typeof callback !== 'function') {
       return () => {}
     }
@@ -67,16 +78,16 @@ export const neuralMethods = {
     if (!this.eventSubscribers.has(eventType)) {
       this.eventSubscribers.set(eventType, [])
     }
-    this.eventSubscribers.get(eventType).push(callback)
+    this.eventSubscribers.get(eventType)!.push(callback)
 
     return () => {
       const subscribers = this.eventSubscribers.get(eventType)
       const index = subscribers?.indexOf(callback)
-      if (index > -1) subscribers.splice(index, 1)
+      if (index !== undefined && index > -1) subscribers!.splice(index, 1)
     }
   },
 
-  async emit(eventType, eventData) {
+  async emit(this: NeuralHost, eventType: string, eventData: Record<string, any>) {
     try {
       const postType = eventType.split('.')[0] || 'custom'
       const randomId = RuntimeUtil.shortId()
@@ -89,13 +100,13 @@ export const neuralMethods = {
       }
 
       this.recordEventHistory(eventType, event)
-      AgentRuntime.em(eventType, event)
+      gAgentRuntime()?.em?.(eventType, event)
       this.distributeToSubscribers(eventType, event)
 
       return { success: true, event_id: event.event_id }
-    } catch (error) {
-      logger.error('触发自定义事件失败', error)
-      return { success: false, error: error.message }
+    } catch (error: any) {
+      gLogger()?.error?.('触发自定义事件失败', error)
+      return { success: false, error: error?.message }
     }
   }
 }
