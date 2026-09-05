@@ -1,4 +1,3 @@
-// @ts-nocheck
 import RuntimeUtil from '#utils/runtime-util.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import MemoryManager from '#infrastructure/ai-workflow/memory-manager.js';
@@ -29,11 +28,14 @@ import { runHarnessModuleLoop, slimMessagesForExistingSession } from '#infrastru
 import { hasHarnessSession } from '#infrastructure/ai-workflow/harness-session-registry.js';
 import { importHarnessSdk } from '#infrastructure/ai-workflow/harness-resolve.js';
 
+const gLogger = (): any => (globalThis as any).logger;
+
 export default class AiWorkflow {
+  [key: string]: any;
   /** @type {Map<string, object>} MCP 工具注册表 */
-  mcpTools = new Map();
+  mcpTools: any = new Map();
   /** @type {AiWorkflow[]} mergeWorkflows 合成实例挂载的子工作流 */
-  _mergedStreams = [];
+  _mergedStreams: any[] = [];
   _initialized = false;
 
   /**
@@ -49,7 +51,7 @@ export default class AiWorkflow {
    * @param {string[]} [options.capabilities] - 能力标签（如 tools/prompt）
    * @param {boolean} [options.frameworkToolSurface] - 是否自动并入 chat 工具白名单
    */
-  constructor(options = {}) {
+  constructor(options: any = {}) {
     this.name = options.name || 'base-stream';
     this.description = options.description || '基础工作流';
     this.version = options.version || '1.0.5';
@@ -93,7 +95,7 @@ export default class AiWorkflow {
    * @param {string} text - 待估算的文本
    * @returns {number} token数量
    */
-  estimateTokens(text) {
+  estimateTokens(text: any) {
     return estimateTokensMixed(text);
   }
 
@@ -103,7 +105,7 @@ export default class AiWorkflow {
    * @param {number} maxLength - 最大长度
    * @returns {string} 压缩后的文本
    */
-  compressText(text, maxLength = 150) {
+  compressText(text: any, maxLength: any = 150) {
     if (!text || text.length <= maxLength) return text;
     
     const sentences = text.split(/[。！？.!?]/);
@@ -124,7 +126,7 @@ export default class AiWorkflow {
    * 写入进程内短期记忆（embedding.enabled 时）。
    * 主对话历史仍由 ChatStream.messageHistory / memory 工作流负责；此处供 retrieveRelevantContexts 关键词召回。
    */
-  async storeMessageMemory(groupId, message) {
+  async storeMessageMemory(groupId: any, message: any) {
     if (!this.embeddingConfig?.enabled) return;
 
     const messageText = `${message.nickname}: ${message.message}`;
@@ -141,7 +143,7 @@ export default class AiWorkflow {
           messageId: message.message_id
         }
       });
-    } catch (e) {
+    } catch (e: any) {
       RuntimeUtil.makeLog('debug', `[${this.name}] 存储消息失败: ${e.message}`, 'AiWorkflow');
     }
   }
@@ -149,20 +151,20 @@ export default class AiWorkflow {
   /**
    * 从短期记忆做关键词召回（非向量 RAG）。需 embedding.enabled。
    */
-  async retrieveRelevantContexts(groupId, query) {
+  async retrieveRelevantContexts(groupId: any, query: any) {
     if (!query || !this.embeddingConfig?.enabled) return [];
 
     try {
       const userId = String(groupId || '').replace(/^memory_/, '');
       const memories = await MemoryManager.searchShortTermMemories(userId, query, 5);
-      return memories.map((m) => ({
+      return memories.map((m: any) => ({
         message: m.content,
         similarity: typeof m.score === 'number' ? m.score : 0.5,
         time: m.timestamp,
         userId,
         nickname: m.metadata?.nickname || ''
       }));
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('debug', `[${this.name}] 检索上下文失败: ${error.message}`, 'AiWorkflow');
       return [];
     }
@@ -173,7 +175,7 @@ export default class AiWorkflow {
    * @param {string} query - 查询文本
    * @returns {Promise<Array<Object>>}
    */
-  async retrieveKnowledgeContexts(query) {
+  async retrieveKnowledgeContexts(query: any) {
     if (!this._mergedStreams || !query) return [];
 
     // 从合并的工作流中查找支持知识检索的工作流
@@ -196,7 +198,7 @@ export default class AiWorkflow {
    * @param {Array<Object>} baseMessages - 基础消息列表
    * @returns {Promise<Array<Object>>}
    */
-  async buildEnhancedContext(e, question, baseMessages) {
+  async buildEnhancedContext(e: any, question: any, baseMessages: any) {
     const groupId = e ? (e.group_id || `private_${e.user_id}`) : 'default';
 
     let query = '';
@@ -232,13 +234,13 @@ export default class AiWorkflow {
 
       const knowledgeContexts = await this.retrieveKnowledgeContexts(query);
       const allContexts = [
-        ...historyContexts.map(ctx => ({
+        ...historyContexts.map((ctx: any) => ({
           type: 'history',
           message: ctx.message,
           similarity: ctx.similarity || 0,
           source: '历史对话'
         })),
-        ...knowledgeContexts.map(ctx => ({
+        ...knowledgeContexts.map((ctx: any) => ({
           type: 'knowledge',
           message: ctx.content,
           similarity: ctx.similarity || 0.5,
@@ -286,7 +288,7 @@ export default class AiWorkflow {
       }
 
       return enhanced;
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('debug',
         `[${this.name}] 构建上下文失败: ${error.message}`,
         'AiWorkflow'
@@ -304,7 +306,7 @@ export default class AiWorkflow {
    * @param {Object} options.inputSchema - 输入Schema（JSON Schema格式）
    * @param {boolean} options.enabled - 是否启用
    */
-  registerMCPTool(name, options = {}) {
+  registerMCPTool(name: any, options: any = {}) {
     const {
       handler,
       description = '',
@@ -329,7 +331,7 @@ export default class AiWorkflow {
    * @param {Object} context - 上下文
    * @returns {string}
    */
-  buildSystemPrompt() {
+  buildSystemPrompt(_opts: any = {}) {
     return '';
   }
 
@@ -340,7 +342,7 @@ export default class AiWorkflow {
    * @param {string} text
    * @returns {Promise<string>}
    */
-  async finalizeSystemPromptContent(text, opts = {}) {
+  async finalizeSystemPromptContent(text: any, opts: any = {}) {
     if (text == null || text === '') text = '';
     const streamKey = String(this.name || '').replace(/-merged$/, '') || this.name;
     const aux = collectAuxiliaryStreamPrompts(this);
@@ -357,7 +359,7 @@ export default class AiWorkflow {
   /**
    * 默认：仅 system；子类可覆写以拼多轮。提示词由 buildSystemPrompt + agentWorkspace 注入。
    */
-  async buildChatContext(e, question) {
+  async buildChatContext(e: any, question: any) {
     const systemPrompt = await this.buildSystemPrompt({ e, question });
     if (!systemPrompt) return [];
     const userText = typeof question === 'string'
@@ -380,7 +382,7 @@ export default class AiWorkflow {
    * 调用AI（非流式，支持tool calling）
    * @returns {Promise<{ content: string, executedToolNames: string[], usedReplyTool?: boolean, toolRoundsExhausted?: boolean }|null>}
    */
-  async callAI(messages, apiConfig = {}) {
+  async callAI(messages: any, apiConfig: any = {}) {
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       RuntimeUtil.makeLog('warn', '[AiWorkflow] callAI 消息数组为空', 'AiWorkflow');
       return null;
@@ -388,22 +390,22 @@ export default class AiWorkflow {
 
     const config = applyPromptCachePolicy(this.resolveLLMConfig(apiConfig), {
       stream: this,
-      e: getWorkflowRequestContext()?.e ?? null,
+      e: (getWorkflowRequestContext() as any)?.e ?? null,
     });
 
     const overrides = this.buildCallOverrides(config, apiConfig);
-    const e = getWorkflowRequestContext()?.e ?? null;
+    const e = (getWorkflowRequestContext() as any)?.e ?? null;
     const sessionKey = overrides.sessionKey
       ?? apiConfig.sessionKey
-      ?? (typeof this.constructor.getEventHistoryKey === 'function'
-        ? this.constructor.getEventHistoryKey(e)
+      ?? (typeof (this.constructor as any).getEventHistoryKey === 'function'
+        ? (this.constructor as any).getEventHistoryKey(e)
         : null);
 
     let toPrepare = Array.isArray(messages) ? messages : [];
     if (sessionKey) {
       try {
         const harness = await importHarnessSdk();
-        if (hasHarnessSession(harness, sessionKey)) {
+        if (hasHarnessSession(harness as any, sessionKey)) {
           // Prior turns already in harness session — don't trim discarded history.
           toPrepare = slimMessagesForExistingSession(toPrepare);
         }
@@ -414,7 +416,7 @@ export default class AiWorkflow {
 
     const outbound = await this.prepareOutboundMessages(toPrepare, config);
 
-    const inputTokens = outbound.reduce((sum, m) => {
+    const inputTokens = outbound.reduce((sum: any, m: any) => {
       const content = typeof m.content === 'string' ? m.content : (m.content?.text || '');
       return sum + this.estimateTokens(content);
     }, 0);
@@ -455,7 +457,7 @@ export default class AiWorkflow {
       }
       RuntimeUtil.makeLog('warn', `[${this.name}] AI 空响应，放弃本轮`, 'AiWorkflow');
       return null;
-    } catch (err) {
+    } catch (err: any) {
       if (err?.code === 'empty_turn' || /empty llm response/i.test(String(err?.message || ''))) {
         RuntimeUtil.makeLog('warn', `[${this.name}] AI 连续空响应，放弃本轮`, 'AiWorkflow');
         return null;
@@ -480,7 +482,7 @@ export default class AiWorkflow {
 
 
 
-  resolveLLMConfig(apiConfig = {}) {
+  resolveLLMConfig(apiConfig: any = {}) {
     const merged = resolveStreamLLMConfig(this, apiConfig);
     return this.patchLLMConfig(merged, apiConfig);
   }
@@ -489,7 +491,7 @@ export default class AiWorkflow {
    * 出站消息准备：按 contextWindow 裁剪。
    * 多轮压缩 / soft budget 由 harness CompactionOptions 负责。
    */
-  async prepareOutboundMessages(messages, config = {}) {
+  async prepareOutboundMessages(messages: any, config: any = {}) {
     let outbound = Array.isArray(messages) ? messages : [];
     const budget = resolveInputTokenBudget(config);
     if (budget > 0) {
@@ -513,14 +515,14 @@ export default class AiWorkflow {
    * @param {object} apiConfig - 本次调用覆盖
    * @returns {object}
    */
-  patchLLMConfig(merged, _apiConfig = {}) {
+  patchLLMConfig(merged: any, _apiConfig: any = {}) {
     return merged;
   }
 
   /**
    * 组装 overrides（工具白名单等）；MCP tool 环走 harness，不经工厂执行。
    */
-  buildCallOverrides(resolvedConfig, apiConfig = {}) {
+  buildCallOverrides(resolvedConfig: any, apiConfig: any = {}) {
     return {
       ...resolvedConfig,
       ...apiConfig,
@@ -535,7 +537,7 @@ export default class AiWorkflow {
    * @param {Object} config - 配置
    * @returns {Promise<string|null>}
    */
-  async execute(e, question, config) {
+  async execute(e: any, question: any, config: any) {
     const run = async () => {
       const traceId = MonitorService.startTrace(this.name, {
         agentId: e?.user_id,
@@ -545,7 +547,7 @@ export default class AiWorkflow {
 
       try {
         const messages = await assembleChatLlmMessages(this, e, question);
-        const turnEarly = getWorkflowRequestContext()?.turnState;
+        const turnEarly = (getWorkflowRequestContext() as any)?.turnState;
         if (turnEarly?.slashShortCircuit) {
           MonitorService.endTrace(traceId, { success: true, response: turnEarly.lastOutboundSummary || '' });
           return turnEarly.lastOutboundSummary || '';
@@ -563,7 +565,7 @@ export default class AiWorkflow {
         }
 
         if (e?.reply) {
-          await e.reply(responseText.trim()).catch(err => {
+          await e.reply(responseText.trim()).catch((err: any) => {
             RuntimeUtil.makeLog('debug', `发送回复失败: ${err.message}`, 'AiWorkflow');
           });
         }
@@ -581,7 +583,7 @@ export default class AiWorkflow {
 
         MonitorService.endTrace(traceId, { success: true, response: responseText });
         return responseText;
-      } catch (error) {
+      } catch (error: any) {
         MonitorService.recordError(traceId, error);
         MonitorService.endTrace(traceId, { success: false, error: error.message });
         RuntimeUtil.makeLog('error',
@@ -603,7 +605,7 @@ export default class AiWorkflow {
    * - 传了 `mergeWorkflows`（数组，可空）：严格模式 — 名单即工具面；`remote-mcp.*` 与普通 workflow 一样须显式列入，只进白名单不 merge；
    *   未加载的副流名忽略并打 warn，不拖垮整次调用
    */
-  async process(e, question, options = {}) {
+  async process(e: any, question: any, options: any = {}) {
     try {
       const {
         mergeWorkflows,
@@ -611,7 +613,7 @@ export default class AiWorkflow {
         ...apiConfig
       } = options;
 
-      const host = getAiWorkflowHost();
+      const host = getAiWorkflowHost() as any;
       const strict = Array.isArray(mergeWorkflows);
       const { mergeable, toolOnly } = partitionToolStreamNames(
         strict ? mergeWorkflows : [],
@@ -658,7 +660,7 @@ export default class AiWorkflow {
         { e, turnState: null, toolStreamNames },
         () => stream.execute(e, question, apiConfig),
       );
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `工作流处理失败[${this.name}]: ${error.message}`, 'AiWorkflow');
       return null;
     }
@@ -669,7 +671,7 @@ export default class AiWorkflow {
    * @param {Object} data
    * @returns {{ success: true, data: Object }}
    */
-  successResponse(data) {
+  successResponse(data: any) {
     return {
       success: true,
       data: {
@@ -685,7 +687,7 @@ export default class AiWorkflow {
    * @param {string} message
    * @returns {{ success: false, error: { code: string, message: string } }}
    */
-  errorResponse(code, message) {
+  errorResponse(code: any, message: any) {
     return {
       success: false,
       error: { code, message }
