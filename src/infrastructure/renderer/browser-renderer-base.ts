@@ -21,14 +21,13 @@ import Renderer from './Renderer.js';
  */
 export default class BrowserRendererBase extends Renderer {
   logTag = '';
-  browser = null;
+  browser: any = null;
   lock = false;
-  /** @type {string[]} */
-  shoting = [];
-  /** @type {string[]} */
-  shotingUser = [];
+  shoting: any[] = [];
+  shotingUser: any[] = [];
   mac = '';
-  browserMacKey = null;
+  browserMacKey: any = null;
+  config: any;
   restartNum = 100;
   renderNum = 0;
   maxConcurrent = 3;
@@ -38,12 +37,13 @@ export default class BrowserRendererBase extends Renderer {
   browserInitWaitMs = 60000;
   /** close / 健康探测超时 */
   browserOpTimeoutMs = 8000;
-  healthCheckTimer = null;
-  _unregisterShutdownHook = null;
+  healthCheckTimer: any = null;
+  _unregisterShutdownHook: any = null;
   _restarting = false;
 
-  constructor(meta, config = {}, logTag) {
+  constructor(meta: any, config: any = {}, logTag: any) {
     super(meta);
+    this.config = config;
     this.logTag = logTag;
     this.restartNum = config.restartNum ?? this.restartNum;
     this.maxConcurrent = Math.max(1, Number(config.maxConcurrent) || this.maxConcurrent);
@@ -59,23 +59,23 @@ export default class BrowserRendererBase extends Renderer {
       Number.isFinite(config.browserOpTimeout) && config.browserOpTimeout > 0
         ? config.browserOpTimeout
         : this.browserOpTimeoutMs;
-    this._unregisterShutdownHook = registerShutdownHook(() => this.cleanup());
+    this._unregisterShutdownHook = registerShutdownHook(() => (this as any).cleanup());
   }
 
   activeSlotCount() {
     return this.shoting.length + this.shotingUser.length;
   }
 
-  isUserPriority(data = {}) {
+  isUserPriority(data: any = {}) {
     return data.priority === true || data.userTriggered === true;
   }
 
-  makeScreenshotSlotId(name) {
+  makeScreenshotSlotId(name: any) {
     const label = String(name || 'shot').slice(0, 64);
     return `${label}#${Date.now().toString(36)}#${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  resolveQueueWaitMs(data = {}, rendererTimeout) {
+  resolveQueueWaitMs(data: any = {}, rendererTimeout: any) {
     if (Number.isFinite(data.queueWaitTimeout) && data.queueWaitTimeout > 0) {
       return data.queueWaitTimeout;
     }
@@ -89,7 +89,7 @@ export default class BrowserRendererBase extends Renderer {
    * 原子占槽：检查与 push 之间无 await，避免同 tick 超并发。
    * @returns {{ slotId: string, userPriority: boolean } | null}
    */
-  async acquireScreenshotSlot(name, data = {}, rendererTimeout) {
+  async acquireScreenshotSlot(name: any, data: any = {}, rendererTimeout: any) {
     const userPriority = this.isUserPriority(data);
     const slotId = this.makeScreenshotSlotId(name);
     const queueWaitMs = this.resolveQueueWaitMs(data, rendererTimeout);
@@ -114,29 +114,29 @@ export default class BrowserRendererBase extends Renderer {
         );
         return null;
       }
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r: any) => setTimeout(r, 100));
     }
   }
 
-  releaseScreenshotSlot(slotId, userPriority = false) {
+  releaseScreenshotSlot(slotId: any, userPriority: any = false) {
     if (!slotId) return;
     const list = userPriority ? this.shotingUser : this.shoting;
     const i = list.indexOf(slotId);
     if (i >= 0) list.splice(i, 1);
   }
 
-  isFatalBrowserError(err) {
+  isFatalBrowserError(err: any) {
     return /timeout|timed out|disconnected|Target closed|Session closed|Protocol error|Browser closed|Navigation failed|net::ERR/i.test(
       String(err?.message || err || '')
     );
   }
 
-  async withTimeout(promise, ms, label = 'operation') {
+  async withTimeout(promise: any, ms: any, label: any = 'operation') {
     let timer;
     try {
       return await Promise.race([
         promise,
-        new Promise((_, reject) => {
+        new Promise((_: any, reject: any) => {
           timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
         }),
       ]);
@@ -157,7 +157,7 @@ export default class BrowserRendererBase extends Renderer {
   }
 
   /** close 卡住时 disconnect / SIGKILL，不阻塞业务线程过久 */
-  async safeCloseBrowser(browser, closeTimeoutMs = this.browserOpTimeoutMs) {
+  async safeCloseBrowser(browser: any, closeTimeoutMs: any = this.browserOpTimeoutMs) {
     if (!browser) return;
     try {
       await this.withTimeout(
@@ -189,12 +189,12 @@ export default class BrowserRendererBase extends Renderer {
    * @param {(browser: any) => Promise<void>} ping
    * @returns {Promise<boolean>}
    */
-  async ensureBrowserHealthy(ping) {
+  async ensureBrowserHealthy(ping: any) {
     if (!this.browser) return false;
     try {
       await this.withTimeout(Promise.resolve(ping(this.browser)), this.browserOpTimeoutMs, 'browser health');
       return true;
-    } catch (e) {
+    } catch (e: any) {
       RuntimeUtil.makeLog('warn', `Existing browser invalid: ${e.message}`, this.logTag);
       const browser = this.detachBrowser();
       await this.removeStoredEndpoint();
@@ -208,7 +208,7 @@ export default class BrowserRendererBase extends Renderer {
 
     const deadline = Date.now() + this.browserInitWaitMs;
     while (this.lock && Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r: any) => setTimeout(r, 100));
       if (this.browser) return this.browser;
     }
 
@@ -225,14 +225,15 @@ export default class BrowserRendererBase extends Renderer {
     return true;
   }
 
-  async ensureMac(redisKeyPrefix) {
+  async ensureMac(redisKeyPrefix: any) {
     if (this.mac) return;
     this.mac = await this.getMac();
     this.browserMacKey = `${redisKeyPrefix}:${this.mac}`;
   }
 
   async resolveWsEndpoint() {
-    let endpoint = null;
+    const redis = (globalThis as any).redis;
+    let endpoint: any = null;
     if (this.browserMacKey) {
       try {
         endpoint = await redis.get(this.browserMacKey);
@@ -241,16 +242,18 @@ export default class BrowserRendererBase extends Renderer {
     return endpoint || this.config?.wsEndpoint || null;
   }
 
-  async persistWsEndpoint(endpoint) {
+  async persistWsEndpoint(endpoint: any) {
+    const redis = (globalThis as any).redis;
     if (!endpoint || !this.browserMacKey) return;
     try {
       await redis.set(this.browserMacKey, endpoint, { EX: 60 * 60 * 24 * 30 });
-    } catch (err) {
+    } catch (err: any) {
       RuntimeUtil.makeLog('error', `Failed to save browser instance: ${err.message}`, this.logTag);
     }
   }
 
-  async removeStoredEndpoint(expectedEndpoint = null) {
+  async removeStoredEndpoint(expectedEndpoint: any = null) {
+    const redis = (globalThis as any).redis;
     if (!this.browserMacKey) return;
     try {
       if (expectedEndpoint) {
@@ -261,7 +264,7 @@ export default class BrowserRendererBase extends Renderer {
     } catch {}
   }
 
-  prepareScreenshotFile(name, data) {
+  prepareScreenshotFile(name: any, data: any) {
     data._baseUrl = Renderer.toFileUrl(paths.root);
     const pageHeight = data.multiPageHeight ?? 4000;
     const savePath = this.dealTpl(name, data);
@@ -276,7 +279,7 @@ export default class BrowserRendererBase extends Renderer {
     return { filePath, pageHeight };
   }
 
-  buildScreenshotOptions(data) {
+  buildScreenshotOptions(data: any) {
     const screenshotOptions = {
       type: data.imgType ?? 'jpeg',
       omitBackground: data.omitBackground ?? false,
@@ -288,7 +291,7 @@ export default class BrowserRendererBase extends Renderer {
     return screenshotOptions;
   }
 
-  finishScreenshotRun(name, ret, data) {
+  finishScreenshotRun(name: any, ret: any, data: any) {
     if (this.renderNum % this.restartNum === 0 && this.renderNum > 0 && this.activeSlotCount() === 0) {
       RuntimeUtil.makeLog('info', `Completed ${this.renderNum} screenshots, restarting browser...`, this.logTag);
       setTimeout(() => this.restart(), 2000);
@@ -309,7 +312,7 @@ export default class BrowserRendererBase extends Renderer {
   }
 
   /** launch 时去掉 connect 专用字段，避免脏参数 */
-  buildBrowserLaunchOptions(extra = {}) {
+  buildBrowserLaunchOptions(extra: any = {}) {
     const { wsEndpoint: _ws, ignoreHTTPSErrors: _https, ...rest } = { ...(this.config || {}), ...extra };
     return rest;
   }
@@ -318,7 +321,7 @@ export default class BrowserRendererBase extends Renderer {
    * 强制关闭并丢弃浏览器。force 时忽略 lock / 计数条件，且 close 带超时。
    * 子类可 override 做额外清理；默认实现足够 puppeteer/playwright 共用。
    */
-  async restart(force = false) {
+  async restart(force: any = false) {
     if (this._restarting) return;
     if (!force) {
       if (!this.browser || this.lock) return;
@@ -345,7 +348,7 @@ export default class BrowserRendererBase extends Renderer {
       await this.removeStoredEndpoint(currentEndpoint);
       if (global.gc) global.gc();
       RuntimeUtil.makeLog('info', 'Browser restart completed', this.logTag);
-    } catch (err) {
+    } catch (err: any) {
       RuntimeUtil.makeLog('error', `Restart failed: ${err.message}`, this.logTag);
     } finally {
       this._restarting = false;
@@ -355,7 +358,7 @@ export default class BrowserRendererBase extends Renderer {
   }
 
   /** 截图致命错误：立刻 detach，后台 close，下次 screenshot 会重新 launch */
-  handleFatalScreenshotError(error) {
+  handleFatalScreenshotError(error: any) {
     if (!this.isFatalBrowserError(error)) return;
     RuntimeUtil.makeLog('warn', `Fatal browser error, scheduling restart: ${error.message}`, this.logTag);
     void this.restart(true);

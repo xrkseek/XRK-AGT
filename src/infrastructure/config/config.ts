@@ -17,10 +17,10 @@ const LOG_TAG = 'Config';
  * - 服务器配置：存储在 server_bots/{port}/
  */
 class RuntimeConfig {
-  config = {};
-  _port = null;
-  _renderer = null;
-  _package = null;
+  config: any = {};
+  _port: any = null;
+  _renderer: any = null;
+  _package: any = null;
   _destroying = false;
 
   PATHS = {
@@ -51,7 +51,7 @@ class RuntimeConfig {
   }
 
   /** 一次性：旧键清理；工具面默认名单已废止（仅请求体 workflow.workflows） */
-  normalizeAiWorkflowConfigShape(config) {
+  normalizeAiWorkflowConfigShape(config: any) {
     if (!config || typeof config !== 'object') return config;
     const aw = config.agentWorkspace;
     if (aw && typeof aw === 'object' && aw.workflows == null && Array.isArray(aw.streams)) {
@@ -68,7 +68,7 @@ class RuntimeConfig {
   }
 
   /** 一次性：server_bots 下 aistream.yaml → ai-workflow.yaml */
-  migrateAistreamYamlOnce(configDir) {
+  migrateAistreamYamlOnce(configDir: any) {
     if (!configDir) return;
     const legacy = path.join(configDir, 'aistream.yaml');
     const next = path.join(configDir, 'ai-workflow.yaml');
@@ -77,13 +77,13 @@ class RuntimeConfig {
         fs.renameSync(legacy, next);
         RuntimeUtil.makeLog('warn', `[配置迁移] aistream.yaml → ai-workflow.yaml (${configDir})`, LOG_TAG);
       }
-    } catch (err) {
+    } catch (err: any) {
       RuntimeUtil.makeLog('warn', `[配置迁移] aistream→ai-workflow 失败: ${err?.message || err}`, LOG_TAG);
     }
   }
 
 
-  getGlobalConfig(name) {
+  getGlobalConfig(name: any) {
     const key = `global.${name}`;
     if (this.config[key]) return this.config[key];
 
@@ -95,13 +95,13 @@ class RuntimeConfig {
       // 必须先写入缓存：makeLog 会读 runtimeConfig.agt，否则会递归 getGlobalConfig
       this.config[key] = config;
       return this.config[key];
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `[配置解析失败][${name}] ${error?.message || error}`, LOG_TAG, true);
       return this.config[key] = {};
     }
   }
 
-  getServerConfig(name) {
+  getServerConfig(name: any) {
     if (this.GLOBAL_CONFIGS.includes(name)) {
       RuntimeUtil.makeLog('warn', `[配置警告] ${name} 是全局配置，应使用 getGlobalConfig() 或 runtimeConfig.${name} 访问`, LOG_TAG);
       return {};
@@ -135,7 +135,7 @@ class RuntimeConfig {
       if (name === 'chatbot') config = this.ensureChatbotDefaults(config, defaultFile);
       this.config[key] = config;
       return this.config[key];
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `[服务器配置解析失败][${name}] ${error?.message || error}`, LOG_TAG, true);
       return this.config[key] = {};
     }
@@ -145,13 +145,13 @@ class RuntimeConfig {
    * chatbot 缺 default 时从模板补齐（不合并任何其它文件）
    * @private
    */
-  ensureChatbotDefaults(config, defaultFile) {
+  ensureChatbotDefaults(config: any, defaultFile: any) {
     const out = config && typeof config === 'object' ? { ...config } : {};
     if (out.default && typeof out.default === 'object' && !Array.isArray(out.default)) {
       return out;
     }
     try {
-      const { config: tpl } = loadYamlFromCandidates([defaultFile], 'chatbot');
+      const { config: tpl } = loadYamlFromCandidates([defaultFile], 'chatbot') as any;
       if (tpl?.default && typeof tpl.default === 'object') {
         out.default = structuredClone(tpl.default);
       }
@@ -161,7 +161,7 @@ class RuntimeConfig {
     return out;
   }
 
-  getConfig(name) {
+  getConfig(name: any) {
     return this.GLOBAL_CONFIGS.includes(name) 
       ? this.getGlobalConfig(name) 
       : this.getServerConfig(name);
@@ -201,10 +201,11 @@ class RuntimeConfig {
   }
 
   get master() {
-    const masters = {};
-    if (AgentRuntime.uin) {
-      const masterList = this.masterQQ.map(qq => String(qq));
-      AgentRuntime.uin.forEach(botUin => {
+    const masters: Record<string, any> = {};
+    const AgentRuntime = (globalThis as any).AgentRuntime;
+    if (AgentRuntime?.uin) {
+      const masterList = this.masterQQ.map((qq: any) => String(qq));
+      AgentRuntime.uin.forEach((botUin: any) => {
         masters[botUin] = masterList;
       });
     }
@@ -214,7 +215,7 @@ class RuntimeConfig {
   /**
    * 群生效配置 = chatbot.default ∪ 根级群号覆盖（固定键名不会当群号）
    */
-  getGroup(groupId = '') {
+  getGroup(groupId: any = '') {
     const config = this.chatbot || {};
     const defaultCfg =
       config.default && typeof config.default === 'object' && !Array.isArray(config.default)
@@ -222,7 +223,7 @@ class RuntimeConfig {
         : {};
     if (!groupId) return { ...defaultCfg };
     const id = String(groupId);
-    if (CHATBOT_FIXED_ROOT_KEYS.includes(id)) return { ...defaultCfg };
+    if (CHATBOT_FIXED_ROOT_KEYS.includes(id as any)) return { ...defaultCfg };
     const override = config[id];
     if (!override || typeof override !== 'object' || Array.isArray(override)) {
       return { ...defaultCfg };
@@ -230,7 +231,7 @@ class RuntimeConfig {
     return { ...defaultCfg, ...override };
   }
 
-  getRendererConfig(type) {
+  getRendererConfig(type: any) {
     const defaultFile = path.join(this.PATHS.RENDERERS, type, 'config_default.yaml');
     if (!this._port) {
       try {
@@ -243,7 +244,7 @@ class RuntimeConfig {
     }
     const key = `renderer.${this._port}.${type}`;
     if (this.config[key]) return this.config[key];
-    const serverDir = path.join(this.getConfigDir(), 'renderers', type);
+    const serverDir = path.join(this.getConfigDir() as string, 'renderers', type);
     const serverFile = path.join(serverDir, 'config.yaml');
 
     const texts = readYamlTextsBatch([defaultFile, serverFile]);
@@ -270,7 +271,7 @@ class RuntimeConfig {
       );
     }
     if (this._port && this.getConfigDir()) {
-      const configDir = this.getConfigDir();
+      const configDir = this.getConfigDir()!;
       for (const name of this.SERVER_CONFIGS) {
         pathsToRead.push(
           path.join(configDir, `${name}.yaml`),
@@ -298,7 +299,7 @@ class RuntimeConfig {
     return this._package = JSON.parse(fs.readFileSync(path.join(paths.root, 'package.json'), 'utf8'));
   }
 
-  setConfig(name, data) {
+  setConfig(name: any, data: any) {
     const isGlobal = this.GLOBAL_CONFIGS.includes(name);
     const configDir = isGlobal ? this.getGlobalConfigDir() : this.getConfigDir();
     if (!configDir) {
@@ -316,7 +317,7 @@ class RuntimeConfig {
       fs.writeFileSync(file, YAML.stringify(data), 'utf8');
       RuntimeUtil.makeLog('mark', `[保存${configType}配置文件][${name}]`, LOG_TAG);
       return true;
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `[${configType}配置保存失败][${name}] ${error?.message || error}`, LOG_TAG, true);
       return false;
     }
@@ -326,7 +327,7 @@ class RuntimeConfig {
     try {
       const log = await import('#infrastructure/log.js');
       log.default();
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `[AGT配置变更处理失败] ${error?.message || error}`, LOG_TAG, true);
     }
   }

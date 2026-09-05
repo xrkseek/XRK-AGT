@@ -4,6 +4,7 @@
  */
 import path from 'path';
 import * as fsSync from 'fs';
+// @ts-expect-error express 无 @types/express（与仓库约定一致）
 import express from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import RuntimeUtil from '#utils/runtime-util.js';
@@ -14,7 +15,7 @@ import FrontendLauncher from '#infrastructure/frontend/launcher.js';
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export function setupDataStaticServing(runtime) {
+export function setupDataStaticServing(runtime: any) {
   const dataCacheTime = runtimeConfig.server?.static?.dataCacheTime || '1h';
   const staticOptions = {
     dotfiles: 'deny',
@@ -22,7 +23,7 @@ export function setupDataStaticServing(runtime) {
     maxAge: dataCacheTime,
     etag: true,
     lastModified: true,
-    setHeaders: (res, filePath) => {
+    setHeaders: (res: any, filePath: any) => {
       if (!res.headersSent) {
         setStaticHeaders(runtime, res, filePath);
       }
@@ -30,13 +31,13 @@ export function setupDataStaticServing(runtime) {
   };
 
   const mediaDir = path.join(paths.data, 'media');
-  runtime.express.use('/media', (req, res, next) => {
+  runtime.express.use('/media', (req: any, res: any, next: any) => {
     if (runtime._checkHeadersSent(res, next)) return;
     express.static(mediaDir, staticOptions)(req, res, next);
   });
 
   const uploadsDir = path.join(paths.data, 'uploads');
-  runtime.express.use('/uploads', (req, res, next) => {
+  runtime.express.use('/uploads', (req: any, res: any, next: any) => {
     if (runtime._checkHeadersSent(res, next)) return;
     express.static(uploadsDir, staticOptions)(req, res, next);
   });
@@ -45,7 +46,7 @@ export function setupDataStaticServing(runtime) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export function createStaticOptions(runtime) {
+export function createStaticOptions(runtime: any) {
   return {
     index: runtimeConfig.server.static.index || ['index.html', 'index.htm'],
     dotfiles: 'deny',
@@ -55,7 +56,7 @@ export function createStaticOptions(runtime) {
     etag: true,
     lastModified: true,
     immutable: runtimeConfig.server.static.immutable !== false,
-    setHeaders: (res, filePath) => {
+    setHeaders: (res: any, filePath: any) => {
       if (!res.headersSent) {
         setStaticHeaders(runtime, res, filePath);
       }
@@ -66,11 +67,11 @@ export function createStaticOptions(runtime) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export async function setupStaticServing(runtime) {
+export async function setupStaticServing(runtime: any) {
   try {
     const apps = await FrontendLauncher.start();
     if (apps && apps.size > 0) {
-      const devApps = Array.from(apps.values()).filter((app) => app && app.config);
+      const devApps = Array.from(apps.values()).filter((app: any) => app && app.config);
 
       for (const appInfo of devApps) {
         const cfgApp = appInfo.config;
@@ -91,15 +92,15 @@ export async function setupStaticServing(runtime) {
           changeOrigin: true,
           ws: true,
           logLevel: 'warn',
-          pathRewrite: (pathReq) => {
+          pathRewrite: (pathReq: any) => {
             if (!pathReq) return `${mountPrefix}/`;
             if (pathReq === '/') return `${mountPrefix}/`;
             if (pathReq.startsWith('/')) return `${mountPrefix}${pathReq}`;
             return `${mountPrefix}/${pathReq}`;
           },
-        });
+        } as any);
 
-        runtime.express.use(mountPath, (req, res, next) => {
+        runtime.express.use(mountPath, (req: any, res: any, next: any) => {
           RuntimeUtil.makeLog(
             'debug',
             `[前端入口] id=${appId} mount=${mountPath} ${req.method} ${req.originalUrl}`,
@@ -115,23 +116,23 @@ export async function setupStaticServing(runtime) {
         );
       }
     }
-  } catch (e) {
+  } catch (e: any) {
     RuntimeUtil.makeLog('warn', `初始化前端开发代理失败: ${e.message}`, 'Frontend');
   }
 
-  runtime.express.use((req, res, next) => {
+  runtime.express.use((req: any, res: any, next: any) => {
     if (runtime._checkHeadersSent(res, next)) return;
     directoryIndexMiddleware(runtime, req, res, next);
   });
 
-  runtime.express.use((req, res, next) => staticSecurityMiddleware(runtime, req, res, next));
+  runtime.express.use((req: any, res: any, next: any) => staticSecurityMiddleware(runtime, req, res, next));
 
   const staticOptions = createStaticOptions(runtime);
   const { mountCoreWwwStatic } = await import('#infrastructure/http/mount-core-www.js');
   const mounted = await mountCoreWwwStatic(runtime.express, staticOptions);
-  runtime.wwwMountPaths = [...mounted].filter((p) => !String(p).startsWith('/core/'));
+  runtime.wwwMountPaths = [...mounted].filter((p: any) => !String(p).startsWith('/core/'));
 
-  runtime.express.use((req, res, next) => {
+  runtime.express.use((req: any, res: any, next: any) => {
     if (runtime._checkHeadersSent(res, next)) return;
     const staticRoot = req.staticRoot || paths.www;
     fsSync.mkdirSync(staticRoot, { recursive: true });
@@ -142,7 +143,7 @@ export async function setupStaticServing(runtime) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export function directoryIndexMiddleware(runtime, req, res, next) {
+export function directoryIndexMiddleware(runtime: any, req: any, res: any, next: any) {
   if (res.headersSent) return next();
 
   const hasExtension = path.extname(req.path);
@@ -183,13 +184,13 @@ export function directoryIndexMiddleware(runtime, req, res, next) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export function setStaticHeaders(runtime, res, filePath) {
+export function setStaticHeaders(runtime: any, res: any, filePath: any) {
   if (runtime._checkHeadersSent(res)) return;
 
   runtime.httpBusiness.handleCDN({ headers: {} }, res, filePath);
 
   const ext = path.extname(filePath).toLowerCase();
-  const mimeTypes = {
+  const mimeTypes: Record<string, string> = {
     '.html': 'text/html; charset=utf-8',
     '.htm': 'text/html; charset=utf-8',
     '.css': 'text/css; charset=utf-8',
@@ -242,7 +243,7 @@ export function setStaticHeaders(runtime, res, filePath) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export function staticSecurityMiddleware(runtime, req, res, next) {
+export function staticSecurityMiddleware(runtime: any, req: any, res: any, next: any) {
   if (runtime._checkHeadersSent(res, next)) return;
 
   const normalizedPath = path.posix.normalize(req.path);
@@ -261,7 +262,7 @@ export function staticSecurityMiddleware(runtime, req, res, next) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export function isHiddenStaticPath(runtime, normalizedPath) {
+export function isHiddenStaticPath(runtime: any, normalizedPath: any) {
   if (!normalizedPath) return false;
   if (!runtime._compiledHiddenFileMatchers) {
     const raw = runtimeConfig.server?.security?.hiddenFiles;
@@ -293,7 +294,7 @@ export function isHiddenStaticPath(runtime, normalizedPath) {
     runtime._compiledHiddenFileMatchers = compiled;
   }
 
-  return runtime._compiledHiddenFileMatchers.some((m) => {
+  return runtime._compiledHiddenFileMatchers.some((m: any) => {
     if (m.type === 'regex') return m.value.test(normalizedPath);
     if (m.type === 'includes') return normalizedPath.includes(m.value);
     return false;
@@ -303,7 +304,7 @@ export function isHiddenStaticPath(runtime, normalizedPath) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export async function handleFavicon(runtime, req, res) {
+export async function handleFavicon(runtime: any, req: any, res: any) {
   if (runtime._checkHeadersSent(res)) return;
 
   const staticRoot = req.staticRoot || paths.www;
@@ -332,7 +333,7 @@ export async function handleFavicon(runtime, req, res) {
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export async function handleRobotsTxt(runtime, req, res) {
+export async function handleRobotsTxt(runtime: any, req: any, res: any) {
   if (runtime._checkHeadersSent(res)) return;
 
   const robotsCfg = runtimeConfig.server?.robots || {};
@@ -366,7 +367,7 @@ export async function handleRobotsTxt(runtime, req, res) {
     : ['/api/', '/config/', '/data/', '/lib/', '/plugins/', '/trash/'];
   const disallow = [...new Set([...configuredDisallow.map(String), ...consoleDisallow])];
   const allow = Array.isArray(robotsCfg?.allow)
-    ? robotsCfg.allow.map(String).filter((p) => p && p !== '/')
+    ? robotsCfg.allow.map(String).filter((p: any) => p && p !== '/')
     : [];
   const sitemapPath = (robotsCfg?.sitemapPath && String(robotsCfg.sitemapPath).trim()) || '/sitemap.xml';
   const autoSitemap = robotsCfg?.autoSitemap !== false;
@@ -375,8 +376,8 @@ export async function handleRobotsTxt(runtime, req, res) {
 
   let defaultRobots = contentOverride || [
     'User-agent: *',
-    ...disallow.map((p) => `Disallow: ${p}`),
-    ...allow.map((p) => `Allow: ${p}`),
+    ...disallow.map((p: any) => `Disallow: ${p}`),
+    ...allow.map((p: any) => `Allow: ${p}`),
     '',
   ].join('\n');
 
@@ -385,14 +386,14 @@ export async function handleRobotsTxt(runtime, req, res) {
     const declared = new Set(
       defaultRobots
         .split(/\r?\n/)
-        .map((line) => line.trim().toLowerCase())
+        .map((line: any) => line.trim().toLowerCase())
         .filter(Boolean),
     );
     const missing = consoleDisallow.filter(
-      (p) => !declared.has(`disallow: ${String(p).toLowerCase()}`),
+      (p: any) => !declared.has(`disallow: ${String(p).toLowerCase()}`),
     );
     if (missing.length) {
-      defaultRobots = `${defaultRobots.replace(/\s*$/, '')}\n${missing.map((p) => `Disallow: ${p}`).join('\n')}\n`;
+      defaultRobots = `${defaultRobots.replace(/\s*$/, '')}\n${missing.map((p: any) => `Disallow: ${p}`).join('\n')}\n`;
     }
   }
 
