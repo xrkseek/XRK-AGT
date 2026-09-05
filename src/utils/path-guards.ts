@@ -4,11 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/**
- * @param {string} p
- * @returns {string}
- */
-export function realpathSyncOrResolve(p) {
+export function realpathSyncOrResolve(p: string): string {
   try {
     return fs.realpathSync(p);
   } catch {
@@ -16,7 +12,7 @@ export function realpathSyncOrResolve(p) {
   }
 }
 
-function normalizeWindowsPathForComparison(input) {
+function normalizeWindowsPathForComparison(input: string): string {
   let normalized = path.win32.normalize(input);
   if (normalized.startsWith('\\\\?\\')) {
     normalized = normalized.slice(4);
@@ -27,12 +23,7 @@ function normalizeWindowsPathForComparison(input) {
   return normalized.replaceAll('/', '\\').toLowerCase();
 }
 
-/**
- * @param {string} root
- * @param {string} target
- * @returns {boolean}
- */
-export function isPathInside(root, target) {
+export function isPathInside(root: string, target: string): boolean {
   if (process.platform === 'win32') {
     const rootForCompare = normalizeWindowsPathForComparison(path.win32.resolve(root));
     const targetForCompare = normalizeWindowsPathForComparison(path.win32.resolve(target));

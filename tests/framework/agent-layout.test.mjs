@@ -13,7 +13,7 @@ import {
   LONG_TERM_MEMORY_REL,
   projectAgentsAbs,
   projectAgentsRel,
-} from '../../src/utils/agent-workspace-paths.js';
+} from '#utils/agent-workspace-paths.js';
 import paths from '#utils/paths.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');

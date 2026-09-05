@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {
   estimateTokensRough,
   estimateTokensMixed,
-} from '../../src/utils/token-estimate.js';
+} from '#utils/token-estimate.js';
 
 describe('token-estimate 属性', () => {
   it('rough：空串为 0；长度单调不减', () => {

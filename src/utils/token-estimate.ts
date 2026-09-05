@@ -3,23 +3,15 @@
  * `estimateTokensRough`：chars/4；`estimateTokensMixed`：中英/URL/hex 分权重。
  */
 
-/**
- * 粗估：约 4 字符 ≈ 1 token
- * @param {unknown} text
- * @returns {number}
- */
-export function estimateTokensRough(text) {
+/** 粗估：约 4 字符 ≈ 1 token */
+export function estimateTokensRough(text: unknown): number {
   const s = text == null ? '' : String(text);
   if (!s) return 0;
   return Math.ceil(s.length / 4);
 }
 
-/**
- * 混合启发式：CJK / 英文词 / 标点 / URL / 长 hex 分别加权
- * @param {unknown} text
- * @returns {number}
- */
-export function estimateTokensMixed(text) {
+/** 混合启发式：CJK / 英文词 / 标点 / URL / 长 hex 分别加权 */
+export function estimateTokensMixed(text: unknown): number {
   if (text == null || typeof text !== 'string' || text.length === 0) return 0;
 
   let chinese = 0;
@@ -31,12 +23,12 @@ export function estimateTokensMixed(text) {
   let other = 0;
 
   for (let i = 0; i < text.length; i++) {
-    const cp = text.codePointAt(i);
+    const cp = text.codePointAt(i)!;
     if (cp > 0xffff) i += 1;
     if (cp >= 0x4e00 && cp <= 0x9fff) chinese += 1;
     else if (
-      (cp >= 0x3040 && cp <= 0x30ff) ||
-      (cp >= 0xac00 && cp <= 0xd7af)
+      (cp >= 0x3040 && cp <= 0x30ff)
+      || (cp >= 0xac00 && cp <= 0xd7af)
     ) {
       cjkOther += 1;
     } else if ((cp >= 0x41 && cp <= 0x5a) || (cp >= 0x61 && cp <= 0x7a)) {
@@ -44,15 +36,15 @@ export function estimateTokensMixed(text) {
     } else if (cp >= 0x30 && cp <= 0x39) digits += 1;
     else if (cp === 0x20 || cp === 0x09 || cp === 0x0a || cp === 0x0d) whitespace += 1;
     else if (
-      (cp >= 0x21 && cp <= 0x2f) ||
-      (cp >= 0x3a && cp <= 0x40) ||
-      (cp >= 0x5b && cp <= 0x60) ||
-      (cp >= 0x7b && cp <= 0x7e) ||
-      cp === 0x3001 ||
-      cp === 0x3002 ||
-      cp === 0xff0c ||
-      cp === 0xff01 ||
-      cp === 0xff1f
+      (cp >= 0x21 && cp <= 0x2f)
+      || (cp >= 0x3a && cp <= 0x40)
+      || (cp >= 0x5b && cp <= 0x60)
+      || (cp >= 0x7b && cp <= 0x7e)
+      || cp === 0x3001
+      || cp === 0x3002
+      || cp === 0xff0c
+      || cp === 0xff01
+      || cp === 0xff1f
     ) {
       punct += 1;
     } else {
@@ -71,18 +63,18 @@ export function estimateTokensMixed(text) {
 
   const bodyChars = Math.max(0, text.length - urlChars - hexChars);
   const dense =
-    chinese * 1.6 +
-    cjkOther * 1.5 +
-    englishWords * 1.25 +
-    identish * 0.15 +
-    digits * 0.35 +
-    punct * 0.4 +
-    whitespace * 0.15 +
-    other * 0.5 +
-    Math.max(0, latinLetters - englishWords) * 0.2;
+    chinese * 1.6
+    + cjkOther * 1.5
+    + englishWords * 1.25
+    + identish * 0.15
+    + digits * 0.35
+    + punct * 0.4
+    + whitespace * 0.15
+    + other * 0.5
+    + Math.max(0, latinLetters - englishWords) * 0.2;
 
   return Math.max(
     1,
-    Math.ceil(dense + bodyChars * 0.12 + urlChars / 4 + hexChars / 3.5)
+    Math.ceil(dense + bodyChars * 0.12 + urlChars / 4 + hexChars / 3.5),
   );
 }

@@ -17,7 +17,7 @@ export const AGENTS_MD = 'AGENTS.md';
 export const PROJECT_AGENTS_DIR_REL = 'agents';
 
 /** subagents 清单文件名（工作区根与 agents/ 下均支持） */
-export const AGENT_MANIFEST_BASENAMES = ['subagents.yaml', 'subagents.yml', 'subagents.json'];
+export const AGENT_MANIFEST_BASENAMES = ['subagents.yaml', 'subagents.yml', 'subagents.json'] as const;
 
 /** 工作区根目录下的助手模板文件名（OpenClaw 风格扁平布局） */
 export const WORKSPACE_TEMPLATE_RELS = [
@@ -27,7 +27,7 @@ export const WORKSPACE_TEMPLATE_RELS = [
   'TOOLS.md',
   'ENV.md',
   'HEARTBEAT.md',
-];
+] as const;
 
 /** 相对工作区根：长期记忆文件 */
 export const LONG_TERM_MEMORY_REL = 'memory/MEMORY.md';
@@ -57,24 +57,25 @@ export const WORKSPACE_SKILLS_DIR = 'skills';
 export const DEFAULT_WORKSPACE_ID = 'default';
 
 /** 项目根下 agents/ 子路径（绝对） */
-export function projectAgentsAbs(projectRoot, ...segments) {
+export function projectAgentsAbs(projectRoot: string, ...segments: string[]): string {
   return path.join(projectRoot, PROJECT_AGENTS_DIR_REL, ...segments);
 }
 
 /** 项目根下 agents/ 子路径（相对项目根，POSIX 斜杠） */
-export function projectAgentsRel(...segments) {
+export function projectAgentsRel(...segments: string[]): string {
   return path.posix.join(PROJECT_AGENTS_DIR_REL, ...segments);
 }
 
 /**
  * 缺文件才拷；不覆盖已有（用户定制优先）。
- * @param {string} srcDir
- * @param {string} destDir
- * @param {{ skipNames?: Set<string> }} [opts]
  */
-export function copyTreeMissingOnly(srcDir, destDir, opts = {}) {
+export function copyTreeMissingOnly(
+  srcDir: string,
+  destDir: string,
+  opts: { skipNames?: Set<string> } = {},
+): void {
   if (!fs.existsSync(srcDir)) return;
-  const skipNames = opts.skipNames instanceof Set ? opts.skipNames : new Set();
+  const skipNames = opts.skipNames instanceof Set ? opts.skipNames : new Set<string>();
   fs.mkdirSync(destDir, { recursive: true });
   for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
     if (skipNames.has(entry.name)) continue;
@@ -91,18 +92,20 @@ export function copyTreeMissingOnly(srcDir, destDir, opts = {}) {
   }
 }
 
-export function getProjectRoot() {
+export function getProjectRoot(): string {
   return paths.root || process.cwd();
 }
 
-export function normalizeWorkspaceId(raw) {
+export function normalizeWorkspaceId(raw: unknown): string {
   let id = String(raw || DEFAULT_WORKSPACE_ID).trim() || DEFAULT_WORKSPACE_ID;
   if (id === 'desktop') id = DEFAULT_WORKSPACE_ID;
   return id.replace(/[^\w.\u4e00-\u9fa5-]/g, '_').slice(0, 64) || DEFAULT_WORKSPACE_ID;
 }
 
-export function getConfiguredDefaultWorkspaceId() {
-  const runtimeConfig = getAiWorkflowConfigOptional();
+export function getConfiguredDefaultWorkspaceId(): string {
+  const runtimeConfig = getAiWorkflowConfigOptional() as {
+    workspace?: { defaultId?: unknown };
+  } | null | undefined;
   const raw = runtimeConfig?.workspace?.defaultId;
   if (raw != null && String(raw).trim() !== '') {
     return normalizeWorkspaceId(raw);
@@ -110,15 +113,15 @@ export function getConfiguredDefaultWorkspaceId() {
   return DEFAULT_WORKSPACE_ID;
 }
 
-export function getAgentWorkspacesRoot() {
+export function getAgentWorkspacesRoot(): string {
   return paths.dataAiWorkspace || path.join(paths.data, 'ai-workspace');
 }
 
-export function getAgentWorkspaceAbs(id = DEFAULT_WORKSPACE_ID) {
+export function getAgentWorkspaceAbs(id: string = DEFAULT_WORKSPACE_ID): string {
   return path.join(getAgentWorkspacesRoot(), normalizeWorkspaceId(id));
 }
 
-export function isAgentDataWorkspaceAbs(absPath) {
+export function isAgentDataWorkspaceAbs(absPath: string | null | undefined): boolean {
   if (!absPath) return false;
   try {
     const wsRoot = realpathSyncOrResolve(getAgentWorkspacesRoot());
@@ -133,8 +136,16 @@ export function isAgentDataWorkspaceAbs(absPath) {
  * customSkillRoots 有值则用配置；否则回退项目 standard。
  * 工作区 skills/ 若存在则追加（同名技能后写覆盖）。
  */
-export function resolveSkillRootAbsList({ projectRoot, workspaceRoot, customSkillRoots = [] } = {}) {
-  const roots = new Set();
+export function resolveSkillRootAbsList({
+  projectRoot,
+  workspaceRoot,
+  customSkillRoots = [],
+}: {
+  projectRoot: string;
+  workspaceRoot?: string | null;
+  customSkillRoots?: unknown[];
+} = { projectRoot: '' }): string[] {
+  const roots = new Set<string>();
   const configured = Array.isArray(customSkillRoots)
     ? customSkillRoots.filter(Boolean).map(String)
     : [];
@@ -152,7 +163,7 @@ export function resolveSkillRootAbsList({ projectRoot, workspaceRoot, customSkil
 }
 
 /** 从仓库 `agents/workspace` + `.xrk/skills` 种子复制缺失项到 data 工作区（不覆盖已有） */
-export function seedWorkspaceFromBundle(workspaceAbs) {
+export function seedWorkspaceFromBundle(workspaceAbs: string): void {
   if (!isAgentDataWorkspaceAbs(workspaceAbs)) return;
   fs.mkdirSync(workspaceAbs, { recursive: true });
   fs.mkdirSync(path.join(workspaceAbs, 'memory'), { recursive: true });
@@ -177,7 +188,6 @@ export function seedWorkspaceFromBundle(workspaceAbs) {
   }
 
   const wsRules = path.join(workspaceAbs, WORKSPACE_RULES_DIR);
-  // 工作区 rules/ 仅用户自建（加法）；共享护栏运行时直接读 `agents/rules`，勿拷进工作区（否则同名会盖住种子更新）
   copyTreeMissingOnly(path.join(bundleDir, WORKSPACE_RULES_DIR), wsRules, {
     skipNames: new Set(['README.md']),
   });
@@ -185,10 +195,9 @@ export function seedWorkspaceFromBundle(workspaceAbs) {
 
   copyTreeMissingOnly(
     path.join(projectRoot, PROJECT_SKILLS_STANDARD_REL),
-    path.join(workspaceAbs, WORKSPACE_SKILLS_DIR)
+    path.join(workspaceAbs, WORKSPACE_SKILLS_DIR),
   );
 
-  // 工作区业务 Core（Agent 可写插件；Loader 扫描 data/ai-workspace/*/core/*/plugin）
   const coreSrc = path.join(bundleDir, 'core');
   const coreDest = path.join(workspaceAbs, 'core');
   const coreWasMissing = !fs.existsSync(coreDest);
@@ -205,7 +214,7 @@ export function seedWorkspaceFromBundle(workspaceAbs) {
     fs.writeFileSync(
       path.join(workspaceAbs, AGENTS_MD),
       `# ${label}\n\n在此编写 Agent 规则（AGENTS.md）。\n`,
-      'utf8'
+      'utf8',
     );
   }
 }
@@ -215,8 +224,8 @@ export function seedWorkspaceFromBundle(workspaceAbs) {
  * runtimeConfig.root 留空 → data/ai-workspace/{defaultId}；显式路径则相对项目根解析。
  * 落在 data/ai-workspace 下时幂等 seed（缺啥补啥）。
  */
-export function resolveAgentWorkspaceAbs(cfgRoot = '') {
-  let abs;
+export function resolveAgentWorkspaceAbs(cfgRoot: string = ''): string {
+  let abs: string;
   if (cfgRoot != null && String(cfgRoot).trim() !== '') {
     const raw = String(cfgRoot).trim();
     abs = path.isAbsolute(raw) ? path.normalize(raw) : path.resolve(getProjectRoot(), raw);
@@ -228,10 +237,10 @@ export function resolveAgentWorkspaceAbs(cfgRoot = '') {
   return abs;
 }
 
-export function getAgentsReadCandidates() {
+export function getAgentsReadCandidates(): string[] {
   return [AGENTS_MD];
 }
 
-export function getAgentsWriteRel() {
+export function getAgentsWriteRel(): string {
   return AGENTS_MD;
 }

@@ -14,7 +14,7 @@ import {
   formatPrometheusMetrics,
   buildProcessMetrics,
 } from '../../src/utils/observability.js';
-import { estimateTokensMixed } from '../../src/utils/token-estimate.js';
+import { estimateTokensMixed } from '#utils/token-estimate.js';
 
 const dataRoot = path.join(process.cwd(), 'data');
 
