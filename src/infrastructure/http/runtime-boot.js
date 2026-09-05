@@ -42,7 +42,6 @@ export async function displayStartupSummary(runtime, loadTime, startTime, timing
     bootstrapPackages: 'bootstrapRuntimePackages',
     commonConfig: 'CommonConfig',
     loaders: 'Workflow/Plugins/Api 并行加载',
-    watchSetup: '热加载监视',
     middleware: '中间件与路由',
     apiRegister: 'API 注册',
     apiKey: 'API 密钥',
@@ -278,21 +277,6 @@ export async function runAgentRuntime(runtime, options = {}) {
   if (loaderFailures.length && !softFail) {
     throw loaderFailures[0][1].reason;
   }
-
-  const watchResults = await phase('watchSetup', () =>
-    Promise.allSettled([
-      CommonConfigRegistry.watch(true),
-      AiWorkflowLoader.watch(true),
-      PluginLoader.watch(true),
-      HttpApiLoader.watch(true),
-    ])
-  );
-  const watchLabels = ['配置', '工作流', '插件', 'API'];
-  watchResults.forEach((result, i) => {
-    if (result.status === 'rejected') {
-      RuntimeUtil.makeLog('error', `${watchLabels[i]}热加载启动失败: ${result.reason?.message}`, '服务器');
-    }
-  });
 
   await phase('middleware', () => runtime._initializeMiddlewareAndRoutes());
 
