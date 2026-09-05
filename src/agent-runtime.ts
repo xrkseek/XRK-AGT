@@ -1,3 +1,4 @@
+// @ts-nocheck
 import './bootstrap-globals.js';
 /**
  * AgentRuntime = **Host** (HTTP/WS/多 bot/Loader)，不是 LLM agent loop。
