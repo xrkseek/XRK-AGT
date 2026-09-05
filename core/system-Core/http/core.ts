@@ -1,4 +1,3 @@
-// @ts-nocheck
 import os from 'node:os';
 import si from 'systeminformation';
 import runtimeConfig from '#infrastructure/config/config.js';
@@ -8,22 +7,22 @@ import { readDisks, readMem, readNetworkBytes } from '#infrastructure/http/utils
 import { getAuthModePublicSnapshot } from '#infrastructure/http/runtime-auth.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
-let __lastNetSample = null;
-let __netSampler = null;
-const __netHist = [];
-const __netRecent = [];
+let __lastNetSample: any = null;
+let __netSampler: any = null;
+const __netHist: any[] = [];
+const __netRecent: any[] = [];
 const NET_HISTORY_LIMIT = 24 * 60;
 const NET_RECENT_LIMIT = 60;
 const NET_SAMPLE_MS = 3_000;
 const NET_MAX_BPS = 10 * 1024 * 1024 * 1024;
 
 let __cpuCache = { percent: 0, ts: 0 };
-let __cpuTimer = null;
-let __cpuPrevSnap = null;
-let __fsCache = { disks: [], ts: 0 };
-let __procCache = { top5: [], ts: 0 };
-let __fsTimer = null;
-let __procTimer = null;
+let __cpuTimer: any = null;
+let __cpuPrevSnap: any = null;
+let __fsCache: any = { disks: [], ts: 0 };
+let __procCache: any = { top5: [], ts: 0 };
+let __fsTimer: any = null;
+let __procTimer: any = null;
 
 function __sampleCpuOnce() {
   try {
@@ -134,8 +133,8 @@ async function __refreshProcCache() {
         .map((p) => ({
           pid: p.pid,
           name: p.name,
-          cpu: Number(p.pcpu || p.cpu || 0),
-          mem: Number(p.pmem || p.mem || 0),
+          cpu: Number((p as any).pcpu || p.cpu || 0),
+          mem: Number((p as any).pmem || p.mem || 0),
         }))
         .sort((a, b) => b.cpu - a.cpu || b.mem - a.mem)
         .slice(0, 5),
@@ -161,7 +160,7 @@ function __ensureSysSamplers() {
 }
 
 function __ipv4Ifaces() {
-  const out = {};
+  const out: any = {};
   for (const [name, list] of Object.entries(os.networkInterfaces() || {})) {
     const iface = (list || []).find((i) => i.family === 'IPv4' && !i.internal);
     if (iface) out[name] = { address: iface.address, netmask: iface.netmask, mac: iface.mac };
@@ -169,7 +168,7 @@ function __ipv4Ifaces() {
   return out;
 }
 
-async function buildSystemSnapshot(AgentRuntime, { includeHistory = false } = {}) {
+async function buildSystemSnapshot(AgentRuntime: any, { includeHistory = false }: any = {}) {
   if (!__cpuCache.ts || Date.now() - __cpuCache.ts > 5_000) __sampleCpuOnce();
 
   const cpus = os.cpus();
@@ -260,12 +259,12 @@ async function buildSystemSnapshot(AgentRuntime, { includeHistory = false } = {}
     taskers: summarizeTaskers(AgentRuntime.tasker),
     workflows: { stats: workflowStats, items: workflowList },
   };
-  snapshot.panels = buildPanelPayload(snapshot);
+  (snapshot as any).panels = buildPanelPayload(snapshot);
   return snapshot;
 }
 
 /** Tasker 实例含 ws/readline/Timer，不可直接 JSON */
-function summarizeTaskers(list) {
+function summarizeTaskers(list: any) {
   if (!Array.isArray(list)) return [];
   return list.map((t) => ({
     id: t?.id ?? null,
@@ -274,7 +273,7 @@ function summarizeTaskers(list) {
   }));
 }
 
-function buildPanelPayload(snapshot) {
+function buildPanelPayload(snapshot: any) {
   const { system, bots, workflows, processesTop5 } = snapshot;
   const disk = system.disks?.[0];
   const diskUsage = disk?.size > 0 ? ((disk.used / disk.size) * 100).toFixed(1) : 0;
@@ -310,14 +309,14 @@ export default {
       method: 'GET',
       path: '/api/system/auth-mode',
       systemAuth: false,
-      handler: HttpResponse.asyncHandler(async (_req, res, AgentRuntime) => {
-        return HttpResponse.success(res, getAuthModePublicSnapshot(AgentRuntime));
+      handler: HttpResponse.asyncHandler(async (_req: any, res: any, AgentRuntime: any) => {
+        return HttpResponse.success(res, getAuthModePublicSnapshot(AgentRuntime as any));
       }, 'system.auth-mode'),
     },
     {
       method: 'GET',
       path: '/api/system/status',
-      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
         const includeHist =
           ['24h', '1', 'true'].includes(req.query?.hist) ||
           ['1', 'true'].includes(req.query?.withHistory);
@@ -327,7 +326,7 @@ export default {
     {
       method: 'GET',
       path: '/api/system/overview',
-      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
         const includeHist =
           ['24h', '1', 'true'].includes(req.query?.hist) ||
           ['1', 'true'].includes(req.query?.withHistory);
@@ -336,7 +335,7 @@ export default {
           timestamp: snapshot.timestamp,
           system: snapshot.system,
           bot: snapshot.bot,
-          panels: snapshot.panels,
+          panels: (snapshot as any).panels,
           workflows: snapshot.workflows,
           bots: snapshot.bots,
           processesTop5: snapshot.processesTop5,
@@ -352,7 +351,7 @@ export default {
     {
       method: 'GET',
       path: '/api/status',
-      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
         const snapshot = await buildSystemSnapshot(AgentRuntime, { includeHistory: false });
         HttpResponse.success(res, {
           system: snapshot.system,
@@ -378,7 +377,7 @@ export default {
     {
       method: 'GET',
       path: '/api/health',
-      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
         const { buildReadinessSnapshot } = await import('#utils/observability.js');
         const snapshot = await buildReadinessSnapshot({ agentRuntime: AgentRuntime });
         const httpStatus = snapshot.status === 'unhealthy' ? 503 : 200;

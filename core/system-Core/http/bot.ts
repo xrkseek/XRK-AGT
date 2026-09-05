@@ -1,8 +1,9 @@
-// @ts-nocheck
 import { collectBotInventory } from '#infrastructure/http/utils/botInventory.js';
 import { InputValidator } from '#utils/input-validator.js';
 import { HttpResponse } from '#utils/http-utils.js';
 import { EXIT_STOP } from '#utils/process-signals.js';
+
+const gRedis = (): any => (globalThis as any).redis;
 
 
 /**
@@ -18,17 +19,17 @@ export default {
     {
       method: 'GET',
       path: '/api/bots',
-      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
         const includeDevices = /^(1|true|yes)$/i.test(String(req.query?.includeDevices ?? ''));
         const bots = await collectBotInventory(AgentRuntime);
-        HttpResponse.success(res, { bots: includeDevices ? bots : bots.filter(b => !b.device) });
+        HttpResponse.success(res, { bots: includeDevices ? bots : bots.filter((b: any) => !b.device) });
       }, 'bot.list')
     },
 
     {
       method: 'GET',
       path: '/api/bot/:uin/friends',
-      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
         const uin = InputValidator.validateUserId(req.params.uin);
         const bot = AgentRuntime.bots[uin];
         
@@ -44,7 +45,7 @@ export default {
     {
       method: 'GET', 
       path: '/api/bot/:uin/groups',
-      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
         const uin = InputValidator.validateUserId(req.params.uin);
         const bot = AgentRuntime.bots[uin];
         
@@ -60,7 +61,7 @@ export default {
     {
       method: 'POST',
       path: '/api/message/send',
-      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
         // 输入验证
         const { bot_id, type, target_id, message } = req.body;
 
@@ -128,7 +129,7 @@ export default {
     {
       method: 'POST',
       path: '/api/bot/:uin/control',
-      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
         // 输入验证
         const uin = InputValidator.validateUserId(req.params.uin);
         const { action } = req.body;
@@ -138,11 +139,11 @@ export default {
         const redis = getRedis();
         if (!redis) return HttpResponse.error(res, new Error('Redis未初始化'), 503, 'bot.control');
         if (action === 'shutdown' || action === 'hot_shutdown') {
-          await redis.set(`AGT:shutdown:${uin}`, 'true');
+          await gRedis()?.set(`AGT:shutdown:${uin}`, 'true');
           return HttpResponse.success(res, null, '已热关机');
         }
         if (action === 'startup') {
-          await redis.del(`AGT:shutdown:${uin}`);
+          await gRedis()?.del(`AGT:shutdown:${uin}`);
           return HttpResponse.success(res, null, '已开机');
         }
         if (action === 'poweroff') {

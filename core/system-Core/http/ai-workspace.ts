@@ -1,6 +1,6 @@
-// @ts-nocheck
 import path from 'node:path';
 import fs from 'node:fs/promises';
+// @ts-expect-error no @types/multer
 import multer from 'multer';
 import runtimeConfig from '#infrastructure/config/config.js';
 import { HttpResponse } from '#utils/http-utils.js';
@@ -29,16 +29,16 @@ function ensureAuditHook() {
   installMcpAuditHook();
 }
 
-function parsePresetId(req) {
+function parsePresetId(req: any) {
   const raw = req.query.workspace ?? req.query.id ?? req.body?.workspace ?? getConfiguredDefaultWorkspaceId();
   return normalizePresetId(String(raw ?? '').trim() || getConfiguredDefaultWorkspaceId());
 }
 
-function createWorkspaceUploader(req, destDir, maxFileSize) {
+function createWorkspaceUploader(req: any, destDir: any, maxFileSize: any) {
   const createUploader = req.createMultipartUploader || (() => req.multipartUpload);
   const storage = multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, destDir),
-    filename: (_req, file, cb) => {
+    destination: ($_1: any, $_2: any, cb: any) => cb(null, destDir),
+    filename: (_req: any, file: any, cb: any) => {
       const safe = sanitizeWorkspaceUploadName(decodeMulterFilename(file.originalname));
       cb(null, safe);
     }
@@ -82,14 +82,14 @@ export default {
     {
       method: 'POST',
       path: '/api/ai/workspaces',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         ensureAuditHook();
         const id = String(req.body?.id || req.body?.name || '').trim();
         if (!id) return HttpResponse.validationError(res, 'id 不能为空');
         try {
           const created = createAgentWorkspace(id);
           HttpResponse.success(res, created, '工作区已创建');
-        } catch (err) {
+        } catch (err: any) {
           return HttpResponse.validationError(res, err.message || '创建失败');
         }
       }, 'ai.workspaces.create')
@@ -97,7 +97,7 @@ export default {
     {
       method: 'GET',
       path: '/api/ai/workspace/files',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         ensureAuditHook();
         const workspace = parsePresetId(req);
         const subdir = String(req.query.dir ?? '').trim();
@@ -109,9 +109,9 @@ export default {
             root: result.root,
             dir: result.dir,
             files: result.files,
-            ...(result.error ? { hint: result.error } : {})
+            ...((result as any).error ? { hint: (result as any).error } : {})
           });
-        } catch (err) {
+        } catch (err: any) {
           return HttpResponse.validationError(res, err.message || '无效工作区');
         }
       }, 'ai.workspace.files')
@@ -119,7 +119,7 @@ export default {
     {
       method: 'POST',
       path: '/api/ai/workspace/files/upload',
-      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
         ensureAuditHook();
         const workspace = parsePresetId(req);
         const subdir = String(req.query.dir ?? req.body?.dir ?? '').trim();
@@ -134,15 +134,15 @@ export default {
           const listed = listWorkspaceFiles(ctx.fileRootAbs, subdir);
           destDir = path.resolve(ctx.fileRootAbs, listed.dir || '.');
           await fs.mkdir(destDir, { recursive: true });
-        } catch (err) {
+        } catch (err: any) {
           return HttpResponse.validationError(res, err.message || '无效目录');
         }
-        let files = [];
+        let files: any[] = [];
         try {
           const upload = createWorkspaceUploader(req, destDir, maxFileSize);
-          await new Promise((resolve, reject) => upload(req, res, (err) => (err ? reject(err) : resolve())));
+          await new Promise<void>((resolve, reject) => upload(req, res, (err: any) => (err ? reject(err) : resolve())));
           files = Array.isArray(req.files) ? req.files : [];
-        } catch (e) {
+        } catch (e: any) {
           return HttpResponse.error(res, new Error(e?.message || '上传失败'), 400, 'ai.workspace.upload');
         }
         if (!files.length) return HttpResponse.validationError(res, '没有文件');
@@ -160,7 +160,7 @@ export default {
     {
       method: 'GET',
       path: '/api/ai/workspace/files/serve',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         ensureAuditHook();
         const workspace = parsePresetId(req);
         const filePath = String(req.query.path || '').trim();
@@ -170,7 +170,7 @@ export default {
           const { abs, name } = openWorkspaceFileDownload(ctx.fileRootAbs, filePath);
           res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(name)}"`);
           return res.sendFile(abs);
-        } catch (err) {
+        } catch (err: any) {
           return HttpResponse.validationError(res, err.message || '无法读取文件');
         }
       }, 'ai.workspace.serve')
@@ -178,7 +178,7 @@ export default {
     {
       method: 'GET',
       path: '/api/ai/workspace/files/download',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         ensureAuditHook();
         const workspace = parsePresetId(req);
         const filePath = String(req.query.path || '').trim();
@@ -186,7 +186,7 @@ export default {
         try {
           const { abs, basename } = await resolvePresetDownload(workspace, filePath);
           return res.download(abs, basename);
-        } catch (err) {
+        } catch (err: any) {
           return HttpResponse.validationError(res, err.message || '无法下载');
         }
       }, 'ai.workspace.download')
@@ -194,14 +194,14 @@ export default {
     {
       method: 'GET',
       path: '/api/ai/workspace/agents',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         ensureAuditHook();
         const workspace = parsePresetId(req);
         try {
           resolvePresetOrThrow(workspace);
           const data = await readPresetAgents(workspace);
           HttpResponse.success(res, { workspace, ...data });
-        } catch (err) {
+        } catch (err: any) {
           return HttpResponse.validationError(res, err.message || '读取失败');
         }
       }, 'ai.workspace.agents.get')
@@ -209,7 +209,7 @@ export default {
     {
       method: 'PUT',
       path: '/api/ai/workspace/agents',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         ensureAuditHook();
         const workspace = parsePresetId(req);
         const content = req.body?.content;
@@ -219,7 +219,7 @@ export default {
         try {
           const saved = await writePresetAgents(workspace, content);
           HttpResponse.success(res, { workspace, ...saved }, '规则已保存');
-        } catch (err) {
+        } catch (err: any) {
           return HttpResponse.validationError(res, err.message || '保存失败');
         }
       }, 'ai.workspace.agents.put')
@@ -227,7 +227,7 @@ export default {
     {
       method: 'GET',
       path: '/api/ai/workspace/audit',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         ensureAuditHook();
         const workspace = parsePresetId(req);
         try {
@@ -235,7 +235,7 @@ export default {
           const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
           const entries = await readAuditTail(workspace, limit);
           HttpResponse.success(res, { workspace, entries });
-        } catch (err) {
+        } catch (err: any) {
           return HttpResponse.validationError(res, err.message || '无效工作区');
         }
       }, 'ai.workspace.audit')

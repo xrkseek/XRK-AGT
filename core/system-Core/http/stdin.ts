@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from 'fs';
 import path from 'path';
 import paths from '#utils/paths.js';
@@ -18,8 +17,8 @@ export default {
     {
       method: 'GET',
       path: '/api/stdin/status',
-      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
-        const stdinHandler = getRuntimeGlobal('stdinHandler');
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
+        const stdinHandler: any = getRuntimeGlobal('stdinHandler');
 
         if (!stdinHandler) {
           return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.status');
@@ -43,8 +42,8 @@ export default {
     {
       method: 'POST',
       path: '/api/stdin/command',
-      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
-        const stdinHandler = getRuntimeGlobal('stdinHandler');
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
+        const stdinHandler: any = getRuntimeGlobal('stdinHandler');
         if (!stdinHandler) {
           return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.command');
         }
@@ -71,8 +70,8 @@ export default {
     {
       method: 'POST',
       path: '/api/stdin/event',
-      handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
-        const stdinHandler = getRuntimeGlobal('stdinHandler');
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
+        const stdinHandler: any = getRuntimeGlobal('stdinHandler');
         if (!stdinHandler) {
           return HttpResponse.error(res, new Error('Stdin handler not initialized'), 503, 'stdin.event');
         }
@@ -102,13 +101,13 @@ export default {
         }
 
         // 与 callStdin 一致：以 PluginLoader.deal finally 的 _onDone 为边界
-        const done = new Promise((resolve) => {
+        const done = new Promise<any>((resolve) => {
           event._onDone = resolve;
         });
         AgentRuntime.em(emitName, event);
         const finishedEvent = await Promise.race([
           done,
-          new Promise((resolve) => setTimeout(() => resolve(event), timeout))
+          new Promise<any>((resolve) => setTimeout(() => resolve(event), timeout))
         ]);
 
         const results = Array.isArray(finishedEvent?._pluginResults) ? finishedEvent._pluginResults : [];
@@ -128,8 +127,8 @@ export default {
   ],
 
   ws: {
-    stdin: [(conn, req, AgentRuntime) => {
-      const listener = (data) => {
+    stdin: [(conn: any, req: any, AgentRuntime: any) => {
+      const listener = (data: any) => {
         conn.sendMsg(JSON.stringify({
           type: 'stdin',
           data,
@@ -147,12 +146,12 @@ export default {
     }]
   },
 
-  async init(app, AgentRuntime) {
+  async init(app: any, AgentRuntime: any) {
     if (getRuntimeGlobal('stdinHandler')) return
 
     // 只触发模块注册（去重 push），勿再 new 第二份实例
     await import('../tasker/stdin.js')
-    const instance = AgentRuntime.tasker.find((t) => (t.path || t.id) === 'stdin')
+    const instance = AgentRuntime.tasker.find((t: any) => (t.path || t.id) === 'stdin')
     instance?.load?.()
 
     if (!AgentRuntime.url && AgentRuntime.getServerUrl) {

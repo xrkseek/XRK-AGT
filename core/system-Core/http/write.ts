@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from 'fs/promises';
 import path from 'path';
 import yaml from 'yaml';
@@ -9,18 +8,18 @@ import { InputValidator } from '#utils/input-validator.js';
 /**
  * 判断是否为对象
  */
-function isObject(item) {
+function isObject(item: any) {
   return item && typeof item === 'object' && !Array.isArray(item);
 }
 
 /**
  * 深度合并对象
  */
-function deepMerge(target, source) {
+function deepMerge(target: any, source: any) {
   const output = { ...target };
   
   if (isObject(target) && isObject(source)) {
-    Object.keys(source).forEach(key => {
+    Object.keys(source).forEach((key: any) => {
       if (isObject(source[key])) {
         if (!(key in target)) {
           output[key] = source[key];
@@ -39,7 +38,7 @@ function deepMerge(target, source) {
 /**
  * 更新嵌套对象的值
  */
-function updateNestedValue(obj, path, value) {
+function updateNestedValue(obj: any, path: any, value: any) {
   const keys = path.split('.');
   const result = { ...obj };
   let current = result;
@@ -69,7 +68,7 @@ export default {
     {
       method: 'GET',
       path: '/api/data/read',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { filePath, encoding = 'utf8' } = req.query;
         
         if (!filePath) {
@@ -91,14 +90,14 @@ export default {
         let data;
         let fileType;
         if (ext === '.json') {
-          data = JSON.parse(content);
+          data = JSON.parse(content as any);
           fileType = 'json';
         } else if (['.yml', '.yaml'].includes(ext)) {
-          data = yaml.parse(content);
+          data = yaml.parse(content as any);
           fileType = 'yaml';
         } else {
           try {
-            data = JSON.parse(content);
+            data = JSON.parse(content as any);
             fileType = 'json';
           } catch {
             data = content;
@@ -124,7 +123,7 @@ export default {
     {
       method: 'POST',
       path: '/api/data/write',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const {
           filePath, 
           data, 
@@ -165,9 +164,9 @@ export default {
           
           try {
             existingData = fileFormat === 'json' 
-              ? JSON.parse(existingContent)
-              : yaml.parse(existingContent);
-          } catch (error) {
+              ? JSON.parse(existingContent as any)
+              : yaml.parse(existingContent as any);
+          } catch (error: any) {
             return HttpResponse.validationError(res, `现有文件格式错误: ${error.message}`);
           }
 
@@ -198,7 +197,7 @@ export default {
           }
         }
 
-        let backupPath = null;
+        let backupPath: any = null;
         if (backup && fileExists) {
           backupPath = `${normalizedPath}.backup.${Date.now()}`;
           await fs.copyFile(normalizedPath, backupPath);

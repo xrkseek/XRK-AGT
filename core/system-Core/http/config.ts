@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 配置管理API
  * 提供统一的配置文件读写接口
@@ -8,22 +7,22 @@ import runtimeConfig from '#infrastructure/config/config.js';
 import CommonConfigRegistry from '#infrastructure/commonconfig/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
-const getConfig = (name) => CommonConfigRegistry?.get(name);
+const getConfig = (name: any) => CommonConfigRegistry?.get(name);
 
 /** 多文件配置：system / llm_factories 等（有 configFiles + getConfigInstance） */
-function isMultiFileConfig(config) {
+function isMultiFileConfig(config: any) {
   return Boolean(config?.configFiles && typeof config.getConfigInstance === 'function');
 }
 
 /** CommonConfig 写入后清 runtimeConfig 内存缓存，使 LLMFactory 等立即读到新 providers[] */
-function invalidateRuntimeCfgCache(configName) {
+function invalidateRuntimeCfgCache(configName: any) {
   if (!runtimeConfig?.config || !configName) return;
   delete runtimeConfig.config[`global.${configName}`];
   const port = runtimeConfig.port;
   if (port) delete runtimeConfig.config[`server.${port}.${configName}`];
 }
 
-const resolveConfigInstance = (name, keyPath) => {
+const resolveConfigInstance = (name: any, keyPath: any) => {
   const config = getConfig(name);
   if (!config) return { error: `配置 ${name} 不存在` };
   if (isMultiFileConfig(config)) {
@@ -43,11 +42,11 @@ export default {
     {
       method: 'GET',
       path: '/api/config/list',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
-        let configList = (global.CommonConfigRegistry?.getList?.() || []);
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
+        let configList = ((globalThis as any).CommonConfigRegistry?.getList?.() || []);
         // 确保 system 配置排在第一位，其余按名称排序，提升前端展示的一致性
-        const rank = (n) => (n === 'system' ? 0 : n === 'llm_factories' ? 1 : 2);
-        configList = configList.slice().sort((a, b) => {
+        const rank = (n: any) => (n === 'system' ? 0 : n === 'llm_factories' ? 1 : 2);
+        configList = configList.slice().sort((a: any, b: any) => {
           const dr = rank(a.name) - rank(b.name);
           if (dr !== 0) return dr;
           const an = (a.displayName || a.name || '').toLowerCase();
@@ -64,7 +63,7 @@ export default {
     {
       method: 'GET',
       path: '/api/config/:name/structure',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { name } = req.params;
         const config = getConfig(name);
         if (!config) return HttpResponse.notFound(res, `配置 ${name} 不存在`);
@@ -77,7 +76,7 @@ export default {
     {
       method: 'GET',
       path: '/api/config/:name/flat-structure',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { name } = req.params;
         const { path: keyPath } = req.query || {};
         const { config, error, multi } = resolveConfigInstance(name, keyPath);
@@ -91,7 +90,7 @@ export default {
     {
       method: 'GET',
       path: '/api/config/:name/flat',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { name } = req.params;
         const { path: keyPath } = req.query || {};
         const { config, error, multi } = resolveConfigInstance(name, keyPath);
@@ -106,7 +105,7 @@ export default {
     {
       method: 'POST',
       path: '/api/config/:name/batch-set',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { name } = req.params;
         const { flat, path: keyPath, backup = true, validate = true } = req.body || {};
         if (!flat || typeof flat !== 'object') {
@@ -146,11 +145,11 @@ export default {
     {
       method: 'GET',
       path: '/api/config/:name/read',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const configName = req.params?.name;
         const { path: keyPath } = req.query || {};
         if (!configName) return HttpResponse.validationError(res, '配置名称不能为空');
-        if (!global.CommonConfigRegistry) return HttpResponse.error(res, new Error('配置管理器未初始化'), 503, 'config.read');
+        if (!(globalThis as any).CommonConfigRegistry) return HttpResponse.error(res, new Error('配置管理器未初始化'), 503, 'config.read');
         const { config, error, multi } = resolveConfigInstance(configName, keyPath);
         if (error) return HttpResponse.notFound(res, error);
         let data;
@@ -165,7 +164,7 @@ export default {
     {
       method: 'POST',
       path: '/api/config/:name/write',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const configName = req.params?.name;
         const { data, path: keyPath, backup = true, validate = true } = req.body || {};
 
@@ -173,7 +172,7 @@ export default {
           return HttpResponse.validationError(res, '配置名称不能为空');
         }
 
-        if (!global.CommonConfigRegistry) return HttpResponse.error(res, new Error('配置管理器未初始化'), 503, 'config.write');
+        if (!(globalThis as any).CommonConfigRegistry) return HttpResponse.error(res, new Error('配置管理器未初始化'), 503, 'config.write');
         const config = getConfig(configName);
         if (!config) return HttpResponse.notFound(res, `配置 ${configName} 不存在`);
         const multi = isMultiFileConfig(config);
@@ -205,7 +204,7 @@ export default {
     {
       method: 'POST',
       path: '/api/config/:name/validate',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { name } = req.params;
         const { data } = req.body;
         const config = getConfig(name);
@@ -218,7 +217,7 @@ export default {
     {
       method: 'POST',
       path: '/api/config/:name/backup',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { name } = req.params;
         const config = getConfig(name);
         if (!config) return HttpResponse.notFound(res, `配置 ${name} 不存在`);
@@ -230,7 +229,7 @@ export default {
     {
       method: 'POST',
       path: '/api/config/:name/reset',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { name } = req.params;
         const { backup = true } = req.body;
         const config = getConfig(name);
@@ -243,8 +242,8 @@ export default {
     {
       method: 'POST',
       path: '/api/config/clear-cache',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
-        global.CommonConfigRegistry.clearAllCache();
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
+        (globalThis as any).CommonConfigRegistry.clearAllCache();
         HttpResponse.success(res, null, '已清除所有配置缓存');
       }, 'config.clear-cache')
     }

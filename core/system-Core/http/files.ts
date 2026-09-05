@@ -1,8 +1,8 @@
-// @ts-nocheck
 import path from 'path';
 import fs from 'fs/promises';
 import { createReadStream } from 'fs';
 import crypto from 'crypto';
+// @ts-expect-error no @types/multer
 import multer from 'multer';
 import paths from '#utils/paths.js';
 import RuntimeUtil from '#utils/runtime-util.js';
@@ -19,11 +19,11 @@ import { Disposables } from '#utils/disposables.js';
 const uploadDir = path.join(paths.data, 'uploads');
 const mediaDir = path.join(paths.data, 'media');
 const fileMap = new Map();
-let __runtime = null;
+let __runtime: any = null;
 
-async function hashFileMd5(filePath) {
+async function hashFileMd5(filePath: any) {
   const hash = crypto.createHash('md5');
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const stream = createReadStream(filePath);
     stream.on('data', (d) => hash.update(d));
     stream.on('end', resolve);
@@ -32,10 +32,10 @@ async function hashFileMd5(filePath) {
   return hash.digest('hex');
 }
 
-function createDiskUploader(req, maxFileSize) {
+function createDiskUploader(req: any, maxFileSize: any) {
   const createUploader = req.createMultipartUploader || (() => req.multipartUpload);
   const storage = multer.diskStorage({
-    destination: async (_req, file, cb) => {
+    destination: async ($_1: any, file: any, cb: any) => {
       try {
         const name = decodeMulterFilename(file.originalname);
         const ext = path.extname(name);
@@ -43,11 +43,11 @@ function createDiskUploader(req, maxFileSize) {
         const targetDir = isMedia ? mediaDir : uploadDir;
         await fs.mkdir(targetDir, { recursive: true });
         cb(null, targetDir);
-      } catch (e) {
+      } catch (e: any) {
         cb(e);
       }
     },
-    filename: (_req, file, cb) => {
+    filename: (_req: any, file: any, cb: any) => {
       const id = crypto.randomUUID();
       const ext = path.extname(decodeMulterFilename(file.originalname)).slice(0, 20) || '.file';
       cb(null, `${id}${ext}`);
@@ -75,16 +75,16 @@ export default {
     {
       method: 'POST',
       path: '/api/file/upload',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
         const contentType = req.headers['content-type'] || '';
         if (!contentType.includes('multipart/form-data')) return HttpResponse.validationError(res, '请使用 multipart/form-data 格式上传文件');
         const maxFileSize = runtimeConfig?.server?.limits?.fileSize || '100mb';
-        let files = [];
+        let files: any[] = [];
         try {
           const upload = createDiskUploader(req, maxFileSize);
-          await new Promise((resolve, reject) => upload(req, res, (err) => (err ? reject(err) : resolve())));
+          await new Promise<void>((resolve, reject) => upload(req, res, (err: any) => (err ? reject(err) : resolve())));
           files = Array.isArray(req.files) ? req.files : [];
-        } catch (e) {
+        } catch (e: any) {
           const code = e?.code || e?.name || 'UPLOAD_ERROR';
           if (code === 'LIMIT_FILE_SIZE') {
             return HttpResponse.error(res, new Error(`文件超过大小限制（${maxFileSize}）`), 413, 'file.upload');
@@ -95,10 +95,10 @@ export default {
           return HttpResponse.error(res, new Error(`解析 multipart/form-data 失败: ${e?.message || e}`), 400, 'file.upload');
         }
         if (!files?.length) return HttpResponse.validationError(res, '没有文件或文件被过滤');
-        const filesWithMd5 = [];
+        const filesWithMd5: any[] = [];
         for (const f of files) {
           if (!f?.path) continue;
-          let md5 = null;
+          let md5: any = null;
           try {
             md5 = await hashFileMd5(f.path);
           } catch {}
@@ -130,7 +130,7 @@ export default {
           }
         }
 
-        const uploadedFiles = [];
+        const uploadedFiles: any[] = [];
         const baseUrl = resolveClientBaseUrl(req, AgentRuntime);
         for (const file of filesWithMd5) {
           const ext = path.extname(file.originalname) || '.file';
@@ -155,12 +155,12 @@ export default {
           uploadedFiles.push(fileInfo);
         }
 
-        const results = uploadedFiles.map(f => ({
+        const results = uploadedFiles.map((f: any) => ({
           type: f.is_media ? 'image' : 'file',
           data: [{ type: f.is_media ? 'image' : 'file', url: f.url, name: f.name, size: f.size, mime: f.mime, download_url: f.download_url, preview_url: f.preview_url }]
         }));
         const payload = {
-          files: uploadedFiles.map(f => ({ file_id: f.id, file_url: f.url, file_name: f.name })),
+          files: uploadedFiles.map((f: any) => ({ file_id: f.id, file_url: f.url, file_name: f.name })),
           results,
           timestamp: Date.now()
         };
@@ -172,7 +172,7 @@ export default {
     {
       method: 'GET',
       path: '/api/file/:id',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         // 输入验证
         const { id } = req.params;
         if (!id || typeof id !== 'string' || id.length > 50) {
@@ -186,7 +186,7 @@ export default {
           try {
             for (const dir of [uploadDir, mediaDir]) {
               const files = await fs.readdir(dir);
-              const file = files.find(f => f.includes(id));
+              const file = files.find((f: any) => f.includes(id));
               if (file) {
                 // validatePath 已返回落在 dir 内的绝对路径，勿再 path.join(dir, …)
                 const filePath = InputValidator.validatePath(file, dir);
@@ -207,7 +207,7 @@ export default {
                 return res.sendFile(filePath);
               }
             }
-          } catch (err) {
+          } catch (err: any) {
             // debug: 文件查找失败是技术细节
             RuntimeUtil.makeLog('debug', `查找文件失败: ${err.message}`, 'FileAPI');
           }
@@ -232,7 +232,7 @@ export default {
     {
       method: 'DELETE',
       path: '/api/file/:id',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { id } = req.params;
         if (!id || typeof id !== 'string' || id.length > 50) {
           return HttpResponse.validationError(res, '无效的文件ID');
@@ -248,7 +248,7 @@ export default {
             );
             await fs.unlink(safePath);
             fileMap.delete(id);
-          } catch (err) {
+          } catch (err: any) {
             errorHandler.handle(
               err,
               { context: 'file.delete', fileId: id, code: ErrorCodes.SYSTEM_ERROR }
@@ -264,8 +264,8 @@ export default {
     {
       method: 'GET',
       path: '/api/files',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
-        const files = Array.from(fileMap.values()).map(f => ({
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
+        const files = Array.from(fileMap.values()).map((f: any) => ({
           id: f.id,
           name: f.name,
           url: f.url,
