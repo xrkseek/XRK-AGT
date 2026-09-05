@@ -7,7 +7,7 @@ import runtimeConfig from '#infrastructure/config/config.js';
 import RendererLoader from '#infrastructure/renderer/loader.js';
 import { setShuttingDown } from '#utils/runtime-globals.js';
 
-export async function stopAllLoaderWatchers() {
+export async function stopAllLoaderWatchers(): Promise<void> {
   setShuttingDown(true);
   await PluginLoader.destroy().catch(() => {});
   await AiWorkflowLoader.cleanupAll().catch(() => {});

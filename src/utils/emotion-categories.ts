@@ -7,8 +7,11 @@
  * 分类与 XRK-Yunzai lib/utils/emotion-categories.js 对齐。
  */
 
-/** @type {Record<string, { reactionIds?: string[] }>} */
-export const EMOTION_CATEGORIES = {
+export type EmotionCategory = {
+  reactionIds?: string[];
+};
+
+export const EMOTION_CATEGORIES: Record<string, EmotionCategory> = {
   开心: { reactionIds: ['4', '14', '21', '28', '76', '79', '99', '182', '201', '290'] },
   大笑: { reactionIds: ['12', '28', '101', '182', '281'] },
   喜欢: { reactionIds: ['42', '63', '85', '116', '122', '319'] },
@@ -32,18 +35,18 @@ export const EMOTION_CATEGORIES = {
   加油: { reactionIds: ['30', '246', '315'] },
   摸鱼: { reactionIds: ['285', '29'] },
   晚安: { reactionIds: ['8', '25', '104'] },
-  睡: { reactionIds: ['8', '25', '104'] }
+  睡: { reactionIds: ['8', '25', '104'] },
 };
 
 export const EMOTION_TYPES = Object.keys(EMOTION_CATEGORIES);
 
 /** 有 QQ 表情回应 ID 的子集（emojiReaction 工具） */
 export const EMOJI_REACTION_TYPES = EMOTION_TYPES.filter(
-  (name) => (EMOTION_CATEGORIES[name].reactionIds?.length ?? 0) > 0
+  (name) => (EMOTION_CATEGORIES[name].reactionIds?.length ?? 0) > 0,
 );
 
 /** emojiReaction / emotion 英文别名 → 中文分类 */
-export const EMOJI_REACTION_ALIASES = {
+export const EMOJI_REACTION_ALIASES: Record<string, string> = {
   happy: '开心',
   laugh: '大笑',
   like: '喜欢',
@@ -67,26 +70,29 @@ export const EMOJI_REACTION_ALIASES = {
   cheer: '加油',
   slack: '摸鱼',
   goodnight: '晚安',
-  sleep: '睡'
+  sleep: '睡',
 };
 
 export const EMOTION_IMAGE_EXTS = /\.(jpg|jpeg|png|gif|webp|bmp)$/i;
 
-export function normalizeEmotionType(raw, aliases = EMOJI_REACTION_ALIASES) {
+export function normalizeEmotionType(
+  raw: unknown,
+  aliases: Record<string, string> = EMOJI_REACTION_ALIASES,
+): string {
   const t = String(raw ?? '').trim();
   return aliases[t] || t;
 }
 
-export function getEmojiReactionIds(emotionType) {
+export function getEmojiReactionIds(emotionType: string): string[] | null {
   const ids = EMOTION_CATEGORIES[emotionType]?.reactionIds;
   return ids?.length ? ids : null;
 }
 
-export function formatEmotionTypeList(types = EMOTION_TYPES) {
+export function formatEmotionTypeList(types: string[] = EMOTION_TYPES): string {
   return types.join('、');
 }
 
 /** 兼容旧代码：分类名 → reactionIds */
 export const QQ_EMOJI_REACTION_IDS = Object.fromEntries(
-  EMOTION_TYPES.map((name) => [name, EMOTION_CATEGORIES[name].reactionIds || []])
+  EMOTION_TYPES.map((name) => [name, EMOTION_CATEGORIES[name].reactionIds || []]),
 );

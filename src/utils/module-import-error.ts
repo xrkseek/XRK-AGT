@@ -1,15 +1,21 @@
+export type ModuleImportErrorKind =
+  | 'missing_package'
+  | 'missing_file'
+  | 'missing_export'
+  | 'other';
+
+export type ClassifiedModuleImportError = {
+  kind: ModuleImportErrorKind;
+  packageName?: string;
+  filePath?: string;
+  exportName?: string;
+  message: string;
+};
+
 /**
  * Classify Node ESM/CJS module load failures for plugin/HTTP loaders and tests.
- * @param {unknown} err
- * @returns {{
- *   kind: 'missing_package' | 'missing_file' | 'missing_export' | 'other',
- *   packageName?: string,
- *   filePath?: string,
- *   exportName?: string,
- *   message: string
- * }}
  */
-export function classifyModuleImportError(err) {
+export function classifyModuleImportError(err: unknown): ClassifiedModuleImportError {
   const message = isErrorLike(err) ? err.message : String(err ?? '');
   const stack = isErrorLike(err) && typeof err.stack === 'string' ? err.stack : '';
   const text = `${message}\n${stack}`;
@@ -28,7 +34,7 @@ export function classifyModuleImportError(err) {
     return {
       kind: 'missing_package',
       packageName: normalizePackageSpecifier(spec),
-      message
+      message,
     };
   }
 
@@ -39,40 +45,36 @@ export function classifyModuleImportError(err) {
       kind: 'missing_export',
       exportName: m[1],
       packageName: mod?.[1],
-      message
+      message,
     };
   }
 
   return { kind: 'other', message };
 }
 
-/** @param {unknown} err @returns {err is { message: string, stack?: string }} */
-function isErrorLike(err) {
-  if (typeof Error.isError === 'function') return Error.isError(err);
-  return Boolean(err && typeof err === 'object' && typeof /** @type {{ message?: unknown }} */ (err).message === 'string');
+type ErrorConstructorWithIsError = ErrorConstructor & {
+  isError?: (value: unknown) => value is Error;
+};
+
+function isErrorLike(err: unknown): err is { message: string; stack?: string } {
+  const Ctor = Error as ErrorConstructorWithIsError;
+  if (typeof Ctor.isError === 'function') return Ctor.isError(err);
+  return Boolean(err && typeof err === 'object' && typeof (err as { message?: unknown }).message === 'string');
 }
 
-/**
- * Absolute / relative / #alias specs are not npm package names.
- * @param {string} spec
- */
-function isLocalModuleSpecifier(spec) {
+/** Absolute / relative / #alias specs are not npm package names. */
+function isLocalModuleSpecifier(spec: string): boolean {
   if (!spec) return false;
   if (spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('#') || pathIsAbsolute(spec)) {
     return true;
   }
-  // Windows path without drive letter is rare; UNC handled in pathIsAbsolute
   if (spec.includes('\\') || /[/\\]\.(js|mjs|cjs|json|node)$/i.test(spec)) {
     return true;
   }
   return false;
 }
 
-/**
- * @param {string} spec
- * @returns {string}
- */
-function normalizePackageSpecifier(spec) {
+function normalizePackageSpecifier(spec: string): string {
   if (!spec || isLocalModuleSpecifier(spec)) {
     return spec;
   }
@@ -83,24 +85,16 @@ function normalizePackageSpecifier(spec) {
   return spec.split('/')[0] || spec;
 }
 
-/** @param {string} p */
-function pathIsAbsolute(p) {
+function pathIsAbsolute(p: string): boolean {
   return /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('\\\\') || p.startsWith('/');
 }
 
-/**
- * @param {unknown} err
- * @returns {string | null}
- */
-export function extractMissingPackageName(err) {
+export function extractMissingPackageName(err: unknown): string | null {
   const c = classifyModuleImportError(err);
   return c.kind === 'missing_package' ? (c.packageName || null) : null;
 }
 
-/**
- * 是否应归入「缺少 npm 依赖」提示（而非普通代码错误）
- * @param {unknown} err
- */
-export function isMissingPackageError(err) {
+/** 是否应归入「缺少 npm 依赖」提示（而非普通代码错误） */
+export function isMissingPackageError(err: unknown): boolean {
   return classifyModuleImportError(err).kind === 'missing_package';
 }
