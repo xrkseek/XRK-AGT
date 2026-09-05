@@ -1,4 +1,3 @@
-// @ts-nocheck
 import BrowserRendererBase from "#infrastructure/renderer/browser-renderer-base.js";
 import playwright from "playwright";
 import { createRequire } from "node:module";
@@ -12,7 +11,8 @@ const { buildPlaywrightLaunchOptions, pickBrowserPath } = createRequire(import.m
  * 配置由 RendererLoader 通过 getRendererConfig('playwright') 注入。
  */
 export default class PlaywrightRenderer extends BrowserRendererBase {
-  constructor(config = {}) {
+  [key: string]: any;
+  constructor(config: any = {}) {
     super({ id: "playwright", type: "image", render: "screenshot" }, config, "PlaywrightRenderer");
 
     this.browserType = config.browserType ?? config.browser ?? "chromium";
@@ -53,13 +53,13 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
     };
   }
 
-  async connectToExisting(wsEndpoint, retries = 0) {
+  async connectToExisting(wsEndpoint: any, retries: any = 0): Promise<any> {
     const delay = this.retryDelay * Math.pow(2, retries);
     let browser = null;
     try {
       RuntimeUtil.makeLog("info", `Connecting to existing ${this.browserType} instance (attempt ${retries + 1}/${this.maxRetries})`, this.logTag);
 
-      browser = await connectPlaywrightBrowser(playwright, this.browserType, wsEndpoint, { timeout: 10000 });
+      browser = (await connectPlaywrightBrowser(playwright as any, this.browserType, wsEndpoint, { timeout: 10000 })) as any;
       const context = await browser.newContext();
       const page = await context.newPage();
       await page.goto("about:blank", { timeout: 5000 });
@@ -68,7 +68,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
       RuntimeUtil.makeLog("info", `Successfully connected to existing ${this.browserType} instance`, this.logTag);
       return browser;
-    } catch (e) {
+    } catch (e: any) {
       RuntimeUtil.makeLog("warn", `Connection failed: ${e.message}`, this.logTag);
       if (browser) await this.safeCloseBrowser(browser, 3000);
 
@@ -84,7 +84,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
   async browserInit() {
     if (this.browser) {
-      const ok = await this.ensureBrowserHealthy(async (b) => {
+      const ok = await this.ensureBrowserHealthy(async (b: any) => {
         if (typeof b.isConnected === "function" && !b.isConnected()) {
           throw new Error("disconnected");
         }
@@ -111,7 +111,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
       if (!this.browser) {
         RuntimeUtil.makeLog("info", `Launching new ${this.browserType} instance...`, this.logTag);
         this.browser = await this.withTimeout(
-          launchPlaywrightBrowser(playwright, this.browserType, this.launchOptions),
+          launchPlaywrightBrowser(playwright as any, this.browserType, this.launchOptions),
           this.playwrightTimeout,
           "browser launch"
         );
@@ -138,7 +138,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
       });
 
       this.startHealthCheck();
-    } catch (e) {
+    } catch (e: any) {
       if (/Executable doesn't exist/i.test(e.message)) {
         RuntimeUtil.makeLog("error", "Playwright 浏览器未安装，请在启动菜单选择「Playwright 浏览器」安装，或执行: pnpm run setup:browsers", this.logTag);
       } else if (!this.launchOptions.executablePath) {
@@ -164,14 +164,14 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
           throw new Error("disconnected");
         }
         await this.withTimeout(Promise.resolve(this.browser.contexts()), this.browserOpTimeoutMs, "health check");
-      } catch (e) {
+      } catch (e: any) {
         RuntimeUtil.makeLog("warn", `Health check failed: ${e.message}, restarting...`, this.logTag);
         await this.restart(true);
       }
     }, this.healthCheckInterval);
   }
 
-  async screenshot(name, data = {}) {
+  async screenshot(name: any, data: any = {}) {
     const slot = await this.acquireScreenshotSlot(name, data, this.playwrightTimeout);
     if (!slot) return false;
 
@@ -247,7 +247,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
             }
 
             if (i !== 1) {
-              await page.evaluate(scrollY => window.scrollTo(0, scrollY), pageHeight * (i - 1));
+              await page.evaluate((scrollY: any) => (globalThis as any).scrollTo(0, scrollY), pageHeight * (i - 1));
               await page.waitForTimeout(100);
             }
 
@@ -276,7 +276,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
             RuntimeUtil.makeLog("info", `[${name}] Completed in ${Date.now() - start}ms`, this.logTag);
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         RuntimeUtil.makeLog("error", `[${name}] Screenshot failed: ${error.message}`, this.logTag);
         this.handleFatalScreenshotError(error);
         ret = [];

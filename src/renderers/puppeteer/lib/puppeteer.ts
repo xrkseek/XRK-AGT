@@ -1,4 +1,3 @@
-// @ts-nocheck
 import BrowserRendererBase from "#infrastructure/renderer/browser-renderer-base.js";
 import puppeteer from "puppeteer";
 import { createRequire } from "node:module";
@@ -12,7 +11,8 @@ const { resolvePlaywrightExecutable, pickBrowserPath } = createRequire(import.me
  * 配置由 RendererLoader 通过 getRendererConfig('puppeteer') 注入。
  */
 export default class PuppeteerRenderer extends BrowserRendererBase {
-  constructor(config = {}) {
+  [key: string]: any;
+  constructor(config: any = {}) {
     super({ id: "puppeteer", type: "image", render: "screenshot" }, config, "PuppeteerRenderer");
 
     this.puppeteerTimeout = config.puppeteerTimeout ?? 120000;
@@ -37,20 +37,20 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
     if (executablePath) this.config.executablePath = executablePath;
   }
 
-  async connectToExisting(browserWSEndpoint, retries = 0) {
+  async connectToExisting(browserWSEndpoint: any, retries: any = 0): Promise<any> {
     let browser = null;
     try {
-      browser = await puppeteer.connect({
+      browser = (await puppeteer.connect({
         browserWSEndpoint,
         defaultViewport: null,
         protocolTimeout: this.config.protocolTimeout,
-      });
+      })) as any;
       const page = await browser.newPage();
       page.setDefaultTimeout(5000);
       await page.goto("about:blank", { timeout: 5000, waitUntil: "domcontentloaded" });
       await page.close().catch(() => {});
       return browser;
-    } catch (e) {
+    } catch (e: any) {
       if (browser) await this.safeCloseBrowser(browser, 3000);
       if (retries < this.maxRetries - 1) {
         await new Promise((r) => setTimeout(r, this.retryDelay * Math.pow(2, retries)));
@@ -64,7 +64,7 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
 
   async browserInit() {
     if (this.browser) {
-      const ok = await this.ensureBrowserHealthy(async (b) => {
+      const ok = await this.ensureBrowserHealthy(async (b: any) => {
         if (typeof b.isConnected === "function" && !b.isConnected()) {
           throw new Error("disconnected");
         }
@@ -133,7 +133,7 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
       });
 
       this.startHealthCheck();
-    } catch (e) {
+    } catch (e: any) {
       RuntimeUtil.makeLog("error", `Browser initialization failed: ${e.message}`, this.logTag);
       this.browser = null;
     } finally {
@@ -154,14 +154,14 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
           throw new Error("disconnected");
         }
         await this.withTimeout(this.browser.version(), this.browserOpTimeoutMs, "health check");
-      } catch (e) {
+      } catch (e: any) {
         RuntimeUtil.makeLog("warn", `Health check failed: ${e.message}, restarting...`, this.logTag);
         await this.restart(true);
       }
     }, this.healthCheckInterval);
   }
 
-  async screenshot(name, data = {}) {
+  async screenshot(name: any, data: any = {}) {
     const slot = await this.acquireScreenshotSlot(name, data, this.puppeteerTimeout);
     if (!slot) return false;
 
@@ -231,7 +231,7 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
             }
 
             if (i !== 1) {
-              await page.evaluate(scrollY => window.scrollTo(0, scrollY), pageHeight * (i - 1));
+              await page.evaluate((scrollY: any) => (globalThis as any).scrollTo(0, scrollY), pageHeight * (i - 1));
               await new Promise(resolve => setTimeout(resolve, 100));
             }
 
@@ -253,7 +253,7 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
             RuntimeUtil.makeLog("info", `[${name}] Completed in ${Date.now() - start}ms`, this.logTag);
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         RuntimeUtil.makeLog("error", `[${name}] Screenshot failed: ${error.message}`, this.logTag);
         this.handleFatalScreenshotError(error);
         ret = [];
