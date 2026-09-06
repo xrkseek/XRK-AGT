@@ -44,7 +44,7 @@ XRK-AGT 是由向日葵开发、各大学志同道合的学生联合研制的 **
 
 ### 终端启动
 
-`node app.js` 引导菜单 → 选择端口 → 加载插件 / 工作流 / Tasker → 服务 online。
+`pnpm start`（或 `node dist/app.js`）引导菜单 → 选择端口 → 加载插件 / 工作流 / Tasker → 服务 online。
 
 ![终端启动录屏](resources/mdimg/showcase/terminal-startup.gif)
 
@@ -86,7 +86,7 @@ XRK-AGT 是由向日葵开发、各大学志同道合的学生联合研制的 **
 
 ## 🏗️ 架构
 
-Runtime（`src/agent-runtime.js`）+ 基础设施（加载器、基类、工厂）+ **Core 业务层**（`core/*/`：插件、HTTP、工作流、Tasker）。分层图与 AI 链路仅维护于 **[`docs/底层架构设计.md`](docs/底层架构设计.md)**；启动链见 **[`docs/startup.md`](docs/startup.md)**；目录树见 **[`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)**。
+Runtime（`src/agent-runtime.ts` → `dist/src/agent-runtime.js`）+ 基础设施（加载器、基类、工厂）+ **Core 业务层**（`core/*/`：插件、HTTP、工作流、Tasker）。分层图与 AI 链路仅维护于 **[`docs/底层架构设计.md`](docs/底层架构设计.md)**；启动链见 **[`docs/startup.md`](docs/startup.md)**；目录树见 **[`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md)**。
 
 ---
 
@@ -162,10 +162,13 @@ docker-compose down
 
 **Windows/Linux/macOS:**
 ```bash
-# 方式1：使用 app.js（推荐，自动检查依赖与环境后启动）
-node app.js
+# 方式1：推荐（先 build 再启动，自动检查依赖与环境）
+pnpm start
 
-# 方式2：使用启动脚本（会先经 app.js 做依赖检查再启动）
+# 方式2：已 build 时直接跑 dist 入口
+node dist/app.js
+
+# 方式3：启动脚本（内部走 dist/app.js）
 # Windows
 start.bat
 
@@ -173,17 +176,17 @@ start.bat
 chmod +x start.sh
 ./start.sh server 8080
 
-# 方式3：node start 会重定向到 app.js，同样会做依赖检查
-node start.js server 8080
+# 方式4：菜单/进程守护入口（须先 build；直跑 dist/start.js 会重定向到 dist/app.js）
+node dist/start.js server 8080
 ```
 
 **指定端口：**
 ```bash
 # 环境变量
-XRK_SERVER_PORT=3000 node app.js
+XRK_SERVER_PORT=3000 node dist/app.js
 
 # 命令行参数
-node start.js server 3000
+node dist/start.js server 3000
 ```
 
 **首次启动**：
@@ -193,8 +196,8 @@ node start.js server 3000
 
 **端口配置**：
 - 默认端口：8080
-- 通过环境变量：`XRK_SERVER_PORT=3000 node app`
-- 通过命令行参数：`node start.js server 3000`
+- 通过环境变量：`XRK_SERVER_PORT=3000 node dist/app.js`
+- 通过命令行参数：`node dist/start.js server 3000`
 
 ---
 
@@ -300,7 +303,7 @@ A: 按需在本机 `.env` 或 `config/docker.env` 中设置（**勿提交**）�
 
 ### Q: 如何修改服务端口？
 
-A: 环境变量 `XRK_SERVER_PORT=3000 node app.js`、命令行 `node start.js server 3000`，或修改 `data/server_bots/{port}/server.yaml`。
+A: 环境变量 `XRK_SERVER_PORT=3000 node dist/app.js`、命令行 `node dist/start.js server 3000`，或修改 `data/server_bots/{port}/server.yaml`。
 
 ### Q: 如何开发自定义插件？
 

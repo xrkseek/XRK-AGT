@@ -1,9 +1,9 @@
-// @ts-nocheck
 import { promises as fs } from 'node:fs';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
+// @ts-expect-error inquirer@8 has no bundled types
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import { fixWindowsUTF8 } from '#utils/win-utf8.js';
@@ -32,7 +32,7 @@ if (entry && path.basename(entry) === 'start.js') {
   process.exit(result.status !== null ? result.status : 1);
 }
 
-let globalMenuSignalHandler = null;
+let globalMenuSignalHandler: any = null;
 
 async function cleanup() {
   if (!globalMenuSignalHandler) return;
@@ -63,23 +63,23 @@ const CONFIG = {
 
 const JSON_SPACE = 2;
 
-function formatError(err) {
+function formatError(err: any) {
   const error = normalizeError(err);
   return error.stack || error.message;
 }
 
 /** @returns {number | null} */
-function parsePort(value) {
+function parsePort(value: any): number | null {
   const n = Number.parseInt(String(value ?? ''), 10);
   return Number.isInteger(n) && n > 0 && n < 65536 ? n : null;
 }
 
-async function writeFileIfChanged(filePath, content) {
+async function writeFileIfChanged(filePath: any, content: any) {
   try {
     const existing = await fs.readFile(filePath, typeof content === 'string' ? 'utf8' : undefined);
     if (existing === content) return false;
-  } catch (err) {
-    if (Error.isError(err) && err.code !== 'ENOENT') throw err;
+  } catch (err: any) {
+    if (err instanceof Error && (err as any).code !== 'ENOENT') throw err;
   }
 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -87,7 +87,7 @@ async function writeFileIfChanged(filePath, content) {
   return true;
 }
 
-let _restartLogger = null;
+let _restartLogger: any = null;
 
 function getLogger() {
   _restartLogger ??= createSimpleLogger(path.join(PATHS.LOGS, 'restart.log'), false);
@@ -95,12 +95,14 @@ function getLogger() {
 }
 
 class BaseManager {
-  constructor(logger) {
+  [key: string]: any;
+  constructor(logger: any) {
     this.logger = logger;
   }
 }
 
 class PM2Manager extends BaseManager {
+  [key: string]: any;
   getPM2Path() {
     const localPm2Path = process.platform === 'win32'
       ? path.join(process.cwd(), 'node_modules', 'pm2', 'bin', 'pm2.cmd')
@@ -110,14 +112,14 @@ class PM2Manager extends BaseManager {
     return 'pm2';
   }
 
-  getProcessName(port) {
+  getProcessName(port: any) {
     return `XRK-MultiBot-Server-${port}`;
   }
 
-  async executePM2Command(command, args = [], processName = '') {
+  async executePM2Command(command: any, args: any[] = [], processName = '') {
     const pm2Path = this.getPM2Path();
     let cmdCommand = pm2Path;
-    let cmdArgs = [command, ...args];
+    let cmdArgs: any[] = [command, ...args];
 
     // Windows 全局 PM2 走 cmd /c；本地路径直接执行
     if (process.platform === 'win32' && pm2Path === 'pm2') {
@@ -132,7 +134,7 @@ class PM2Manager extends BaseManager {
       windowsHide: true,
       detached: false,
       shell: false,
-    });
+    } as any);
 
     const success = result.status === 0;
     if (success) {
@@ -143,7 +145,7 @@ class PM2Manager extends BaseManager {
     return success;
   }
 
-  async createConfig(port) {
+  async createConfig(port: any) {
     const processName = this.getProcessName(port);
     const nodeArgs = getNodeArgs();
     const pm2Config = {
@@ -179,9 +181,9 @@ class PM2Manager extends BaseManager {
     return { configPath, cleanup };
   }
 
-  async executePortCommand(action, port) {
+  async executePortCommand(action: any, port: any) {
     const processName = this.getProcessName(port);
-    const commandMap = {
+    const commandMap: Record<string, () => Promise<boolean>> = {
       start: async () => {
         const { configPath, cleanup } = await this.createConfig(port);
         const ok = await this.executePM2Command('start', [configPath], processName);
@@ -198,9 +200,10 @@ class PM2Manager extends BaseManager {
 }
 
 class ServerManager extends BaseManager {
-  _activeChild = null;
+  [key: string]: any;
+  _activeChild: any = null;
 
-  constructor(logger, pm2Manager) {
+  constructor(logger: any, pm2Manager: any) {
     super(logger);
     this.pm2Manager = pm2Manager;
 
@@ -220,23 +223,23 @@ class ServerManager extends BaseManager {
     }
   }
 
-  getPortDir(port) {
+  getPortDir(port: any) {
     return path.join(PATHS.SERVER_BOTS, String(port));
   }
 
-  async ensurePortConfig(port, silent = false) {
+  async ensurePortConfig(port: any, silent = false) {
     const { seedPortConfigs } = await import('#infrastructure/config/config-seed.js');
     return seedPortConfigs(port, { silent, logger: this.logger });
   }
 
-  async removePortConfig(port) {
+  async removePortConfig(port: any) {
     const portDir = this.getPortDir(port);
 
     try {
       await fs.rm(portDir, { recursive: true, force: true });
       await this.logger.warning(`端口 ${port} 的配置目录已删除`);
       return true;
-    } catch (error) {
+    } catch (error: any) {
       await this.logger.error(`删除端口配置失败: ${formatError(error)}`);
       return false;
     }
@@ -245,7 +248,7 @@ class ServerManager extends BaseManager {
   async getAvailablePorts() {
     try {
       const files = await fs.readdir(PATHS.SERVER_BOTS);
-      const ports = [];
+      const ports: number[] = [];
       for (const file of files) {
         const port = parsePort(file);
         if (port != null) ports.push(port);
@@ -261,7 +264,7 @@ class ServerManager extends BaseManager {
       type: 'input',
       name: 'port',
       message: chalk.bold('请输入新的服务器端口号:'),
-      validate: (input) =>
+      validate: (input: any) =>
         parsePort(input) != null
           ? true
           : chalk.red('请输入有效的端口号 (1-65535)'),
@@ -272,7 +275,7 @@ class ServerManager extends BaseManager {
     return portNum;
   }
 
-  async startServerMode(port) {
+  async startServerMode(port: any) {
     const skipConfigCheck = process.env.XRK_SKIP_CONFIG_CHECK === '1';
 
     if (!skipConfigCheck) {
@@ -286,13 +289,13 @@ class ServerManager extends BaseManager {
       const runtime = new AgentRuntime();
       setRuntimeGlobal('AgentRuntime', runtime);
       await runtime.run({ port });
-    } catch (error) {
+    } catch (error: any) {
       await this.logger.error(`服务器模式启动失败: ${formatError(error)}`);
       throw error;
     }
   }
 
-  async startWithAutoRestart(port) {
+  async startWithAutoRestart(port: any) {
     await this.ensurePortConfig(port);
 
     if (!this.signalHandler.isSetup) this.signalHandler.setup();
@@ -332,7 +335,7 @@ class ServerManager extends BaseManager {
     }
   }
 
-  async runServerProcess(port, skipConfigCheck = false) {
+  async runServerProcess(port: any, skipConfigCheck = false) {
     const nodeArgs = getNodeArgs();
     const entryScript = path.join(process.cwd(), 'dist', 'app.js');
     const startArgs = [...nodeArgs, entryScript, 'server', port.toString()];
@@ -355,7 +358,7 @@ class ServerManager extends BaseManager {
       });
       this._activeChild = child;
 
-      const finish = (code, signal) => {
+      const finish = (code: any, signal: any) => {
         if (this._activeChild === child) this._activeChild = null;
         this.signalHandler._ensureReadline();
         resolve(resolveChildExit(code, signal));
@@ -372,14 +375,14 @@ class ServerManager extends BaseManager {
     });
   }
 
-  calculateRestartDelay(runTime, restartCount) {
+  calculateRestartDelay(runTime: any, restartCount: any) {
     if (runTime < 10000 && restartCount > 2) {
       return restartCount > 5 ? CONFIG.RESTART_DELAYS.LONG : CONFIG.RESTART_DELAYS.MEDIUM;
     }
     return CONFIG.RESTART_DELAYS.SHORT;
   }
 
-  async stopServer(port) {
+  async stopServer(port: any) {
     await this.logger.log(`尝试停止端口 ${port} 的服务器`);
     
     try {
@@ -393,14 +396,15 @@ class ServerManager extends BaseManager {
       } else {
         await this.logger.warning(`服务器响应异常: ${response.status}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       await this.logger.error(`停止请求失败: ${normalizeError(error).message}`);
     }
   }
 }
 
 class MenuManager {
-  constructor(serverManager, pm2Manager) {
+  [key: string]: any;
+  constructor(serverManager: any, pm2Manager: any) {
     this.serverManager = serverManager;
     this.pm2Manager = pm2Manager;
   }
@@ -416,7 +420,7 @@ class MenuManager {
       try {
         const selected = await this.showMainMenu();
         shouldExit = await this.handleMenuAction(selected);
-      } catch (error) {
+      } catch (error: any) {
         if (error?.isTtyError) {
           console.error(chalk.red('无法在当前环境中渲染菜单'));
           break;
@@ -444,7 +448,7 @@ class MenuManager {
     }
 
     const choices = [
-      ...availablePorts.map(port => ({
+      ...availablePorts.map((port: any) => ({
         name: chalk.green(`> 启动服务器 (端口: ${port})`),
         value: { action: 'start_server', port },
         short: `启动端口 ${port}`
@@ -488,7 +492,7 @@ class MenuManager {
     return selected;
   }
 
-  async handleMenuAction(selected) {
+  async handleMenuAction(selected: any) {
     switch (selected.action) {
       case 'start_server':
         await this.serverManager.startWithAutoRestart(selected.port);
@@ -674,8 +678,8 @@ class MenuManager {
     }
   }
 
-  async selectPort(availablePorts, action) {
-    const actionMessages = {
+  async selectPort(availablePorts: any, action: any) {
+    const actionMessages: Record<string, string> = {
       start: '选择要启动的端口:',
       logs: '查看哪个端口的日志?',
       stop: '停止哪个端口?',
@@ -683,7 +687,7 @@ class MenuManager {
       delete: '选择要删除配置的端口:'
     };
     
-    const choices = availablePorts.map(port => ({
+    const choices: any[] = availablePorts.map((port: any) => ({
       name: chalk.cyan(`端口 ${port}`),
       value: port,
       short: `端口 ${port}`

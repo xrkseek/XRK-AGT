@@ -16,7 +16,7 @@ description: 当需要从整体理解 XRK-AGT 的架构、目录、运行流程�
 - **定位**：融合智能体业务逻辑的通用后端 — Runtime 在 `src/`，业务在 `core/`。
 - 分层：AgentRuntime（Runtime）→ 基础设施（Loader/基类）→ Tasker / 事件 → Core 业务。
 - 业务在 `core/<名>/(plugin|http|stream|tasker|events|commonconfig|www/<app>)`；`src/` 仅基础设施与工厂。
-- 启动：见 `docs/startup.md`（`app.js` → bootstrap → `start.js` → `agent-runtime.js`）。
+- 启动：见 `docs/startup.md`（`dist/app.js` → bootstrap → `dist/start.js` → `dist/src/agent-runtime.js`）。
 - Node ≥ 26.0（`package.json` engines）；包管理仅 **pnpm**。
 
 ## Node 26

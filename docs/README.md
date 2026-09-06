@@ -59,7 +59,7 @@
 - **[文档审查清单](文档审查清单.md)** - 发布前文档准确性、互链与数字一致性 ⭐
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 目录树与文档入口（架构图见底层架构设计）
 - **[底层架构设计](底层架构设计.md)** - Runtime / Infrastructure / Core 分层与 AI 链路（**架构单一事实源**） ⭐
-- **[启动与引导](startup.md)** - `app.js` → bootstrap → `start.js` → AgentRuntime，环境变量与 Playwright ⭐
+- **[启动与引导](startup.md)** - `dist/app.js` → bootstrap → `dist/start.js` → AgentRuntime，环境变量与 Playwright ⭐
 - **[运行时挂载面](runtime-surface.md)** - 全局对象、AgentRuntime Proxy、Loader 单例、按场景写法 ⭐ **开发首读**
 - **[底层写法规范](coding-style.md)** - 全局裸名、状态/I/O/异步/HTTP、性能速查 ⭐
 - **[业务基类契约](base-classes.md)** - plugin / HttpApi / AiWorkflow 最小 export
@@ -220,7 +220,7 @@ AgentRuntime 生命周期、HTTP/WS、关闭流程：**[agent-runtime.md](agent-
 2. **全局对象访问**：始终通过 `AgentRuntime[self_id]` 访问 AgentRuntime 实例，不要直接使用 `e.bot`（除非确保已初始化）
 3. **事件命名**：`{tasker}.{post_type}.{detail?}.{sub_type?}`，如 `onebot.message` / `onebot.message.group`；插件可用跨 Tasker 的 `message`（见 [事件系统标准化文档](事件系统标准化文档.md)）
 4. **错误处理**：异步操作用 try/catch；基础设施层用 `Error.isError` / `normalizeError`
-5. **AgentRuntime 实例**：通过 `node app` 启动，勿手动 `new AgentRuntime()`
+5. **AgentRuntime 实例**：通过 `pnpm start` / `node dist/app.js` 启动，勿手动 `new AgentRuntime()`
 6. **Ctrl+C**：服务端 1 次重启 / 3 次回菜单（见 [agent-runtime.md](agent-runtime.md)）；勿在业务代码自行 `process.on('SIGINT')`
 7. **Node.js ≥ 26**、**pnpm** 为硬性要求（见 [node-26-runtime.md](node-26-runtime.md)）
 

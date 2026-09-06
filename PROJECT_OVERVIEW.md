@@ -34,12 +34,19 @@
 
 ```
 XRK-AGT/
-├── app.js                    # → src/utils/bootstrap.js
-├── start.js                  # 菜单 / PM2 / server
+├── app.ts                    # → dist/app.js → Bootstrap
+├── start.ts                  # → dist/start.js：菜单 / PM2 / server
+├── debug.ts                  # → dist/debug.js：跳过引导直接跑 AgentRuntime
 ├── package.json
 │
+├── dist/                     # tsc 产物（运行入口）
+│   ├── app.js
+│   ├── start.js
+│   ├── src/
+│   └── core/
+│
 ├── src/                      # Runtime + 基础设施（勿写业务）
-│   ├── agent-runtime.js      # AgentRuntime 门面（鉴权/监听/WS/代理委托 runtime-*）
+│   ├── agent-runtime.ts      # AgentRuntime 门面（鉴权/监听/WS/代理委托 runtime-*）
 │   ├── infrastructure/       # 加载器、基类、database、config、ai-workflow…
 │   ├── utils/                # bootstrap、process-signals、http-business…
 │   ├── factory/              # LLM / ASR / TTS
@@ -63,7 +70,7 @@ XRK-AGT/
 
 | 路径 | 说明 |
 |------|------|
-| `app.js` → `bootstrap.js` → `start.js` → `agent-runtime.js` | 启动链，见 [docs/startup.md](docs/startup.md) |
+| `dist/app.js` → bootstrap → `dist/start.js` → `dist/src/agent-runtime.js` | 启动链，见 [docs/startup.md](docs/startup.md) |
 | `core/*/plugin/` | 指令与增强插件 |
 | `core/*/http/` | HTTP API（`/api/` 默认鉴权） |
 | `core/*/workflow/` | AI 工作流（`AiWorkflow`） |

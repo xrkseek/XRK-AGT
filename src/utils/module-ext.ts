@@ -1,6 +1,7 @@
 /**
  * Core / Loader 模块源文件约定（JS + TS）。
- * Node ≥26：进程须带 `--experimental-strip-types` 才能 import `.ts`。
+ * 主路径：`pnpm build` → 从 `dist/` 加载编译后的 `.js`。
+ * 若直接 import 源码 `.ts`，Node ≥26 须带 `--experimental-strip-types`。
  */
 import path from 'node:path';
 

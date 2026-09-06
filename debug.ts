@@ -1,12 +1,11 @@
-// @ts-nocheck
 /**
- * @file debug.js
+ * @file debug.ts
  * @description 手动调试启动脚本
  *
  * 使用方法:
- * 1. 在终端中直接运行 `node debug.js`
- * 2. 脚本会直接启动 AgentRuntime 核心，不经过 app.js 的依赖检查和进程守护
- * 3. 所有错误和日志都会直接输出到控制台，方便调试
+ * 1. `pnpm debug` 或 `pnpm build && node dist/debug.js`
+ * 2. 直接启动 AgentRuntime，不经过 dist/app.js 的依赖检查和进程守护
+ * 3. 错误与日志直接输出到控制台
  */
 
 import AgentRuntime from './src/agent-runtime.js';

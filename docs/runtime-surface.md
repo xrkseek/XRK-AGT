@@ -43,7 +43,7 @@
 
 ```mermaid
 sequenceDiagram
-  participant App as app.js
+  participant App as dist/app.js
   participant Boot as bootstrap-globals
   participant Start as start.js
   participant AgentRuntime as AgentRuntime.run

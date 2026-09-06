@@ -50,7 +50,7 @@ sequenceDiagram
 
     Start->>Ensure: 探测 Redis（必要时本机拉起）
     Ensure-->>Start: OK / 中止
-    Start->>IM: node app.js
+    Start->>IM: node dist/app.js
     IM->>DM: initDatabases()
     DM->>R: redisInit（fail-fast）
     R-->>DM: setRuntimeGlobal redis

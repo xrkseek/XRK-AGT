@@ -20,7 +20,7 @@ description: 当你需要使用 Docker/Docker Compose 部署 XRK-AGT（含 Pytho
 ## Node 26
 
 - 镜像基线：`Dockerfile` 使用 **`node:26-slim`**；容器内 `node -v` 应 ≥ 26.0。
-- `package.json` engines 与 `app.js` 启动校验一致；**勿**在文档或示例中写 Node 24 / `node-fetch`。
+- `package.json` engines 与 `app.ts` / Bootstrap 启动校验一致；**勿**在文档或示例中写 Node 24 / `node-fetch`。容器入口为 `dist/start.js`（见 `docker-entrypoint.sh`）。
 - 可选：`NODE_COMPILE_CACHE` 缩短冷启动（见 `docs/node-26-runtime.md` §2.2）。
 
 ## 故障排查关键路径

@@ -14,7 +14,7 @@
 ## 栈与启动
 
 - Node ≥ 26 · 包管理仅 **pnpm**
-- `node app` → `start.js` → `src/agent-runtime.js`
+- `node dist/app.js` → `dist/start.js` → `dist/src/agent-runtime.js`
 - 首读：[docs/runtime-surface.md](docs/runtime-surface.md) · [docs/coding-style.md](docs/coding-style.md) · [docs/base-classes.md](docs/base-classes.md) · 索引 [docs/README.md](docs/README.md)
 
 ## 放码

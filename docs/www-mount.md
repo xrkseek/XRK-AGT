@@ -97,7 +97,7 @@ Vite `base` 必须与该 URL 一致。
 ```
 
 - `command` / `port` 在此模式下**不会用到**（留给切到反代时用）。
-- **启动过程构建**：`node app.js server`（含 Ctrl+C 热重启子进程）时 Bootstrap 在加载 AGT 之前按 stale 编各有 sign 静态前端（`pnpm run build:www` 等同）；`XRK_SKIP_WWW_BUILD=1` 可跳过。编完子进程退出后再启 AGT，避免同机抢内存。
+- **启动过程构建**：`node dist/app.js server`（含 Ctrl+C 热重启子进程）时 Bootstrap 在加载 AGT 之前按 stale 编各有 sign 静态前端（`pnpm run build:www` 等同）；`XRK_SKIP_WWW_BUILD=1` 可跳过。编完子进程退出后再启 AGT，避免同机抢内存。
 - `buildOnStart`：仅反代模式（Launcher）使用；静态前端只看 stale。
 - `pnpm`/`npm` 经 `#utils/command-spawn.js` 解析（Windows `.cmd`、PATH、`pnpm.cjs`、corepack、`npm exec pnpm`），避免葵子/精简 PATH 下 `spawn pnpm ENOENT`。
 
