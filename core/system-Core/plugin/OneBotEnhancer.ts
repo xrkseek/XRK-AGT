@@ -1,10 +1,10 @@
-// @ts-nocheck
 import runtimeConfig from '#infrastructure/config/config.js'
 import RuntimeUtil from '#utils/runtime-util.js'
 import EnhancerBase from '#infrastructure/plugins/enhancer-base.js'
 import { EventNormalizer } from '#utils/event-normalizer.js'
 
 export default class OneBotEnhancer extends EnhancerBase {
+  [key: string]: any;
   constructor() {
     super({
       name: 'OneBot',
@@ -15,7 +15,7 @@ export default class OneBotEnhancer extends EnhancerBase {
     })
   }
 
-  enhanceEvent(e) {
+  enhanceEvent(e: any) {
     super.enhanceEvent(e)
     EventNormalizer.normalizeOneBot(e)
 
@@ -43,7 +43,7 @@ export default class OneBotEnhancer extends EnhancerBase {
     }
   }
 
-  processAtProperties(e) {
+  processAtProperties(e: any) {
     if (!e.message || !Array.isArray(e.message)) return
 
     const atList = []
@@ -72,7 +72,7 @@ export default class OneBotEnhancer extends EnhancerBase {
     }
   }
 
-  applyAlias(e) {
+  applyAlias(e: any) {
     if (!e.group_id || !e.msg) return
     const groupCfg = runtimeConfig.getGroup(e.group_id) || {}
     const aliases = this.normalizeAliasList(groupCfg.botAlias)
@@ -87,7 +87,7 @@ export default class OneBotEnhancer extends EnhancerBase {
     }
   }
 
-  async applyAutoRequest(e) {
+  async applyAutoRequest(e: any) {
     if (e.post_type !== 'request' || typeof e.approve !== 'function') return
     const auto = runtimeConfig.chatbot?.auto || {}
     try {
@@ -95,12 +95,12 @@ export default class OneBotEnhancer extends EnhancerBase {
         await e.approve(true)
         RuntimeUtil.makeLog('info', `已自动同意加好友：${e.user_id}`, e.self_id)
       }
-    } catch (err) {
+    } catch (err: any) {
       RuntimeUtil.makeLog('warn', `自动同意加好友失败: ${err?.message || err}`, e.self_id)
     }
   }
 
-  async applyAutoQuitOnInvite(e) {
+  async applyAutoQuitOnInvite(e: any) {
     if (e.post_type !== 'notice' || e.notice_type !== 'group' || e.sub_type !== 'invite') return
     const quitThreshold = Number(runtimeConfig.chatbot?.auto?.quit) || 0
     if (quitThreshold <= 0 || !e.group_id) return
@@ -112,12 +112,12 @@ export default class OneBotEnhancer extends EnhancerBase {
         await group.quit()
         RuntimeUtil.makeLog('info', `群人数 ${count} < ${quitThreshold}，已自动退群 ${e.group_id}`, e.self_id)
       }
-    } catch (err) {
+    } catch (err: any) {
       RuntimeUtil.makeLog('warn', `自动退群失败: ${err?.message || err}`, e.self_id)
     }
   }
 
-  async applyConfigPolicies(e) {
+  async applyConfigPolicies(e: any) {
     try {
       if (e.post_type === 'request') {
         await this.applyAutoRequest(e)
@@ -146,8 +146,8 @@ export default class OneBotEnhancer extends EnhancerBase {
       const disableGuildMsg = guild?.disableMsg === true
 
       // 统一字符串转换和比较
-      const toStr = (v) => (v === undefined || v === null ? '' : String(v))
-      const inList = (list, id) =>
+      const toStr = (v: any) => (v === undefined || v === null ? '' : String(v))
+      const inList = (list: any, id: any) =>
         Array.isArray(list) && list.length > 0 && id && list.map(toStr).includes(toStr(id))
 
       const groupId = toStr(e.group_id || '')
@@ -197,13 +197,13 @@ export default class OneBotEnhancer extends EnhancerBase {
       }
 
       return true
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `OneBotEnhancer 配置策略应用失败: ${error.message}`, e.self_id)
       return true
     }
   }
 
-  enforceReplyPolicy(e) {
+  enforceReplyPolicy(e: any) {
     // 非群组、设备、stdin事件跳过
     if (!e.group_id || e.isDevice || e.isStdin) return true
 
@@ -226,7 +226,7 @@ export default class OneBotEnhancer extends EnhancerBase {
    * @param {string|Array} alias - 别名或别名数组
    * @returns {Array} 标准化后的别名数组
    */
-  normalizeAliasList(alias) {
+  normalizeAliasList(alias: any) {
     if (!alias) return []
     return Array.isArray(alias) ? alias.filter(Boolean) : [alias].filter(Boolean)
   }

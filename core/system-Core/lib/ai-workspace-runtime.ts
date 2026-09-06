@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -36,7 +35,7 @@ const BUILTIN_PROJECT = {
   kind: 'project'
 };
 
-function resolvePathInput(raw, projectRoot) {
+function resolvePathInput(raw: any, projectRoot: any) {
   if (raw == null || String(raw).trim() === '') return projectRoot;
   let w = String(raw).trim();
   if (w.startsWith('~')) {
@@ -47,13 +46,13 @@ function resolvePathInput(raw, projectRoot) {
   return path.resolve(projectRoot, w);
 }
 
-export function sanitizeWorkspaceId(raw) {
+export function sanitizeWorkspaceId(raw: any) {
   const id = String(raw || DEFAULT_WORKSPACE_ID).trim() || DEFAULT_WORKSPACE_ID;
   if (id === 'project') return 'project';
   return normalizeWorkspaceId(id);
 }
 
-export function ensureAgentWorkspaceSync(id = DEFAULT_WORKSPACE_ID) {
+export function ensureAgentWorkspaceSync(id: any = DEFAULT_WORKSPACE_ID) {
   const safeId = sanitizeWorkspaceId(id);
   const abs = getAgentWorkspaceAbs(safeId);
   seedWorkspaceFromBundle(abs);
@@ -68,7 +67,7 @@ export function listAgentWorkspaceIds() {
     const ids = entries
       .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
       .map((e) => e.name)
-      .sort((a, b) => {
+      .sort((a: any, b: any) => {
         if (a === DEFAULT_WORKSPACE_ID) return -1;
         if (b === DEFAULT_WORKSPACE_ID) return 1;
         return a.localeCompare(b, 'zh-CN');
@@ -79,14 +78,14 @@ export function listAgentWorkspaceIds() {
   }
 }
 
-export function createAgentWorkspace(id) {
+export function createAgentWorkspace(id: any) {
   const safeId = sanitizeWorkspaceId(id);
   if (safeId === 'project') throw new Error('不能使用保留名称 project');
   const abs = ensureAgentWorkspaceSync(safeId);
   return { id: safeId, path: abs, label: safeId === DEFAULT_WORKSPACE_ID ? '默认工作区' : safeId };
 }
 
-export function resolveWorkspacePreset(presetId = DEFAULT_WORKSPACE_ID) {
+export function resolveWorkspacePreset(presetId: any = DEFAULT_WORKSPACE_ID) {
   const id = normalizePresetId(presetId);
   if (id === 'project') return BUILTIN_PROJECT;
   return {
@@ -98,7 +97,7 @@ export function resolveWorkspacePreset(presetId = DEFAULT_WORKSPACE_ID) {
 }
 
 /** 统一 preset id（兼容旧 desktop → default；保留 project） */
-export function normalizePresetId(presetId) {
+export function normalizePresetId(presetId: any) {
   const id = String(presetId || DEFAULT_WORKSPACE_ID).trim() || DEFAULT_WORKSPACE_ID;
   if (id === 'project') return 'project';
   return normalizeWorkspaceId(id);
@@ -108,7 +107,7 @@ export function normalizePresetId(presetId) {
  * 解析 ai-workflow.tools.file.workspace 为绝对路径。
  * 空 → data/ai-workspace/{defaultId}；agent:xxx → 对应 preset；project → 项目根
  */
-export function resolveConfiguredWorkspace(raw) {
+export function resolveConfiguredWorkspace(raw: any) {
   if (raw == null || String(raw).trim() === '') {
     return ensureAgentWorkspaceSync(getConfiguredDefaultWorkspaceId());
   }
@@ -133,7 +132,7 @@ export function listWorkspacePresets() {
   return [...agentPresets, { ...BUILTIN_PROJECT }];
 }
 
-export function resolvePresetOrThrow(presetId) {
+export function resolvePresetOrThrow(presetId: any) {
   const id = normalizePresetId(presetId);
   if (id === 'project') return { ...BUILTIN_PROJECT };
   const abs = getAgentWorkspaceAbs(id);
@@ -143,19 +142,19 @@ export function resolvePresetOrThrow(presetId) {
   return resolveWorkspacePreset(id);
 }
 
-function presetFileContext(presetId) {
+function presetFileContext(presetId: any) {
   resolvePresetOrThrow(presetId);
   return parseRequestWorkspace({ workspace: { id: presetId } });
 }
 
-export async function listPresetFiles(presetId, { subdir = '', limit = 120 } = {}) {
+export async function listPresetFiles(presetId: any, { subdir = '', limit = 120 }: any = {}) {
   const ctx = presetFileContext(presetId);
   try {
     const result = listWorkspaceFiles(ctx.fileRootAbs, subdir);
     const cap = Math.min(200, Math.max(1, Number(limit) || 120));
     if (result.files.length > cap) result.files = result.files.slice(0, cap);
     return result;
-  } catch (err) {
+  } catch (err: any) {
     return {
       root: ctx.fileRootAbs,
       dir: String(subdir || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, ''),
@@ -165,23 +164,23 @@ export async function listPresetFiles(presetId, { subdir = '', limit = 120 } = {
   }
 }
 
-export async function readPresetAgents(presetId) {
+export async function readPresetAgents(presetId: any) {
   const ctx = presetFileContext(presetId);
   return readWorkspaceAgents(ctx.agentRootAbs);
 }
 
-export async function writePresetAgents(presetId, content) {
+export async function writePresetAgents(presetId: any, content: any) {
   const ctx = presetFileContext(presetId);
   return writeWorkspaceAgents(ctx.agentRootAbs, content);
 }
 
-export async function resolvePresetDownload(presetId, filePath) {
+export async function resolvePresetDownload(presetId: any, filePath: any) {
   const ctx = presetFileContext(presetId);
   const { abs, name } = openWorkspaceFileDownload(ctx.fileRootAbs, filePath);
   return { abs, basename: name };
 }
 
-export function parseRequestWorkspace(body = {}) {
+export function parseRequestWorkspace(body: any = {}) {
   const ws = body?.workspace && typeof body.workspace === 'object' ? body.workspace : {};
   const presetId = normalizePresetId(ws.id || ws.preset || getConfiguredDefaultWorkspaceId());
   const projectRoot = getProjectRoot();
@@ -214,7 +213,7 @@ export function parseRequestWorkspace(body = {}) {
 }
 
 /** 请求级工作区：prompt 注入与文件 cwd 使用同一 data/ai-workspace 目录 */
-export function buildAiWorkflowCfgForAgentRoot(aiWorkflowCfg = {}, agentRootAbs) {
+export function buildAiWorkflowCfgForAgentRoot(aiWorkflowCfg: any = {}, agentRootAbs: any) {
   if (!agentRootAbs) return aiWorkflowCfg || {};
   const projectRoot = getProjectRoot();
   let rel = '';
@@ -233,10 +232,10 @@ export function buildAiWorkflowCfgForAgentRoot(aiWorkflowCfg = {}, agentRootAbs)
   };
 }
 
-export function applyRequestWorkspaceToStreams(AiWorkflowLoader, fileWorkspaceAbs) {
+export function applyRequestWorkspaceToStreams(AiWorkflowLoader: any, fileWorkspaceAbs: any) {
   if (!fileWorkspaceAbs || !AiWorkflowLoader?.getWorkflow) return () => {};
 
-  const snapshots = [];
+  const snapshots: any[] = [];
   for (const name of ['tools', 'desktop']) {
     const stream = AiWorkflowLoader.getWorkflow(name);
     if (!stream) continue;
@@ -259,7 +258,7 @@ export function applyRequestWorkspaceToStreams(AiWorkflowLoader, fileWorkspaceAb
   };
 }
 
-function resolveDirUnderRoot(rootAbs, dirRel = '') {
+function resolveDirUnderRoot(rootAbs: any, dirRel: any = '') {
   const rootReal = realpathSyncOrResolve(rootAbs);
   const target = path.resolve(rootReal, String(dirRel || '').replace(/\\/g, '/'));
   const targetReal = realpathSyncOrResolve(target);
@@ -269,12 +268,12 @@ function resolveDirUnderRoot(rootAbs, dirRel = '') {
   return targetReal;
 }
 
-export function listWorkspaceFiles(fileRootAbs, dirRel = '') {
+export function listWorkspaceFiles(fileRootAbs: any, dirRel: any = '') {
   const dirAbs = resolveDirUnderRoot(fileRootAbs, dirRel);
   let entries;
   try {
     entries = fs.readdirSync(dirAbs, { withFileTypes: true });
-  } catch (err) {
+  } catch (err: any) {
     throw new Error(err?.message || '无法读取目录');
   }
 
@@ -296,7 +295,7 @@ export function listWorkspaceFiles(fileRootAbs, dirRel = '') {
       return null;
     })
     .filter(Boolean)
-    .sort((a, b) => {
+    .sort((a: any, b: any) => {
       if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
       return a.name.localeCompare(b.name, 'zh-CN');
     });
@@ -304,7 +303,7 @@ export function listWorkspaceFiles(fileRootAbs, dirRel = '') {
   return { root: fileRootAbs, dir: relBase, files };
 }
 
-function resolveFileUnderRoot(fileRootAbs, relPath = '') {
+function resolveFileUnderRoot(fileRootAbs: any, relPath: any = '') {
   const rootReal = realpathSyncOrResolve(fileRootAbs);
   const abs = path.resolve(rootReal, String(relPath || '').replace(/\\/g, '/'));
   const fileReal = realpathSyncOrResolve(abs);
@@ -314,7 +313,7 @@ function resolveFileUnderRoot(fileRootAbs, relPath = '') {
   return fileReal;
 }
 
-export function readWorkspaceAgents(agentRootAbs) {
+export function readWorkspaceAgents(agentRootAbs: any) {
   seedWorkspaceFromBundle(agentRootAbs);
   for (const rel of getAgentsReadCandidates()) {
     const abs = path.join(agentRootAbs, rel);
@@ -326,7 +325,7 @@ export function readWorkspaceAgents(agentRootAbs) {
   return { path: getAgentsWriteRel(), content: '' };
 }
 
-export function writeWorkspaceAgents(agentRootAbs, content = '') {
+export function writeWorkspaceAgents(agentRootAbs: any, content: any = '') {
   const rel = getAgentsWriteRel();
   const abs = path.join(agentRootAbs, rel);
   const rootReal = realpathSyncOrResolve(agentRootAbs);
@@ -339,14 +338,14 @@ export function writeWorkspaceAgents(agentRootAbs, content = '') {
   return { path: rel };
 }
 
-export function openWorkspaceFileDownload(fileRootAbs, relPath) {
+export function openWorkspaceFileDownload(fileRootAbs: any, relPath: any) {
   const fileReal = resolveFileUnderRoot(fileRootAbs, relPath);
   const st = fs.statSync(fileReal);
   if (!st.isFile()) throw new Error('不是文件');
   return { abs: fileReal, name: path.basename(fileReal) };
 }
 
-export function sanitizeWorkspaceUploadName(name) {
+export function sanitizeWorkspaceUploadName(name: any) {
   const base = path.basename(String(name || 'file').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_'));
   return base.slice(0, 200) || 'file';
 }

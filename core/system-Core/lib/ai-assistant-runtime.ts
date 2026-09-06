@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * AI 助手运行时 — 走 AGT workflow.process（严格 mergeWorkflows）
  */
@@ -13,7 +12,7 @@ const cooldownState = new Map();
 
 function resolveAiConfigInstance() {
   try {
-    const cm = typeof CommonConfigRegistry !== 'undefined' ? CommonConfigRegistry : null;
+    const cm = typeof (globalThis as any).CommonConfigRegistry !== 'undefined' ? (globalThis as any).CommonConfigRegistry : null;
     if (!cm?.get) return null;
     const direct = cm.get('ai_config') || cm.get('system-Core/ai_config');
     if (direct) return direct;
@@ -26,17 +25,17 @@ function resolveAiConfigInstance() {
   return null;
 }
 
-function findGroupOverride(config, groupId) {
+function findGroupOverride(config: any, groupId: any) {
   const gid = String(groupId ?? '');
   if (!gid || !Array.isArray(config?.groupOverrides)) return null;
-  return config.groupOverrides.find((row) => String(row?.groupId ?? '') === gid) || null;
+  return config.groupOverrides.find((row: any) => String(row?.groupId ?? '') === gid) || null;
 }
 
 /**
  * 全局默认 + 群覆盖。
  * 有群覆盖行时 mergeWorkflows 整表替换；llmProvider/prefixes/chance/cooldown/enabled 有值才盖。
  */
-export function resolveEffectiveAiConfig(e, config) {
+export function resolveEffectiveAiConfig(e: any, config: any) {
   const base = config && typeof config === 'object' ? config : {};
   const effective = {
     ...base,
@@ -68,7 +67,7 @@ export function resolveEffectiveAiConfig(e, config) {
   return effective;
 }
 
-export function messageMatchesAiPrefix(msg, prefixes) {
+export function messageMatchesAiPrefix(msg: any, prefixes: any) {
   const text = String(msg ?? '');
   if (!text) return false;
   for (const p of normalizeStringArray(prefixes)) {
@@ -85,7 +84,7 @@ export async function loadAiAssistantConfig() {
   return new AIConfig().read(true);
 }
 
-export function stripAiFullPromptDumpMark(raw) {
+export function stripAiFullPromptDumpMark(raw: any) {
   if (raw == null || typeof raw !== 'string') return '';
   return raw
     .replace(AI_FULL_PROMPT_DUMP_REGEX, '')
@@ -93,17 +92,17 @@ export function stripAiFullPromptDumpMark(raw) {
     .trim();
 }
 
-export function rawMessageTextForAiTrigger(e) {
+export function rawMessageTextForAiTrigger(e: any) {
   if (e?.msg != null && String(e.msg).trim() !== '') return String(e.msg);
   if (!Array.isArray(e?.message)) return '';
   return flattenMessageSegs(e.message).map((seg) => (seg?.type === 'text' ? segText(seg) : '')).join('');
 }
 
-export function resolveChatStream(plugin) {
+export function resolveChatStream(plugin: any) {
   return plugin.getWorkflow?.('chat') || AiWorkflowLoader.getWorkflow?.('chat') || null;
 }
 
-export function isInAiWhitelist(e, config) {
+export function isInAiWhitelist(e: any, config: any) {
   if (!config) return false;
   if (e.isGroup) {
     const groups = config.groups;
@@ -115,7 +114,7 @@ export function isInAiWhitelist(e, config) {
   return users.some((u) => String(u) === String(e.user_id));
 }
 
-export async function shouldTriggerAI(e, config) {
+export async function shouldTriggerAI(e: any, config: any) {
   if (!config) return false;
   const effective = resolveEffectiveAiConfig(e, config);
   if (effective.enabled === false) return false;
@@ -137,9 +136,9 @@ export async function shouldTriggerAI(e, config) {
   return false;
 }
 
-function replyTargetIdFromEvent(e) {
+function replyTargetIdFromEvent(e: any) {
   const seg = Array.isArray(e?.message)
-    ? e.message.find((s) => s && s.type === 'reply')
+    ? e.message.find((s: any) => s && s.type === 'reply')
     : null;
   const fromSeg = segReplyId(seg);
   if (fromSeg) return fromSeg;
@@ -147,7 +146,7 @@ function replyTargetIdFromEvent(e) {
   return fromSource != null && String(fromSource).trim() !== '' ? String(fromSource).trim() : null;
 }
 
-function summarizeReplyRaw(reply) {
+function summarizeReplyRaw(reply: any) {
   if (!reply) return '';
   if (reply.raw_message) return String(reply.raw_message).replace(/\s+/g, ' ').trim();
   if (!Array.isArray(reply.message)) return '';
@@ -165,7 +164,7 @@ function summarizeReplyRaw(reply) {
     .trim();
 }
 
-export async function processMessageContent(e) {
+export async function processMessageContent(e: any) {
   const fallback = e.msg || '';
   const message = e.message;
   if (!Array.isArray(message)) return stripAiFullPromptDumpMark(String(fallback));
@@ -199,27 +198,27 @@ export async function processMessageContent(e) {
       else if (seg.type === 'face') content += '[表情] ';
     }
     return stripAiFullPromptDumpMark(content.trim());
-  } catch (err) {
-    logger.error(`[XRK-AI] processMessageContent: ${err.message}`);
+  } catch (err: any) {
+    (globalThis as any).logger.error(`[XRK-AI] processMessageContent: ${err.message}`);
     return stripAiFullPromptDumpMark(String(fallback));
   }
 }
 
-export async function runChatAgent(plugin, e, {
+export async function runChatAgent(plugin: any, e: any, {
   text,
   persona = '',
   config,
   isGlobalTrigger = false,
   debugDumpFullPrompt = false,
-} = {}) {
+}: any = {}) {
   const stream = resolveChatStream(plugin);
   if (!stream) {
-    logger.error('[XRK-AI] chat 工作流未加载');
+    (globalThis as any).logger.error('[XRK-AI] chat 工作流未加载');
     return false;
   }
 
   const effective = resolveEffectiveAiConfig(e, config);
-  const options = {
+  const options: any = {
     mergeWorkflows: normalizeStringArray(effective.mergeWorkflows),
   };
   if (effective.llmProvider) {
@@ -234,7 +233,7 @@ export async function runChatAgent(plugin, e, {
   return true;
 }
 
-export async function handleClearConversation(e) {
+export async function handleClearConversation(e: any) {
   const historyKey = ChatStream.getEventHistoryKey(e) ?? String(e.group_id || e.user_id);
   const result = await ChatStream.clearConversation(historyKey, { e });
   if (result.success) {
@@ -247,11 +246,11 @@ export async function handleClearConversation(e) {
   return true;
 }
 
-export function logAiInit(config) {
+export function logAiInit(config: any) {
   const prefixes = normalizeStringArray(config?.prefixes);
   const overrides = Array.isArray(config?.groupOverrides) ? config.groupOverrides.length : 0;
   const provider = config?.llmProvider != null ? String(config.llmProvider).trim() : '';
-  logger.mark(
+  (globalThis as any).logger.mark(
     `[XRK-AI] 就绪 · 群 ${config.groups?.length || 0} · 用户 ${config.users?.length || 0}`
     + ` · 前缀[${prefixes.join(',') || '无'}] · 群覆盖 ${overrides}`
     + ` · llm=${provider || 'ai-workflow'} · merge=[${normalizeStringArray(config?.mergeWorkflows).join(',')}]`

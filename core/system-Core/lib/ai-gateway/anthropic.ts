@@ -1,11 +1,10 @@
-// @ts-nocheck
 /**
  * Anthropic Messages ↔ 内部 OpenAI Chat Completions 形态。
  * @see https://docs.anthropic.com/en/api/messages
  */
 import { initGatewaySSE, writeNamedSSE } from './sse.js';
 
-function anthropicContentToOpenAI(content) {
+function anthropicContentToOpenAI(content: any) {
   if (content == null) return '';
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return String(content);
@@ -47,13 +46,13 @@ function anthropicContentToOpenAI(content) {
   return parts;
 }
 
-export function anthropicMessagesToOpenAIBody(body = {}) {
+export function anthropicMessagesToOpenAIBody(body: any = {}) {
   const messages = [];
   if (body.system != null) {
     const sys = typeof body.system === 'string'
       ? body.system
       : Array.isArray(body.system)
-        ? body.system.map((b) => (typeof b === 'string' ? b : b?.text || '')).join('\n')
+        ? body.system.map((b: any) => (typeof b === 'string' ? b : b?.text || '')).join('\n')
         : String(body.system);
     if (sys.trim()) messages.push({ role: 'system', content: sys });
   }
@@ -66,7 +65,7 @@ export function anthropicMessagesToOpenAIBody(body = {}) {
     });
   }
 
-  const out = {
+  const out: any = {
     model: body.model,
     messages,
     stream: Boolean(body.stream),
@@ -77,7 +76,7 @@ export function anthropicMessagesToOpenAIBody(body = {}) {
   };
 
   if (Array.isArray(body.tools) && body.tools.length) {
-    out.tools = body.tools.map((t) => {
+    out.tools = body.tools.map((t: any) => {
       if (t?.type === 'function' && t.function) return t;
       return {
         type: 'function',
@@ -95,14 +94,14 @@ export function anthropicMessagesToOpenAIBody(body = {}) {
   return out;
 }
 
-function mapFinishReason(reason) {
+function mapFinishReason(reason: any) {
   const r = String(reason || 'stop').toLowerCase();
   if (r === 'length') return 'max_tokens';
   if (r === 'tool_calls' || r === 'function_call') return 'tool_use';
   return 'end_turn';
 }
 
-export function openAIChatToAnthropicMessage(completion, { model } = {}) {
+export function openAIChatToAnthropicMessage(completion: any, { model }: any = {}) {
   const choice = completion?.choices?.[0];
   const text = choice?.message?.content ?? '';
   const usage = completion?.usage || {};
@@ -123,14 +122,14 @@ export function openAIChatToAnthropicMessage(completion, { model } = {}) {
 
 export const initAnthropicMessageSSE = initGatewaySSE;
 
-export async function pipeAnthropicMessagesStream(res, {
+export async function pipeAnthropicMessagesStream(res: any, {
   client,
   messages,
   overrides,
   id,
   model,
-  runWrapped = (run) => run()
-}) {
+  runWrapped = (run: any) => run()
+}: any) {
   writeNamedSSE(res, 'message_start', {
     type: 'message_start',
     message: {
@@ -152,7 +151,7 @@ export async function pipeAnthropicMessagesStream(res, {
 
   let total = '';
   await runWrapped(async () => {
-    await client.chatStream(messages, (delta) => {
+    await client.chatStream(messages, (delta: any) => {
       if (typeof delta !== 'string' || !delta) return;
       total += delta;
       writeNamedSSE(res, 'content_block_delta', {

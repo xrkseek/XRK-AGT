@@ -1,5 +1,5 @@
-// @ts-nocheck
 import os from 'os'
+import PluginBase from '#infrastructure/plugins/plugin-base.js'
 import moment from 'moment'
 import * as si from 'systeminformation'
 import runtimeConfig from '#infrastructure/config/config.js'
@@ -16,6 +16,7 @@ let showProcessInfo = true
 let showDiskInfo = true
 
 export class stattools extends PluginBase {
+  [key: string]: any;
   constructor() {
     super({
       name: 'System Status',
@@ -38,7 +39,7 @@ export class stattools extends PluginBase {
     showDiskInfo = statusCfg.showDisk !== false
   }
 
-  formatFileSize(bytes) {
+  formatFileSize(bytes: any) {
     if (!bytes || bytes === 0) return '0B'
     const units = ['B', 'KB', 'MB', 'GB', 'TB']
     let index = 0
@@ -50,7 +51,7 @@ export class stattools extends PluginBase {
     return `${size.toFixed(2)}${units[index]}`
   }
 
-  formatTime(seconds) {
+  formatTime(seconds: any) {
     const days = Math.floor(seconds / 86400)
     const hours = Math.floor((seconds % 86400) / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
@@ -65,7 +66,7 @@ export class stattools extends PluginBase {
     return result.length ? result.join('') : '0秒'
   }
 
-  async status(e) {
+  async status(e: any) {
     try {
       const [
         cpu,
@@ -87,7 +88,7 @@ export class stattools extends PluginBase {
         si.networkInterfaces().catch(() => [])
       ])
 
-      const bot = (globalThis.AgentRuntime && (AgentRuntime[e.self_id] || AgentRuntime)) || {}
+      const bot = ((globalThis as any).AgentRuntime && ((globalThis as any).AgentRuntime[e.self_id] || (globalThis as any).AgentRuntime)) || {}
       const startTime = bot.stat?.start_time
       const runtimeSeconds = typeof startTime === 'number'
         ? Math.floor(Date.now() / 1000 - startTime)
@@ -101,7 +102,7 @@ export class stattools extends PluginBase {
       const nodeVersion = process.version
       
       const mainDisk = disks[0]
-      const activeNetwork = networkInterfaces.find(net => net.default) || networkInterfaces[0]
+      const activeNetwork = networkInterfaces.find((net: any) => net.default) || networkInterfaces[0]
       
       const cpuLoad = Number(cpuLoadPct).toFixed(1)
       const memUsage = mem.total > 0 ? ((mem.used / mem.total) * 100).toFixed(1) : '0.0'
@@ -149,7 +150,7 @@ export class stattools extends PluginBase {
           `  阻塞：${processes.blocked}个`,
           ''
         ] : [],
-        `● AgentRuntime信息`,
+        `● (globalThis as any).AgentRuntime信息`,
         `  昵称：${bot.nickname || '未知'}`,
         `  账号：${bot.uin || e.self_id}`,
         `  运行时长：${botRuntime}`,
@@ -170,8 +171,8 @@ export class stattools extends PluginBase {
 
       await e.reply(msg.join('\n'))
       return true
-    } catch (error) {
-      logger.error(`获取系统状态失败: ${error.message}`)
+    } catch (error: any) {
+      (globalThis as any).logger.error(`获取系统状态失败: ${error.message}`)
       await e.reply('获取系统状态失败')
       return false
     }
