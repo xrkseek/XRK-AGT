@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * 更新 — 对齐 Yunzai/TRSS「全部更新」习惯：
  * - #强制更新[ Core]：fetch --all → reset --hard @{upstream} → pull --ff-only
@@ -6,6 +5,7 @@
  * - 静默 / 定时：跳过「开始」「已是最新」；有更新或失败才说话（群/主人）
  */
 import fs from 'node:fs';
+import PluginBase from '#infrastructure/plugins/plugin-base.js';
 import path from 'node:path';
 import lodash from 'lodash';
 import common from '#utils/common.js';
@@ -27,7 +27,7 @@ function autoUpdateCfg() {
   return runtimeConfig.agt?.autoUpdate || {};
 }
 
-function cronList(cfg) {
+function cronList(cfg: any) {
   const raw = cfg.cron;
   const list = Array.isArray(raw)
     ? raw
@@ -38,6 +38,7 @@ function cronList(cfg) {
 }
 
 export class update extends PluginBase {
+  [key: string]: any;
   constructor() {
     super({
       name: '更新',
@@ -74,17 +75,17 @@ export class update extends PluginBase {
       fnc: () => this.scheduledUpdateAll(),
       log: false,
     }));
-    this.task = tasks.length === 1 ? tasks[0] : tasks;
+    this.task = (tasks.length === 1 ? tasks[0] : tasks) as any;
   }
 
   /** @returns {ForceMode} */
-  _forceModeFromMsg(msg = '') {
+  _forceModeFromMsg(msg: any = '') {
     if (/^#强制更新/.test(msg)) return 'hard';
     if (/全部强制更新/.test(msg)) return 'onConflict';
     return 'none';
   }
 
-  async _git(cmd, cwd) {
+  async _git(cmd: any, cwd: any) {
     try {
       const { stdout, stderr } = await exec(cmd, {
         cwd,
@@ -98,7 +99,7 @@ export class update extends PluginBase {
         stdout: String(stdout || ''),
         stderr: String(stderr || ''),
       };
-    } catch (err) {
+    } catch (err: any) {
       return {
         ok: false,
         error: err,
@@ -109,12 +110,12 @@ export class update extends PluginBase {
     }
   }
 
-  _isConflict(ret) {
+  _isConflict(ret: any) {
     const blob = `${ret.message || ''}\n${ret.stdout || ''}\n${ret.stderr || ''}`;
     return CONFLICT_RE.test(blob);
   }
 
-  async _resolveUpstreamRef(cwd) {
+  async _resolveUpstreamRef(cwd: any) {
     const upstream = await this._git(
       'git rev-parse --abbrev-ref --symbolic-full-name @{u}',
       cwd
@@ -129,12 +130,12 @@ export class update extends PluginBase {
     return 'origin/main';
   }
 
-  async _fetchAll(cwd) {
+  async _fetchAll(cwd: any) {
     return this._git('git fetch --all --prune', cwd);
   }
 
   /** 强制：fetch → reset --hard @{upstream} → ff-only pull */
-  async _hardSync(cwd) {
+  async _hardSync(cwd: any) {
     const fetchRet = await this._fetchAll(cwd);
     if (!fetchRet.ok) return fetchRet;
     const upstream = await this._resolveUpstreamRef(cwd);
@@ -144,7 +145,7 @@ export class update extends PluginBase {
   }
 
   /** 普通：先 fetch 再 pull */
-  async _softPull(cwd) {
+  async _softPull(cwd: any) {
     const fetchRet = await this._fetchAll(cwd);
     if (!fetchRet.ok) return fetchRet;
     return this._git('git pull --no-rebase', cwd);
@@ -178,8 +179,8 @@ export class update extends PluginBase {
         isUp = !!result.updated;
       }
       this._scheduleRestartIfUpdated(isUp);
-    } catch (error) {
-      logger.error(`更新失败: ${error.message}`, error);
+    } catch (error: any) {
+      (globalThis as any).logger.error(`更新失败: ${error.message}`, error);
       await this.reply(`更新失败: ${error.message}`);
       return false;
     } finally {
@@ -193,14 +194,14 @@ export class update extends PluginBase {
    * @param {{ forceMode?: ForceMode, muteStart?: boolean, quiet?: boolean }} [opts]
    * @returns {Promise<{ updated: boolean, status: string, lines: string[] }>}
    */
-  async runUpdate(coreName = '', opts = {}) {
+  async runUpdate(coreName: any = '', opts: any = {}) {
     const forceMode =
       opts.forceMode ?? this._forceModeFromMsg(this.e?.msg || '');
     const isProjectUpdate = !coreName;
     const targetPath = isProjectUpdate ? '.' : path.join('core', coreName);
     const targetDisplayName = isProjectUpdate ? 'XRK-AGT 项目' : coreName;
-    const lines = [];
-    const reply = async (msg) => {
+    const lines: any[] = [];
+    const reply = async (msg: any) => {
       lines.push(msg);
       if (this.reply) await this.reply(msg);
     };
@@ -210,7 +211,7 @@ export class update extends PluginBase {
     if (forceMode === 'hard') {
       if (!opts.muteStart) await reply(`开始强制更新 ${targetDisplayName}`);
       if (!opts.quiet)
-        logger.mark(
+        (globalThis as any).logger.mark(
           `${this.e?.logFnc || '[更新]'} 强制更新：${targetDisplayName}`
         );
       const ret = await this._hardSync(targetPath);
@@ -227,13 +228,13 @@ export class update extends PluginBase {
 
     if (!opts.muteStart) await reply(`开始更新 ${targetDisplayName}`);
     if (!opts.quiet)
-      logger.mark(`${this.e?.logFnc || '[更新]'} 更新：${targetDisplayName}`);
+      (globalThis as any).logger.mark(`${this.e?.logFnc || '[更新]'} 更新：${targetDisplayName}`);
     let ret = await this._softPull(targetPath);
 
     if (!ret.ok && forceMode === 'onConflict' && this._isConflict(ret)) {
       await reply(`${targetDisplayName} 拉取冲突，改为强制更新…`);
       if (!opts.quiet)
-        logger.mark(
+        (globalThis as any).logger.mark(
           `${this.e?.logFnc || '[更新]'} 冲突后强制：${targetDisplayName}`
         );
       ret = await this._hardSync(targetPath);
@@ -268,7 +269,7 @@ export class update extends PluginBase {
     });
   }
 
-  async _finishUpdate(ret, ctx) {
+  async _finishUpdate(ret: any, ctx: any) {
     const {
       targetPath,
       targetDisplayName,
@@ -305,18 +306,18 @@ export class update extends PluginBase {
     );
     if (updateLog) await reply(updateLog);
     if (!quiet)
-      logger.mark(
+      (globalThis as any).logger.mark(
         `${this.e?.logFnc || '[更新]'} ${tag}：${targetDisplayName} @ ${time}`
       );
     return { updated: true, status: forced ? 'forced' : 'updated', lines };
   }
 
-  async getCommitId(cwd = '.') {
+  async getCommitId(cwd: any = '.') {
     const ret = await this._git('git rev-parse --short HEAD', cwd);
     return ret.ok ? lodash.trim(ret.stdout) : 'unknown';
   }
 
-  async getTime(cwd = '.') {
+  async getTime(cwd: any = '.') {
     const ret = await this._git(
       'git log -1 --pretty=%cd --date=format:"%F %T"',
       cwd
@@ -324,7 +325,7 @@ export class update extends PluginBase {
     return ret.ok ? lodash.trim(ret.stdout) || '获取时间失败' : '获取时间失败';
   }
 
-  async handleGitError(err, stdout) {
+  async handleGitError(err: any, stdout: any) {
     const msg = '更新失败！';
     const errMsg = err?.message || String(err);
     const stdoutStr = String(stdout || '');
@@ -351,13 +352,13 @@ export class update extends PluginBase {
     await this.reply?.(`${msg}\n${errMsg}${stdoutStr ? `\n${stdoutStr}` : ''}`);
   }
 
-  extractRemoteUrl(str) {
+  extractRemoteUrl(str: any) {
     return (
       (str.match(/'([^']+)'/g) || []).pop()?.replace(/'/g, '') || '未知地址'
     );
   }
 
-  isValidGitCore(coreName) {
+  isValidGitCore(coreName: any) {
     if (!coreName) return false;
     const corePath = path.join('core', coreName);
     return (
@@ -370,7 +371,7 @@ export class update extends PluginBase {
   /**
    * @param {{ forceMode?: ForceMode, silent?: boolean, fromSchedule?: boolean }} [opts]
    */
-  async updateAll(opts = {}) {
+  async updateAll(opts: any = {}) {
     if (this.e && !this.e.isMaster) return false;
     if (uping) {
       await this.reply?.('已有命令更新中..请勿重复操作');
@@ -394,7 +395,7 @@ export class update extends PluginBase {
     const collected = [];
     const originalReply = this.reply?.bind(this);
     if (isSilent) {
-      this.reply = async (message) => {
+      this.reply = async (message: any) => {
         collected.push(message);
       };
     } else if (forceMode === 'onConflict') {
@@ -403,7 +404,7 @@ export class update extends PluginBase {
 
     uping = true;
     let isUp = false;
-    const summary = { updated: [], latest: [], forced: [], failed: [] };
+    const summary = { updated: [] as any[], latest: [] as any[], forced: [] as any[], failed: [] as any[] };
 
     try {
       const coreDir = path.join('.', 'core');
@@ -436,8 +437,8 @@ export class update extends PluginBase {
       else if (root.status === 'latest') summary.latest.push(rootLabel);
       else if (root.status === 'failed') summary.failed.push(rootLabel);
       else if (root.status === 'forced') summary.forced.push(rootLabel);
-    } catch (error) {
-      logger.error(`全部更新失败: ${error.message}`, error);
+    } catch (error: any) {
+      (globalThis as any).logger.error(`全部更新失败: ${error.message}`, error);
       collected.push(`更新过程中出错: ${error.message}`);
       summary.failed.push('(过程异常)');
       if (!isSilent) await this.reply?.(`更新过程中出错: ${error.message}`);
@@ -476,7 +477,7 @@ export class update extends PluginBase {
     return true;
   }
 
-  _formatSummary(summary, forceMode, opts = {}) {
+  _formatSummary(summary: any, forceMode: any, opts: any = {}) {
     const modeHint =
       forceMode === 'hard'
         ? '模式：硬强制'
@@ -507,23 +508,23 @@ export class update extends PluginBase {
     };
     try {
       await this.updateAll({ silent: true, fromSchedule: true });
-    } catch (err) {
-      logger.error(`[更新] 定时更新失败: ${err?.message || err}`, err);
+    } catch (err: any) {
+      (globalThis as any).logger.error(`[更新] 定时更新失败: ${err?.message || err}`, err);
     }
   }
 
-  async notifyMasters(messages, title = '更新汇总') {
+  async notifyMasters(messages: any, title: any = '更新汇总') {
     const masters = (runtimeConfig.masterQQ || [])
       .map((q) => String(q))
       .filter(Boolean);
     const botIds = (
-      Array.isArray(AgentRuntime.uin) ? [...AgentRuntime.uin] : []
+      Array.isArray((globalThis as any).AgentRuntime.uin) ? [...(globalThis as any).AgentRuntime.uin] : []
     )
       .map(String)
       .filter((id) => id && id !== 'stdin');
     if (!masters.length || !botIds.length) return;
 
-    const flat = messages.flatMap((m) => {
+    const flat = messages.flatMap((m: any) => {
       if (m == null) return [];
       if (typeof m === 'string' || typeof m === 'number') return [String(m)];
       return [m];
@@ -531,7 +532,7 @@ export class update extends PluginBase {
     if (!flat.length) return;
 
     for (const botId of botIds) {
-      const bot = AgentRuntime[botId];
+      const bot = (globalThis as any).AgentRuntime[botId];
       if (!bot) continue;
       for (const qq of masters) {
         try {
@@ -540,15 +541,15 @@ export class update extends PluginBase {
           if (friend?.makeForwardMsg) {
             const nodes = [
               { message: title },
-              ...flat.map((message) => ({ message })),
+              ...flat.map((message: any) => ({ message })),
             ];
             payload = await friend.makeForwardMsg(nodes);
           } else {
             payload = `${title}\n\n${payload}`;
           }
-          await AgentRuntime.sendFriendMsg(botId, qq, payload);
-        } catch (err) {
-          logger.error(
+          await (globalThis as any).AgentRuntime.sendFriendMsg(botId, qq, payload);
+        } catch (err: any) {
+          (globalThis as any).logger.error(
             `[更新] 推送主人失败 ${botId}/${qq}: ${err?.message || err}`
           );
         }
@@ -556,7 +557,7 @@ export class update extends PluginBase {
     }
   }
 
-  _scheduleRestartIfUpdated(didUpdate, fromSchedule = false) {
+  _scheduleRestartIfUpdated(didUpdate: any, fromSchedule: any = false) {
     if (!didUpdate) return;
     if (fromSchedule) {
       setTimeout(() => process.exit(EXIT_RESTART), 2000);
@@ -565,7 +566,7 @@ export class update extends PluginBase {
     setTimeout(() => new Restart(this.e).restart(), 2000);
   }
 
-  async getLog(cwd = '.', displayName = '', oldCommitId = null) {
+  async getLog(cwd: any = '.', displayName: any = '', oldCommitId: any = null) {
     try {
       const ret = await this._git(
         'git log -100 --pretty="%h||[%cd] %s" --date=format:"%F %T"',
@@ -602,8 +603,8 @@ export class update extends PluginBase {
         );
       }
       return `${displayName} 更新日志，共${log.length}条\n\n${log.join('\n')}${repoUrl ? `\n\n${repoUrl}` : ''}`;
-    } catch (error) {
-      logger.error('获取更新日志失败:', error);
+    } catch (error: any) {
+      (globalThis as any).logger.error('获取更新日志失败:', error);
       return `获取更新日志失败: ${error.message}`;
     }
   }
