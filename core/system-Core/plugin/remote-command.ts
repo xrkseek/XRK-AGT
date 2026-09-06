@@ -1,5 +1,5 @@
-// @ts-nocheck
 import fs from 'fs'
+import PluginBase from '#infrastructure/plugins/plugin-base.js'
 import path from 'path'
 import YAML from 'yaml'
 import { exec } from 'node:child_process'
@@ -23,7 +23,8 @@ const ROOT_PATH = process.cwd();
  * 工具配置管理类
  */
 class ToolsConfig {
-  constructor(configPath) {
+  [key: string]: any;
+  constructor(configPath: any) {
     this.configPath = configPath;
     this.config = {};
     this.loadConfig();
@@ -52,8 +53,8 @@ class ToolsConfig {
         };
         this.saveConfig();
       }
-    } catch (error) {
-      logger.error(`[终端工具] 配置文件加载失败: ${error.message}`);
+    } catch (error: any) {
+      (globalThis as any).logger.error(`[终端工具] 配置文件加载失败: ${error.message}`);
     }
   }
 
@@ -64,16 +65,16 @@ class ToolsConfig {
         fs.mkdirSync(configDir, { recursive: true });
       }
       fs.writeFileSync(this.configPath, YAML.stringify(this.config), 'utf8');
-    } catch (error) {
-      logger.error(`[终端工具] 配置文件保存失败: ${error.message}`);
+    } catch (error: any) {
+      (globalThis as any).logger.error(`[终端工具] 配置文件保存失败: ${error.message}`);
     }
   }
 
-  get(key, defaultValue) {
+  get(key: any, defaultValue: any = undefined) {
     return key in this.config ? this.config[key] : defaultValue;
   }
 
-  set(key, value) {
+  set(key: any, value: any) {
     this.config[key] = value;
     this.saveConfig();
   }
@@ -83,17 +84,15 @@ class ToolsConfig {
  * 终端命令处理类
  */
 class TerminalHandler {
+  [key: string]: any;
   constructor() {
     if (process.platform === 'win32') {
-      this.formatPrompt = (cmd) =>
-        `powershell -EncodedCommand ${Buffer.from(
-          `$ProgressPreference="SilentlyContinue";[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;${cmd}`,
-          'utf-16le'
-        ).toBase64()}`;
-      this.formatOutput = (cmd, data) => data.replace(/\r\n/g, '\n').trim();
+      this.formatPrompt = (cmd: any) =>
+        `powershell -EncodedCommand ${(Buffer.from(`$ProgressPreference="SilentlyContinue";[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;${cmd}`, 'utf-16le') as any).toBase64()}`;
+      this.formatOutput = (cmd: any, data: any) => data.replace(/\r\n/g, '\n').trim();
     } else {
-      this.formatPrompt = (cmd) => cmd;
-      this.formatOutput = (cmd, data) => data.trim();
+      this.formatPrompt = (cmd: any) => cmd;
+      this.formatOutput = (cmd: any, data: any) => data.trim();
     }
 
     this.outputDir = path.join(ROOT_PATH, 'data', 'terminal_output');
@@ -102,7 +101,7 @@ class TerminalHandler {
     }
   }
 
-  isLongRunningCommand(cmd) {
+  isLongRunningCommand(cmd: any) {
     const longRunningPatterns = [
       /\bgit\s+clone\b/i,
       /\bgit\s+pull\b/i,
@@ -132,11 +131,11 @@ class TerminalHandler {
     return longRunningPatterns.some((pattern) => pattern.test(cmd));
   }
 
-  isGitCommand(cmd) {
+  isGitCommand(cmd: any) {
     return /\bgit\b/.test(cmd);
   }
 
-  saveOutputToFile(cmd, output) {
+  saveOutputToFile(cmd: any, output: any) {
     try {
       const timestamp = moment().format('YYYYMMDD_HHmmss');
       const sanitizedCmd = cmd.replace(/[^a-z0-9]/gi, '_').substring(0, 20);
@@ -145,13 +144,13 @@ class TerminalHandler {
 
       fs.writeFileSync(filepath, output, 'utf8');
       return filepath;
-    } catch (error) {
-      logger.error(`[终端工具] 保存输出到文件失败: ${error.message}`);
+    } catch (error: any) {
+      (globalThis as any).logger.error(`[终端工具] 保存输出到文件失败: ${error.message}`);
       return null;
     }
   }
 
-  async execute(e, cmd, options, timeout = 300000) {
+  async execute(e: any, cmd: any, options: any, timeout: any = 300000) {
     const isLongRunning = this.isLongRunningCommand(cmd);
     const isGitCmd = this.isGitCommand(cmd);
     const updateInterval = config.get('updateInterval', 3000);
@@ -176,9 +175,9 @@ class TerminalHandler {
       );
     }
 
-    return new Promise(async (resolve) => {
+    return new Promise(async (resolve: any) => {
       const startTime = Date.now();
-      const chunkedOutput = [];
+      const chunkedOutput: any[] = [];
       const command = exec(this.formatPrompt(cmd), {
         ...options,
         maxBuffer: 10 * 1024 * 1024
@@ -187,7 +186,7 @@ class TerminalHandler {
       let stdout = '';
       let stderr = '';
       let lastUpdateTime = Date.now();
-      let msgId = null;
+      let msgId: any = null;
       
       const updateOutput = async () => {
         if (Date.now() - lastUpdateTime < updateInterval) return;
@@ -209,8 +208,8 @@ class TerminalHandler {
             if (msgId) {
               try {
                 (e.isGroup ? e.group : e.friend)?.recallMsg(msgId);
-              } catch (error) {
-                logger.debug(`[终端工具] 撤回消息失败: ${error.message}`);
+              } catch (error: any) {
+                (globalThis as any).logger.debug(`[终端工具] 撤回消息失败: ${error.message}`);
               }
             }
             const msg = await 制作聊天记录(e, currentOutput.trim(), '⏳ 命令执行进行中', `${cmd} | 已执行: ${((Date.now() - startTime) / 1000).toFixed(1)}秒`);
@@ -218,26 +217,26 @@ class TerminalHandler {
             if (msg && msg.message_id) {
               msgId = msg.message_id;
             }
-          } catch (error) {
-            logger.error(`[终端工具] 更新消息错误: ${error.message}`);
+          } catch (error: any) {
+            (globalThis as any).logger.error(`[终端工具] 更新消息错误: ${error.message}`);
             try {
               const msg = await e.reply(`⏳ 命令执行进行中...\n执行时间: ${((Date.now() - startTime) / 1000).toFixed(1)}秒`, true);
               if (msg && msg.message_id) {
                 msgId = msg.message_id;
               }
-            } catch (innerError) {
-              logger.error(`[终端工具] 发送进度消息失败: ${innerError.message}`);
+            } catch (innerError: any) {
+              (globalThis as any).logger.error(`[终端工具] 发送进度消息失败: ${innerError.message}`);
             }
           }
         }
       };
 
-      command.stdout.on('data', (data) => {
+      command.stdout?.on('data', (data) => {
         stdout += data.toString();
         if (isLongRunning) updateOutput();
       });
 
-      command.stderr.on('data', (data) => {
+      command.stderr?.on('data', (data) => {
         stderr += data.toString();
         if (isLongRunning) updateOutput();
       });
@@ -255,15 +254,15 @@ class TerminalHandler {
         });
       }, timeout);
 
-      command.on('close', async (code) => {
+      command.on('close', async (code: any) => {
         clearTimeout(timer);
-        logger.debug(`命令 "${cmd}" 返回代码: ${code}`);
+        (globalThis as any).logger.debug(`命令 "${cmd}" 返回代码: ${code}`);
 
         if (isLongRunning && msgId) {
           try {
             (e.isGroup ? e.group : e.friend)?.recallMsg(msgId);
-          } catch (error) {
-            logger.debug(`[终端工具] 无法撤回消息: ${error.message}`);
+          } catch (error: any) {
+            (globalThis as any).logger.debug(`[终端工具] 无法撤回消息: ${error.message}`);
           }
         }
 
@@ -318,7 +317,8 @@ class TerminalHandler {
  * 命令历史记录管理类
  */
 class CommandHistory {
-  constructor(maxSize = 100) {
+  [key: string]: any;
+  constructor(maxSize: any = 100) {
     this.maxSize = maxSize;
     this.history = [];
     this.historyFile = path.join(ROOT_PATH, 'data', 'tools_history.json');
@@ -330,8 +330,8 @@ class CommandHistory {
       if (fs.existsSync(this.historyFile)) {
         this.history = JSON.parse(fs.readFileSync(this.historyFile, 'utf8'));
       }
-    } catch (error) {
-      logger.error(`[终端工具] 历史记录加载失败: ${error.message}`);
+    } catch (error: any) {
+      (globalThis as any).logger.error(`[终端工具] 历史记录加载失败: ${error.message}`);
       this.history = [];
     }
   }
@@ -343,12 +343,12 @@ class CommandHistory {
         fs.mkdirSync(dir, { recursive: true });
       }
       fs.writeFileSync(this.historyFile, JSON.stringify(this.history), 'utf8');
-    } catch (error) {
-      logger.error(`[终端工具] 历史记录保存失败: ${error.message}`);
+    } catch (error: any) {
+      (globalThis as any).logger.error(`[终端工具] 历史记录保存失败: ${error.message}`);
     }
   }
 
-  add(command, type, code) {
+  add(command: any, type: any, code: any) {
     this.history.unshift({
       command,
       type,
@@ -361,9 +361,9 @@ class CommandHistory {
     this.saveHistory();
   }
 
-  get(limit = 10, type = null) {
+  get(limit: any = 10, type: any = null) {
     if (type) {
-      return this.history.filter((item) => item.type === type).slice(0, limit);
+      return this.history.filter((item: any) => item.type === type).slice(0, limit);
     }
     return this.history.slice(0, limit);
   }
@@ -379,7 +379,8 @@ class CommandHistory {
  * 对象检查工具
  */
 class ObjectInspector {
-  constructor(options = {}) {
+  [key: string]: any;
+  constructor(options: any = {}) {
     this.options = {
       maxDepth: options.maxDepth || 4,
       circularDetection: options.circularDetection !== false,
@@ -392,7 +393,7 @@ class ObjectInspector {
     };
   }
 
-  inspect(obj, name = 'Object') {
+  inspect(obj: any, name: any = 'Object'): any {
     if (obj === undefined) {
       return {
         name,
@@ -422,7 +423,7 @@ class ObjectInspector {
       };
     }
 
-    const result = {
+    const result: any = {
       name,
       type: this.getType(obj),
       properties: [],
@@ -435,16 +436,16 @@ class ObjectInspector {
       result.propertyCount = result.properties.length;
       result.methodCount = result.methods.length;
 
-      result.properties.sort((a, b) => {
-        const sourceOrder = { 'own': 0, 'array': 1, 'proto': 2, 'circular': 3 };
+      result.properties.sort((a: any, b: any) => {
+        const sourceOrder: any = { 'own': 0, 'array': 1, 'proto': 2, 'circular': 3 };
         if (sourceOrder[a.from] !== sourceOrder[b.from]) {
           return sourceOrder[a.from] - sourceOrder[b.from];
         }
         return a.name.localeCompare(b.name);
       });
 
-      result.methods.sort((a, b) => {
-        const sourceOrder = { 'own': 0, 'proto': 1 };
+      result.methods.sort((a: any, b: any) => {
+        const sourceOrder: any = { 'own': 0, 'proto': 1 };
         if (sourceOrder[a.from] !== sourceOrder[b.from]) {
           return sourceOrder[a.from] - sourceOrder[b.from];
         }
@@ -452,8 +453,8 @@ class ObjectInspector {
       });
 
       return result;
-    } catch (error) {
-      logger.error(`[终端工具] 对象检查错误: ${error.stack || error.message}`);
+    } catch (error: any) {
+      (globalThis as any).logger.error(`[终端工具] 对象检查错误: ${error.stack || error.message}`);
       return {
         name,
         type: this.getType(obj),
@@ -464,7 +465,7 @@ class ObjectInspector {
     }
   }
 
-  getType(obj) {
+  getType(obj: any) {
     if (obj === null) return 'null';
     if (obj === undefined) return 'undefined';
 
@@ -477,7 +478,7 @@ class ObjectInspector {
     if (Array.isArray(obj)) return 'Array';
     if (obj instanceof Date) return 'Date';
     if (obj instanceof RegExp) return 'RegExp';
-    if (Error.isError(obj)) return obj.constructor.name;
+    if ((Error as any).isError(obj)) return obj.constructor.name;
     if (obj instanceof Map) return 'Map';
     if (obj instanceof Set) return 'Set';
     if (obj instanceof WeakMap) return 'WeakMap';
@@ -499,7 +500,7 @@ class ObjectInspector {
     return typeof obj;
   }
 
-  formatValue(value, depth = 0) {
+  formatValue(value: any, depth: any = 0): any {
     if (value === null) return 'null';
     if (value === undefined) return 'undefined';
 
@@ -528,7 +529,7 @@ class ObjectInspector {
       
       if (Array.isArray(value)) {
         if (value.length === 0) return '[]';
-        const items = value.slice(0, this.options.maxArrayItems).map((item) => {
+        const items: any = value.slice(0, this.options.maxArrayItems).map((item) => {
           return typeof item === 'object' && item !== null ? this.getType(item) : this.formatValue(item, depth + 1);
         });
         if (value.length > this.options.maxArrayItems) items.push(`...共${value.length}项`);
@@ -537,7 +538,7 @@ class ObjectInspector {
 
       if (value instanceof Date) return value.toISOString();
       if (value instanceof RegExp) return value.toString();
-      if (Error.isError(value)) return `${value.name}: ${value.message}`;
+      if ((Error as any).isError(value)) return `${value.name}: ${value.message}`;
       
       if (value instanceof Map) {
         return `Map(${value.size})`;
@@ -555,7 +556,7 @@ class ObjectInspector {
     return String(value);
   }
 
-  collectPropertiesAndMethods(obj, result, seen, depth) {
+  collectPropertiesAndMethods(obj: any, result: any, seen: any, depth: any) {
     if (depth >= this.options.maxDepth) {
       result.properties.push({
         name: '(达到最大深度)',
@@ -600,7 +601,7 @@ class ObjectInspector {
               from: 'array',
               isArrayItem: true,
             });
-          } catch (itemError) {
+          } catch (itemError: any) {
             result.properties.push({
               name: String(i),
               type: 'error',
@@ -621,10 +622,10 @@ class ObjectInspector {
         }
       }
 
-      let ownProps = [];
+      let ownProps: any[] = [];
       try {
         ownProps = Object.getOwnPropertyNames(obj);
-      } catch (error) {
+      } catch (error: any) {
         result.properties.push({
           name: '(错误)',
           type: 'error',
@@ -657,7 +658,7 @@ class ObjectInspector {
                 try {
                   const value = obj[prop];
                   accessorValue = this.formatValue(value);
-                } catch (getterError) {
+                } catch (getterError: any) {
                   accessorValue = `[访问器错误: ${getterError.message}]`;
                 }
               }
@@ -674,7 +675,7 @@ class ObjectInspector {
           let value;
           try {
             value = obj[prop];
-          } catch (accessError) {
+          } catch (accessError: any) {
             result.properties.push({
               name: prop,
               type: 'error',
@@ -701,7 +702,7 @@ class ObjectInspector {
               from: 'own',
             });
           }
-        } catch (propError) {
+        } catch (propError: any) {
           result.properties.push({
             name: prop,
             type: 'error',
@@ -715,7 +716,7 @@ class ObjectInspector {
         try {
           const proto = Object.getPrototypeOf(obj);
           if (proto && proto !== Object.prototype && proto !== Function.prototype) {
-            let protoProps = [];
+            let protoProps: any[] = [];
             try {
               protoProps = Object.getOwnPropertyNames(proto);
             } catch {
@@ -728,7 +729,7 @@ class ObjectInspector {
               try {
                 const value = proto[prop];
                 if (typeof value === 'function') {
-                  if (this.options.showFunctions && !result.methods.some((m) => m.name === prop)) {
+                  if (this.options.showFunctions && !result.methods.some((m: any) => m.name === prop)) {
                     result.methods.push({
                       name: prop,
                       params: this.extractFunctionParams(value),
@@ -746,8 +747,8 @@ class ObjectInspector {
           // 静默处理
         }
       }
-    } catch (error) {
-      logger.error(`[终端工具] 收集属性方法错误: ${error.message}`);
+    } catch (error: any) {
+      (globalThis as any).logger.error(`[终端工具] 收集属性方法错误: ${error.message}`);
       result.properties.push({
         name: '(错误)',
         type: 'error',
@@ -757,7 +758,7 @@ class ObjectInspector {
     }
   }
 
-  extractFunctionParams(func) {
+  extractFunctionParams(func: any) {
     try {
       const funcStr = func.toString();
       if (funcStr.includes('[native code]')) {
@@ -773,7 +774,7 @@ class ObjectInspector {
     }
   }
 
-  formatResult(result) {
+  formatResult(result: any) {
     if (result.error) return `错误: ${result.error}`;
 
     let output = `【${result.name} 对象详情】\n`;
@@ -782,10 +783,10 @@ class ObjectInspector {
     output += `共 ${result.methodCount || 0} 个方法, ${result.propertyCount || 0} 个属性\n\n`;
 
     if (result.properties && result.properties.length > 0) {
-      const ownProps = result.properties.filter(p => p.from === 'own' && !p.isArrayItem);
-      const arrayProps = result.properties.filter(p => p.isArrayItem);
-      const protoProps = result.properties.filter(p => p.from === 'proto');
-      const otherProps = result.properties.filter(p => !['own', 'proto'].includes(p.from) && !p.isArrayItem);
+      const ownProps = result.properties.filter((p: any) => p.from === 'own' && !p.isArrayItem);
+      const arrayProps = result.properties.filter((p: any) => p.isArrayItem);
+      const protoProps = result.properties.filter((p: any) => p.from === 'proto');
+      const otherProps = result.properties.filter((p: any) => !['own', 'proto'].includes(p.from) && !p.isArrayItem);
 
       if (arrayProps.length > 0) {
         output += `—— 数组项 (${arrayProps.length}) ——\n`;
@@ -821,7 +822,7 @@ class ObjectInspector {
     }
 
     if (result.methods && result.methods.length > 0) {
-      const ownMethods = result.methods.filter(m => m.from === 'own');
+      const ownMethods = result.methods.filter((m: any) => m.from === 'own');
       if (ownMethods.length > 0) {
         output += `—— 自有方法 (${ownMethods.length}) ——\n`;
         for (const method of ownMethods) {
@@ -831,7 +832,7 @@ class ObjectInspector {
         output += '\n';
       }
 
-      const protoMethods = result.methods.filter(m => m.from === 'proto');
+      const protoMethods = result.methods.filter((m: any) => m.from === 'proto');
       if (protoMethods.length > 0) {
         output += `—— 继承方法 (${protoMethods.length}) ——\n`;
         for (const method of protoMethods) {
@@ -849,10 +850,11 @@ class ObjectInspector {
  * 增强的JavaScript执行器
  */
 class JavaScriptExecutor {
+  [key: string]: any;
   /**
    * 格式化执行结果为字符串
    */
-  formatResult(result, depth = 0, seen = new WeakSet()) {
+  formatResult(result: any, depth: any = 0, seen: any = new WeakSet()): any {
     if (result === undefined) return 'undefined';
     if (result === null) return 'null';
     
@@ -884,7 +886,7 @@ class JavaScriptExecutor {
       if (result instanceof Promise) {
         return '[Promise]';
       }
-      if (Error.isError(result)) {
+      if ((Error as any).isError(result)) {
         return `${result.name}: ${result.message}\n${result.stack}`;
       }
       if (result instanceof Date) {
@@ -894,7 +896,7 @@ class JavaScriptExecutor {
         return result.toString();
       }
       if (Buffer.isBuffer(result)) {
-        return `Buffer(${result.length}): ${result.toHex().substring(0, 100)}...`;
+        return `Buffer(${result.length}): ${(result as any).toHex().substring(0, 100)}...`;
       }
       if (result instanceof Map) {
         const entries = Array.from(result.entries()).slice(0, 10);
@@ -904,7 +906,7 @@ class JavaScriptExecutor {
       }
       if (result instanceof Set) {
         const values = Array.from(result).slice(0, 10);
-        return `Set(${result.size}) { ${values.map(v => 
+        return `Set(${result.size}) { ${values.map((v: any) => 
           this.formatResult(v, depth + 1, seen)
         ).join(', ')}${result.size > 10 ? ', ...' : ''} }`;
       }
@@ -954,7 +956,7 @@ class JavaScriptExecutor {
   /**
    * 检测代码类型和特性
    */
-  analyzeCode(code) {
+  analyzeCode(code: any) {
     const features = {
       isExpression: false,
       isAsync: false,
@@ -998,7 +1000,7 @@ class JavaScriptExecutor {
   /**
    * 执行JavaScript代码 - 安全模式
    */
-  async executeSafe(code, globalContext) {
+  async executeSafe(code: any, globalContext: any) {
     const features = this.analyzeCode(code);
     const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
     const contextKeys = Object.keys(globalContext);
@@ -1019,7 +1021,7 @@ class JavaScriptExecutor {
           : new Function(...contextKeys, `return (${code});`);
         result = await exprFunction(...contextValues);
         return result;
-      } catch (error) {
+      } catch (error: any) {
         if (!error.message.includes('Unexpected token')) {
           throw error;
         }
@@ -1039,7 +1041,7 @@ class JavaScriptExecutor {
       
       const stmtFunction = new AsyncFunction(...contextKeys, wrappedCode);
       result = await stmtFunction(...contextValues);
-    } catch (error) {
+    } catch (error: any) {
       // 如果是返回值问题，尝试包装执行
       if (error.message.includes('return') || error.message.includes('await')) {
         try {
@@ -1049,7 +1051,7 @@ class JavaScriptExecutor {
             })();`
           );
           result = await wrappedFunction(...contextValues);
-        } catch (wrapError) {
+        } catch (wrapError: any) {
           throw wrapError;
         }
       } else {
@@ -1063,7 +1065,7 @@ class JavaScriptExecutor {
   /**
    * 执行JavaScript代码 - 增强模式
    */
-  async executeEnhanced(code, globalContext) {
+  async executeEnhanced(code: any, globalContext: any) {
     // 创建一个更宽松的执行环境
     const script = new vm.Script(`
       (async function() {
@@ -1096,7 +1098,7 @@ class JavaScriptExecutor {
         displayErrors: true
       });
       return result;
-    } catch (error) {
+    } catch (error: any) {
       throw error;
     }
   }
@@ -1104,14 +1106,14 @@ class JavaScriptExecutor {
   /**
    * 执行JavaScript代码 - 沙箱模式
    */
-  async executeSandbox(code, globalContext) {
+  async executeSandbox(code: any, globalContext: any) {
     // 创建受限的沙箱环境
     const limitedContext = {
       console: {
-        log: (...args) => args.join(' '),
-        error: (...args) => args.join(' '),
-        warn: (...args) => args.join(' '),
-        info: (...args) => args.join(' ')
+        log: (...args: any[]) => args.join(' '),
+        error: (...args: any[]) => args.join(' '),
+        warn: (...args: any[]) => args.join(' '),
+        info: (...args: any[]) => args.join(' ')
       },
       Math,
       Date,
@@ -1137,7 +1139,7 @@ class JavaScriptExecutor {
         displayErrors: true
       });
       return result;
-    } catch (error) {
+    } catch (error: any) {
       throw error;
     }
   }
@@ -1145,7 +1147,7 @@ class JavaScriptExecutor {
   /**
    * 执行JavaScript代码
    */
-  async execute(code, globalContext, mode = null) {
+  async execute(code: any, globalContext: any, mode: any = null) {
     const startTime = Date.now();
     const execMode = mode || config.get('jsExecutionMode', 'safe');
     
@@ -1176,7 +1178,7 @@ class JavaScriptExecutor {
           typeof result,
         mode: execMode
       };
-    } catch (error) {
+    } catch (error: any) {
       const executionTime = ((Date.now() - startTime) / 1000).toFixed(2);
       
       return {
@@ -1192,7 +1194,7 @@ class JavaScriptExecutor {
   /**
    * 评估表达式（快速计算）
    */
-  async evaluate(expression, globalContext = {}) {
+  async evaluate(expression: any, globalContext: any = {}) {
     const keys = Object.keys(globalContext);
     const values = keys.map((key) => globalContext[key]);
     const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
@@ -1207,7 +1209,7 @@ class JavaScriptExecutor {
         result,
         type: typeof result,
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         error: error.message,
@@ -1218,7 +1220,7 @@ class JavaScriptExecutor {
   /**
    * 异步执行代码片段
    */
-  async executeAsync(code, globalContext) {
+  async executeAsync(code: any, globalContext: any) {
     return this.execute(code, globalContext, 'enhanced');
   }
 }
@@ -1241,7 +1243,7 @@ const jsExecutor = new JavaScriptExecutor();
 
 /** rj / roj / roi 共享的 JS 沙箱静态绑定（不含 e、plugin、运行时全局） */
 const JS_SANDBOX_STATIC = {
-  AgentRuntime,
+  AgentRuntime: (globalThis as any).AgentRuntime,
   common,
   runtimeConfig,
   process,
@@ -1278,6 +1280,7 @@ const JS_SANDBOX_STATIC = {
  * 增强型终端工具插件
  */
 export class EnhancedTools extends PluginBase {
+  [key: string]: any;
   constructor() {
     const permission = config.get('permission', 'master');
     super({
@@ -1326,13 +1329,13 @@ export class EnhancedTools extends PluginBase {
   }
 
   /** 检查命令是否在黑名单中 */
-  async checkBlacklist(e, cmd) {
+  async checkBlacklist(e: any, cmd: any) {
     if (!config.get('blacklist', true)) return false;
     const banList = config.get('ban', []);
     for (const bannedCmd of banList) {
       if (cmd.includes(bannedCmd)) {
         await e.reply(`❌ 命令 "${cmd}" 包含禁用关键词 "${bannedCmd}"`, true);
-        logger.debug(`已拦截黑名单命令: ${cmd}`);
+        (globalThis as any).logger.debug(`已拦截黑名单命令: ${cmd}`);
         return true;
       }
     }
@@ -1340,7 +1343,7 @@ export class EnhancedTools extends PluginBase {
   }
 
   /** 执行终端命令（项目目录） */
-  async runTerminalXRK(e) {
+  async runTerminalXRK(e: any) {
     const msg = e.msg.replace(/^rx\s*/i, '').trim();
     if (!msg) return false;
 
@@ -1356,7 +1359,7 @@ export class EnhancedTools extends PluginBase {
       };
 
       const timeout = config.get('timeout', 300000);
-      const result = await terminal.execute(e, msg, options, timeout);
+      const result: any = await terminal.execute(e, msg, options, timeout);
 
       history.add(msg, 'terminal', result.code);
 
@@ -1366,8 +1369,8 @@ export class EnhancedTools extends PluginBase {
       } else {
         await e.reply('✅ 命令执行完成，无输出', true);
       }
-    } catch (error) {
-      logger.error(`[终端工具] 命令执行错误: ${error.stack || error.message}`);
+    } catch (error: any) {
+      (globalThis as any).logger.error(`[终端工具] 命令执行错误: ${error.stack || error.message}`);
       await e.reply(`❌ 执行错误: ${error.message}`);
     }
 
@@ -1375,7 +1378,7 @@ export class EnhancedTools extends PluginBase {
   }
 
   /** 执行终端命令（用户主目录） */
-  async runTerminalhome(e) {
+  async runTerminalhome(e: any) {
     const msg = e.msg.replace(/^rh\s*/i, '').trim();
     if (!msg) return false;
 
@@ -1392,7 +1395,7 @@ export class EnhancedTools extends PluginBase {
       };
 
       const timeout = config.get('timeout', 300000);
-      const result = await terminal.execute(e, msg, options, timeout);
+      const result: any = await terminal.execute(e, msg, options, timeout);
 
       history.add(msg, 'terminal', result.code);
 
@@ -1402,8 +1405,8 @@ export class EnhancedTools extends PluginBase {
       } else {
         await e.reply('✅ 命令执行完成，无输出', true);
       }
-    } catch (error) {
-      logger.error(`[终端工具] 命令执行错误: ${error.stack || error.message}`);
+    } catch (error: any) {
+      (globalThis as any).logger.error(`[终端工具] 命令执行错误: ${error.stack || error.message}`);
       await e.reply(`❌ 执行错误: ${error.message}`);
     }
 
@@ -1414,7 +1417,7 @@ export class EnhancedTools extends PluginBase {
    * roj - 完整JavaScript执行（支持多行代码、异步、类定义等）
    * 特点：支持复杂代码结构，完整错误栈追踪，可选执行模式
    */
-  async runJavaScript(e) {
+  async runJavaScript(e: any) {
     const code = e.msg.replace(/^roj\s*/i, '').trim();
     if (!code) {
       await e.reply(`📝 roj - 完整JavaScript执行器
@@ -1469,9 +1472,9 @@ roj const arr = [1,2,3];
           `模式: ${result.mode} | 用时: ${result.executionTime}秒`
         );
       }
-    } catch (error) {
+    } catch (error: any) {
       await e.reply(`❌ 执行错误: ${error.message}`, true);
-      logger.error(`[终端工具] JavaScript执行错误: ${error.stack || error.message}`);
+      (globalThis as any).logger.error(`[终端工具] JavaScript执行错误: ${error.stack || error.message}`);
     }
 
     return true;
@@ -1481,7 +1484,7 @@ roj const arr = [1,2,3];
    * roi - 对象深度检查（详细分析对象结构）
    * 特点：显示对象所有属性、方法、原型链，支持循环引用检测
    */
-  async inspectObject(e) {
+  async inspectObject(e: any) {
     const code = e.msg.replace(/^roi\s*/i, '').trim();
     if (!code) {
       await e.reply(`🔍 roi - 对象深度检查器
@@ -1489,7 +1492,7 @@ roj const arr = [1,2,3];
 用法：roi <对象或表达式>
 示例：
 roi e                    // 检查事件对象
-roi AgentRuntime                  // 检查AgentRuntime对象
+roi (globalThis as any).AgentRuntime                  // 检查(globalThis as any).AgentRuntime对象
 roi process.versions     // 检查版本信息
 roi new Date()          // 检查日期对象`, true);
       return true;
@@ -1501,7 +1504,7 @@ roi new Date()          // 检查日期对象`, true);
       const execResult = await jsExecutor.execute(code, globalContext);
       
       if (execResult.success) {
-        const result = inspector.inspect(execResult.result, code);
+        const result: any = inspector.inspect(execResult.result, code);
         const output = inspector.formatResult(result);
         
         // 发送对象检查结果
@@ -1526,9 +1529,9 @@ roi new Date()          // 检查日期对象`, true);
       } else {
         await e.reply(`❌ 执行错误: ${execResult.error}`, true);
       }
-    } catch (error) {
+    } catch (error: any) {
       await e.reply(`❌ 检查对象错误: ${error.message}`, true);
-      logger.error(`[终端工具] 对象检查错误: ${error.stack || error.message}`);
+      (globalThis as any).logger.error(`[终端工具] 对象检查错误: ${error.stack || error.message}`);
     }
 
     return true;
@@ -1538,7 +1541,7 @@ roi new Date()          // 检查日期对象`, true);
    * rj - 快速表达式计算（简单计算和方法调用）
    * 特点：快速执行单行表达式，自动返回结果，适合快速测试
    */
-  async quickEvaluate(e) {
+  async quickEvaluate(e: any) {
     const expression = e.msg.replace(/^rj\s*/i, '').trim();
     if (!expression) {
       await e.reply(`⚡ rj - 快速表达式计算器
@@ -1547,8 +1550,8 @@ roi new Date()          // 检查日期对象`, true);
 示例：
 rj 1 + 2 * 3                   // 数学计算
 rj Math.random()                // 调用方法
-rj AgentRuntime.uin                      // 获取属性
-rj [1,2,3].map(x => x*2)       // 数组操作
+rj (globalThis as any).AgentRuntime.uin                      // 获取属性
+rj [1,2,3].map((x: any) => x*2)       // 数组操作
 rj e.reply("Hello!")           // 发送消息`, true);
       return true;
     }
@@ -1562,7 +1565,7 @@ rj e.reply("Hello!")           // 发送消息`, true);
                                  !expression.includes('await') &&
                                  !expression.includes('async');
       
-      let result;
+      let result: any;
       if (isSimpleExpression) {
         // 使用快速计算
         result = await jsExecutor.evaluate(expression, globalContext);
@@ -1585,7 +1588,7 @@ rj e.reply("Hello!")           // 发送消息`, true);
           if (result.resultType === 'object' && result.result && typeof result.result === 'object') {
             result.resultType = result.result.constructor?.name || 'object';
           }
-        } catch (promiseErr) {
+        } catch (promiseErr: any) {
           result.success = false;
           result.error = promiseErr?.message || String(promiseErr);
         }
@@ -1624,19 +1627,19 @@ rj e.reply("Hello!")           // 发送消息`, true);
       } else {
         await e.reply(`❌ 计算错误: ${result.error}`, true);
       }
-    } catch (error) {
+    } catch (error: any) {
       await e.reply(`❌ 执行错误: ${error.message}`, true);
-      logger.error(`[终端工具] 快速计算错误: ${error.stack || error.message}`);
+      (globalThis as any).logger.error(`[终端工具] 快速计算错误: ${error.stack || error.message}`);
     }
 
     return true;
   }
 
   /** 显示历史记录 */
-  async showHistory(e) {
+  async showHistory(e: any) {
     const match = /^rrl\s*(\w*)\s*(\d*)\s*$/i.exec(e.msg);
-    const type = match[1]?.toLowerCase() || '';
-    const limit = match[2] ? parseInt(match[2]) : 10;
+    const type = match?.[1]?.toLowerCase() || '';
+    const limit = match?.[2] ? parseInt(match[2]) : 10;
 
     if (type === 'clear' || type === 'c') {
       const result = history.clear();
@@ -1686,14 +1689,14 @@ rj e.reply("Hello!")           // 发送消息`, true);
   }
 
   /** 配置工具 */
-  async configTool(e) {
+  async configTool(e: any) {
     const cmd = e.msg.replace(/^rc\s*/i, '').trim().toLowerCase();
 
     if (!cmd || cmd === 'show' || cmd === 'list') {
       const configData = config.config;
       let configText = '【工具配置】\n\n';
       
-      const configDesc = {
+      const configDesc: any = {
         permission: '权限等级',
         blacklist: '启用黑名单',
         ban: '禁用命令列表',
@@ -1728,7 +1731,7 @@ rj e.reply("Hello!")           // 发送消息`, true);
     const setMatch = /^set\s+(\w+)\s+(.+)$/i.exec(cmd);
     if (setMatch) {
       const key = setMatch[1];
-      let value = setMatch[2];
+      let value: any = setMatch[2];
 
       try {
         if (value.toLowerCase() === 'true') {
@@ -1766,7 +1769,7 @@ rj e.reply("Hello!")           // 发送消息`, true);
         config.config = {};
         config.loadConfig();
         await e.reply('✅ 配置已重置为默认值', true);
-      } catch (error) {
+      } catch (error: any) {
         await e.reply(`❌ 重置配置失败: ${error.message}`, true);
       }
       return true;
@@ -1804,7 +1807,7 @@ rc help - 显示详细帮助`, true);
   }
 
   /** 获取执行时间 */
-  getExecutionTime(result) {
+  getExecutionTime(result: any) {
     if (result.startTime && result.endTime) {
       return ((result.endTime - result.startTime) / 1000).toFixed(2);
     }
@@ -1812,11 +1815,11 @@ rc help - 显示详细帮助`, true);
   }
 
   /** 获取 rj/roj/roi 的全局上下文（每次浅拷贝，避免调用方污染静态绑定） */
-  getGlobalContext(e = null) {
+  getGlobalContext(e: any = null) {
     return {
       ...JS_SANDBOX_STATIC,
-      segment,
-      logger,
+      segment: (globalThis as any).segment ?? (globalThis as any).msgSegment,
+      logger: (globalThis as any).logger,
       e,
       plugin: this,
     }
