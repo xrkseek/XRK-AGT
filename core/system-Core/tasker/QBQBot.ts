@@ -1,34 +1,34 @@
-// @ts-nocheck
-AgentRuntime.tasker.push(
+(globalThis as any).AgentRuntime.tasker.push(
   new (class OPQBotTasker {
+  [key: string]: any;
     id = "QQ"
     name = "OPQBot"
     path = this.name
     echo = new Map()
     timeout = 60000
-    CommandId = {
+    CommandId: any = {
       FriendImage: 1,
       GroupImage: 2,
       FriendVoice: 26,
       GroupVoice: 29,
     }
 
-    sendApi(id, CgiCmd, CgiRequest) {
+    sendApi(id: any, CgiCmd: any, CgiRequest: any) {
       const ReqId = Math.round(Math.random() * 10 ** 16)
-      const request = { BotUin: String(id), CgiCmd, CgiRequest, ReqId }
-      AgentRuntime[id].ws.sendMsg(request)
+      const request: any = { BotUin: String(id), CgiCmd, CgiRequest, ReqId };
+      (globalThis as any).AgentRuntime[id].ws.sendMsg(request)
       const cache = Promise.withResolvers()
       this.echo.set(ReqId, cache)
       const timeout = setTimeout(() => {
-        cache.reject(AgentRuntime.makeError("请求超时", request, { timeout: this.timeout }))
-        AgentRuntime.makeLog("error", ["请求超时", request], id)
-        ws.terminate()
+        cache.reject((globalThis as any).AgentRuntime.makeError("请求超时", request, { timeout: this.timeout }));
+        (globalThis as any).AgentRuntime.makeLog("error", ["请求超时", request], id);
+        (globalThis as any).AgentRuntime[id].ws.terminate()
       }, this.timeout)
 
       return cache.promise
-        .then(data => {
+        .then((data: any) => {
           if (data.CgiBaseResponse?.Ret !== 0)
-            throw AgentRuntime.makeError(data.CgiBaseResponse?.ErrMsg, request, { error: data })
+            throw (globalThis as any).AgentRuntime.makeError(data.CgiBaseResponse?.ErrMsg, request, { error: data })
           return data
         })
         .finally(() => {
@@ -37,30 +37,30 @@ AgentRuntime.tasker.push(
         })
     }
 
-    makeLog(msg) {
-      return AgentRuntime.String(msg).replace(/base64:\/\/.*?"/g, 'base64://..."')
+    makeLog(msg: any) {
+      return (globalThis as any).AgentRuntime.String(msg).replace(/base64:\/\/.*?"/g, 'base64://..."')
     }
 
-    async uploadFile(id, type, file) {
-      const opts = { CommandId: this.CommandId[type] }
+    async uploadFile(id: any, type: any, file: any) {
+      const opts: any = { CommandId: this.CommandId[type] }
 
-      file = await AgentRuntime.Buffer(file, {
+      file = await (globalThis as any).AgentRuntime.Buffer(file, {
         http: true,
         size: 10485760,
       })
-      if (Buffer.isBuffer(file)) opts.Base64Buf = file.toBase64()
+      if (Buffer.isBuffer(file)) opts.Base64Buf = (file as any).toBase64()
       else if (file.match(/^https?:\/\//)) opts.FileUrl = file
       else opts.FilePath = file
 
       return (await this.sendApi(id, "PicUp.DataUp", opts)).ResponseData
     }
 
-    async sendMsg(send, upload, msg) {
+    async sendMsg(send: any, upload: any, msg: any) {
       if (!Array.isArray(msg)) msg = [msg]
-      const message = {
+      const message: any = {
         Content: "",
-        Images: [],
-        AtUinLists: [],
+        Images: [] as any[],
+        AtUinLists: [] as any[],
       }
 
       for (let i of msg) {
@@ -86,66 +86,64 @@ AgentRuntime.tasker.push(
           case "button":
             continue
           case "node":
-            await AgentRuntime.sendForwardMsg(msg => this.sendMsg(send, upload, msg), i.data)
+            await (globalThis as any).AgentRuntime.sendForwardMsg((msg: any) => this.sendMsg(send, upload, msg), i.data)
             continue
           case "raw":
-            for (const i in i.data) message[i] = i.data[i]
+            for (const k in i.data) message[k] = i.data[k]
             continue
           default:
-            message.Content += AgentRuntime.String(i)
+            message.Content += (globalThis as any).AgentRuntime.String(i)
         }
       }
 
       return send(message)
     }
 
-    sendFriendMsg(data, msg) {
-      AgentRuntime.makeLog(
+    sendFriendMsg(data: any, msg: any) {
+      (globalThis as any).AgentRuntime.makeLog(
         "info",
         `发送好友消息：${this.makeLog(msg)}`,
         `${data.self_id} => ${data.user_id}`,
         true,
       )
-      return this.sendMsg(
-        msg =>
+      return this.sendMsg((msg: any) =>
           this.sendApi(data.self_id, "MessageSvc.PbSendMsg", {
             ToUin: data.user_id,
             ToType: 1,
             ...msg,
           }),
-        (type, file) => this.uploadFile(data.self_id, `Friend${type}`, file),
+        (type: any, file: any) => this.uploadFile(data.self_id, `Friend${type}`, file),
         msg,
       )
     }
 
-    sendMemberMsg(data, msg) {
-      AgentRuntime.makeLog(
+    sendMemberMsg(data: any, msg: any) {
+      (globalThis as any).AgentRuntime.makeLog(
         "info",
         `发送群员消息：${this.makeLog(msg)}`,
         `${data.self_id} => ${data.group_id}, ${data.user_id}`,
         true,
       )
-      return this.sendMsg(
-        msg =>
+      return this.sendMsg((msg: any) =>
           this.sendApi(data.self_id, "MessageSvc.PbSendMsg", {
             ToUin: data.user_id,
             GroupCode: data.group_id,
             ToType: 3,
             ...msg,
           }),
-        (type, file) => this.uploadFile(data.self_id, `Friend${type}`, file),
+        (type: any, file: any) => this.uploadFile(data.self_id, `Friend${type}`, file),
         msg,
       )
     }
 
-    sendGroupMsg(data, msg) {
-      AgentRuntime.makeLog(
+    sendGroupMsg(data: any, msg: any) {
+      (globalThis as any).AgentRuntime.makeLog(
         "info",
         `发送群消息：${this.makeLog(msg)}`,
         `${data.self_id} => ${data.group_id}`,
         true,
       )
-      let ReplyTo
+      let ReplyTo: any
       if (data.message_id && data.seq && data.time)
         ReplyTo = {
           MsgSeq: data.seq,
@@ -153,24 +151,23 @@ AgentRuntime.tasker.push(
           MsgUid: data.message_id,
         }
 
-      return this.sendMsg(
-        msg =>
+      return this.sendMsg((msg: any) =>
           this.sendApi(data.self_id, "MessageSvc.PbSendMsg", {
             ToUin: data.group_id,
             ToType: 2,
             ReplyTo,
             ...msg,
           }),
-        (type, file) => this.uploadFile(data.self_id, `Group${type}`, file),
+        (type: any, file: any) => this.uploadFile(data.self_id, `Group${type}`, file),
         msg,
       )
     }
 
-    pickFriend(id, user_id) {
-      const i = {
-        ...AgentRuntime[id].fl.get(user_id),
+    pickFriend(id: any, user_id: any) {
+      const i: any = {
+        ...(globalThis as any).AgentRuntime[id].fl.get(user_id),
         self_id: id,
-        bot: AgentRuntime[id],
+        bot: (globalThis as any).AgentRuntime[id],
         user_id: user_id,
       }
       return {
@@ -182,11 +179,11 @@ AgentRuntime.tasker.push(
       }
     }
 
-    pickMember(id, group_id, user_id) {
-      const i = {
-        ...AgentRuntime[id].fl.get(user_id),
+    pickMember(id: any, group_id: any, user_id: any) {
+      const i: any = {
+        ...(globalThis as any).AgentRuntime[id].fl.get(user_id),
         self_id: id,
-        bot: AgentRuntime[id],
+        bot: (globalThis as any).AgentRuntime[id],
         user_id: user_id,
         group_id: group_id,
       }
@@ -197,11 +194,11 @@ AgentRuntime.tasker.push(
       }
     }
 
-    pickGroup(id, group_id) {
-      const i = {
-        ...AgentRuntime[id].gl.get(group_id),
+    pickGroup(id: any, group_id: any) {
+      const i: any = {
+        ...(globalThis as any).AgentRuntime[id].gl.get(group_id),
         self_id: id,
-        bot: AgentRuntime[id],
+        bot: (globalThis as any).AgentRuntime[id],
         group_id: group_id,
       }
       return {
@@ -214,10 +211,10 @@ AgentRuntime.tasker.push(
       }
     }
 
-    makeMessage(id, event) {
-      const data = {
+    makeMessage(id: any, event: any) {
+      const data: any = {
         event,
-        bot: AgentRuntime[id],
+        bot: (globalThis as any).AgentRuntime[id],
         self_id: id,
         post_type: "message",
         message_id: event.MsgHead.MsgUid,
@@ -228,7 +225,7 @@ AgentRuntime.tasker.push(
           user_id: event.MsgHead.SenderUin,
           nickname: event.MsgHead.SenderNick,
         },
-        message: [],
+        message: [] as any[],
         raw_message: "",
       }
 
@@ -263,24 +260,24 @@ AgentRuntime.tasker.push(
       return data
     }
 
-    makeFriendMessage(id, data) {
+    makeFriendMessage(id: any, data: any) {
       if (!data.MsgBody) return
       data = this.makeMessage(id, data)
       data.message_type = "private"
 
-      if (!AgentRuntime[id].fl.has(data.user_id)) AgentRuntime[id].fl.set(data.user_id, data.sender)
+      if (!(globalThis as any).AgentRuntime[id].fl.has(data.user_id)) (globalThis as any).AgentRuntime[id].fl.set(data.user_id, data.sender)
 
-      AgentRuntime.makeLog(
+      (globalThis as any).AgentRuntime.makeLog(
         "info",
         `好友消息：[${data.sender.nickname}] ${data.raw_message}`,
         `${data.self_id} <= ${data.user_id}`,
         true,
       )
-      data.tasker = 'opqbot'
-      AgentRuntime.em('opqbot.message', data)
+      data.tasker = 'opqbot';
+      (globalThis as any).AgentRuntime.em('opqbot.message', data)
     }
 
-    makeGroupMessage(id, data) {
+    makeGroupMessage(id: any, data: any) {
       if (!data.MsgBody) return
       data = this.makeMessage(id, data)
       data.message_type = "group"
@@ -288,26 +285,26 @@ AgentRuntime.tasker.push(
       data.group_id = data.event.MsgHead.GroupInfo.GroupCode
       data.group_name = data.event.MsgHead.GroupInfo.GroupName
 
-      if (!AgentRuntime[id].gl.has(data.group_id))
-        AgentRuntime[id].gl.set(data.group_id, { group_id: data.group_id, group_name: data.group_name })
-      let gml = AgentRuntime[id].gml.get(data.group_id)
+      if (!(globalThis as any).AgentRuntime[id].gl.has(data.group_id))
+        (globalThis as any).AgentRuntime[id].gl.set(data.group_id, { group_id: data.group_id, group_name: data.group_name })
+      let gml = (globalThis as any).AgentRuntime[id].gml.get(data.group_id)
       if (!gml) {
-        gml = new Map()
-        AgentRuntime[id].gml.set(data.group_id, gml)
+        gml = new Map();
+        (globalThis as any).AgentRuntime[id].gml.set(data.group_id, gml)
       }
       if (!gml.has(data.user_id)) gml.set(data.user_id, data.sender)
 
-      AgentRuntime.makeLog(
+      (globalThis as any).AgentRuntime.makeLog(
         "info",
         `群消息：[${data.group_name}, ${data.sender.nickname}] ${data.raw_message}`,
         `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
         true,
       )
-      data.tasker = 'opqbot'
-      AgentRuntime.em('opqbot.message', data)
+      data.tasker = 'opqbot';
+      (globalThis as any).AgentRuntime.em('opqbot.message', data)
     }
 
-    makeEvent(id, data) {
+    makeEvent(id: any, data: any) {
       switch (data.EventName) {
         case "ON_EVENT_FRIEND_NEW_MSG":
           this.makeFriendMessage(id, data.EventData)
@@ -316,17 +313,17 @@ AgentRuntime.tasker.push(
           this.makeGroupMessage(id, data.EventData)
           break
         default:
-          AgentRuntime.makeLog("warn", `未知事件：${logger.magenta(data.raw)}`, id)
+          (globalThis as any).AgentRuntime.makeLog("warn", `未知事件：${(globalThis as any).logger.magenta(data.raw)}`, id)
       }
     }
 
-    makeBot(id, ws) {
-      AgentRuntime[id] = {
+    makeBot(id: any, ws: any) {
+      const bot: any = {
         tasker: this,
         ws,
 
         uin: id,
-        info: { id },
+        info: { id } as any,
         get nickname() {
           return this.info.nickname
         },
@@ -358,24 +355,25 @@ AgentRuntime.tasker.push(
         gl: new Map(),
         gml: new Map(),
       }
+      ;(globalThis as any).AgentRuntime[id] = bot
 
-      AgentRuntime.makeLog("mark", `${this.name}(${this.id}) ${this.version} 已连接`, id)
-      AgentRuntime.em(`connect.${id}`, { self_id: id })
+      (globalThis as any).AgentRuntime.makeLog("mark", `${this.name}(${this.id}) ${this.version} 已连接`, id);
+      (globalThis as any).AgentRuntime.em(`connect.${id}`, { self_id: id })
     }
 
-    message(data, ws) {
+    message(data: any, ws: any) {
       try {
         data = {
           ...JSON.parse(data),
-          raw: AgentRuntime.String(data),
+          raw: (globalThis as any).AgentRuntime.String(data),
         }
-      } catch (err) {
-        return AgentRuntime.makeLog("error", ["解码数据失败", data, err])
+      } catch (err: any) {
+        return (globalThis as any).AgentRuntime.makeLog("error", ["解码数据失败", data, err])
       }
 
       const id = data.CurrentQQ
       if (id && data.CurrentPacket) {
-        if (AgentRuntime[id]) AgentRuntime[id].ws = ws
+        if ((globalThis as any).AgentRuntime[id]) (globalThis as any).AgentRuntime[id].ws = ws
         else this.makeBot(id, ws)
 
         return this.makeEvent(id, data.CurrentPacket)
@@ -383,13 +381,13 @@ AgentRuntime.tasker.push(
         const cache = this.echo.get(data.ReqId)
         if (cache) return cache.resolve(data)
       }
-      AgentRuntime.makeLog("warn", `未知消息：${logger.magenta(data.raw)}`, id)
+      (globalThis as any).AgentRuntime.makeLog("warn", `未知消息：${(globalThis as any).logger.magenta(data.raw)}`, id)
     }
 
     load() {
-      if (!Array.isArray(AgentRuntime.wsf[this.path])) AgentRuntime.wsf[this.path] = []
-      AgentRuntime.wsf[this.path].push((ws, ...args) =>
-        ws.on("message", data => this.message(data, ws, ...args)),
+      if (!Array.isArray((globalThis as any).AgentRuntime.wsf[this.path])) (globalThis as any).AgentRuntime.wsf[this.path] = [];
+      (globalThis as any).AgentRuntime.wsf[this.path].push((ws: any, ...args: any[]) =>
+        ws.on("message",(data: any) => (this.message as any)(data, ws, ...args)),
       )
     }
   })(),

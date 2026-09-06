@@ -1,15 +1,15 @@
-// @ts-nocheck
-AgentRuntime.tasker.push(
+(globalThis as any).AgentRuntime.tasker.push(
   new (class GSUIDCoreTasker {
+  [key: string]: any;
     id = "GSUIDCore"
     name = "早柚核心(时雨崽)"
     path = this.id
 
-    makeLog(msg) {
-      return AgentRuntime.String(msg).replace(/base64:\/\/.*?"/g, 'base64://..."')
+    makeLog(msg: any) {
+      return (globalThis as any).AgentRuntime.String(msg).replace(/base64:\/\/.*?"/g, 'base64://..."')
     }
 
-    makeButton(button) {
+    makeButton(button: any) {
       const msg = {
         text: button.text,
         pressed_text: button.clicked_text,
@@ -39,8 +39,8 @@ AgentRuntime.tasker.push(
       return msg
     }
 
-    makeButtons(button_square) {
-      const msgs = []
+    makeButtons(button_square: any) {
+      const msgs: any[] = []
       for (const button_row of button_square) {
         const buttons = []
         for (let button of button_row) {
@@ -52,18 +52,18 @@ AgentRuntime.tasker.push(
       return msgs
     }
 
-    async makeMsg(msg) {
+    async makeMsg(msg: any) {
       if (!Array.isArray(msg)) msg = [msg]
-      const msgs = []
+      const msgs: any[] = []
       for (let i of msg) {
         if (typeof i !== "object") i = { type: "text", text: i }
 
         if (i.file) {
-          i.file = await AgentRuntime.Buffer(i.file, {
+          i.file = await (globalThis as any).AgentRuntime.Buffer(i.file, {
             http: true,
             size: 10485760,
           })
-          if (Buffer.isBuffer(i.file)) i.file = `base64://${i.file.toBase64()}`
+          if (Buffer.isBuffer(i.file)) i.file = `base64://${(i.file as any).toBase64()}`
         }
 
         switch (i.type) {
@@ -103,16 +103,16 @@ AgentRuntime.tasker.push(
             i = i.data
             break
           default:
-            i = { type: "text", data: AgentRuntime.String(i) }
+            i = { type: "text", data: (globalThis as any).AgentRuntime.String(i) }
         }
         msgs.push(i)
       }
       return msgs
     }
 
-    async sendFriendMsg(data, msg) {
-      const content = await this.makeMsg(msg)
-      AgentRuntime.makeLog(
+    async sendFriendMsg(data: any, msg: any) {
+      const content = await this.makeMsg(msg);
+      (globalThis as any).AgentRuntime.makeLog(
         "info",
         `发送好友消息：${this.makeLog(content)}`,
         `${data.self_id} => ${data.user_id}`,
@@ -128,10 +128,10 @@ AgentRuntime.tasker.push(
       return { message_id: Date.now().toString(36) }
     }
 
-    async sendGroupMsg(data, msg) {
+    async sendGroupMsg(data: any, msg: any) {
       const target = data.group_id.split("-")
-      const content = await this.makeMsg(msg)
-      AgentRuntime.makeLog(
+      const content = await this.makeMsg(msg);
+      (globalThis as any).AgentRuntime.makeLog(
         "info",
         `发送群消息：${this.makeLog(content)}`,
         `${data.self_id} => ${data.group_id}`,
@@ -147,11 +147,11 @@ AgentRuntime.tasker.push(
       return { message_id: Date.now().toString(36) }
     }
 
-    pickFriend(id, user_id) {
-      const i = {
-        ...AgentRuntime[id].fl.get(user_id),
+    pickFriend(id: any, user_id: any) {
+      const i: any = {
+        ...(globalThis as any).AgentRuntime[id].fl.get(user_id),
         self_id: id,
-        bot: AgentRuntime[id],
+        bot: (globalThis as any).AgentRuntime[id],
         user_id: user_id,
       }
       return {
@@ -161,12 +161,12 @@ AgentRuntime.tasker.push(
       }
     }
 
-    pickMember(id, group_id, user_id) {
-      const i = {
-        ...AgentRuntime[id].fl.get(user_id),
-        ...AgentRuntime[id].gml.get(group_id)?.get(user_id),
+    pickMember(id: any, group_id: any, user_id: any) {
+      const i: any = {
+        ...(globalThis as any).AgentRuntime[id].fl.get(user_id),
+        ...(globalThis as any).AgentRuntime[id].gml.get(group_id)?.get(user_id),
         self_id: id,
-        bot: AgentRuntime[id],
+        bot: (globalThis as any).AgentRuntime[id],
         group_id: group_id,
         user_id: user_id,
       }
@@ -176,11 +176,11 @@ AgentRuntime.tasker.push(
       }
     }
 
-    pickGroup(id, group_id) {
-      const i = {
-        ...AgentRuntime[id].gl.get(group_id),
+    pickGroup(id: any, group_id: any) {
+      const i: any = {
+        ...(globalThis as any).AgentRuntime[id].gl.get(group_id),
         self_id: id,
-        bot: AgentRuntime[id],
+        bot: (globalThis as any).AgentRuntime[id],
         group_id: group_id,
       }
       return {
@@ -190,8 +190,8 @@ AgentRuntime.tasker.push(
       }
     }
 
-    makeBot(data, ws) {
-      AgentRuntime[data.self_id] = {
+    makeBot(data: any, ws: any) {
+      (globalThis as any).AgentRuntime[data.self_id] = {
         tasker: this,
         ws: ws,
         get sendApi() {
@@ -215,20 +215,20 @@ AgentRuntime.tasker.push(
         gl: new Map(),
         gml: new Map(),
       }
-      data.bot = AgentRuntime[data.self_id]
+      data.bot = (globalThis as any).AgentRuntime[data.self_id]
 
-      AgentRuntime.makeLog("mark", `${this.name}(${this.id}) 已连接`, data.self_id)
-      AgentRuntime.em(`connect.${data.self_id}`, data)
+      (globalThis as any).AgentRuntime.makeLog("mark", `${this.name}(${this.id}) 已连接`, data.self_id);
+      (globalThis as any).AgentRuntime.em(`connect.${data.self_id}`, data)
     }
 
-    message(raw, ws) {
+    message(raw: any, ws: any) {
       try {
         raw = JSON.parse(raw)
-      } catch (err) {
-        return AgentRuntime.makeLog("error", ["解码数据失败", raw, err])
+      } catch (err: any) {
+        return (globalThis as any).AgentRuntime.makeLog("error", ["解码数据失败", raw, err])
       }
 
-      const data = {
+      const data: any = {
         raw,
         self_id: raw.bot_self_id,
         post_type: "message",
@@ -241,12 +241,12 @@ AgentRuntime.tasker.push(
           user_id: raw.user_id,
           user_pm: raw.user_pm,
         },
-        message: [],
+        message: [] as any[],
         raw_message: "",
       }
 
-      if (AgentRuntime[data.self_id]) {
-        data.bot = AgentRuntime[data.self_id]
+      if ((globalThis as any).AgentRuntime[data.self_id]) {
+        data.bot = (globalThis as any).AgentRuntime[data.self_id]
         data.bot.ws = ws
       } else {
         this.makeBot(data, ws)
@@ -281,17 +281,17 @@ AgentRuntime.tasker.push(
             break
           case "node":
             data.message.push({ type: "node", data: i.data })
-            data.raw_message += `[合并转发：${AgentRuntime.String(i.data)}]`
+            data.raw_message += `[合并转发：${(globalThis as any).AgentRuntime.String(i.data)}]`
             break
           default:
             data.message.push(i)
-            data.raw_message += AgentRuntime.String(i)
+            data.raw_message += (globalThis as any).AgentRuntime.String(i)
         }
       }
 
       if (raw.user_type === "direct") {
-        data.message_type = "private"
-        AgentRuntime.makeLog(
+        data.message_type = "private";
+        (globalThis as any).AgentRuntime.makeLog(
           "info",
           `好友消息：${data.raw_message}`,
           `${data.self_id} <= ${data.user_id}`,
@@ -313,7 +313,7 @@ AgentRuntime.tasker.push(
           ...data.sender,
         })
 
-        AgentRuntime.makeLog(
+        (globalThis as any).AgentRuntime.makeLog(
           "info",
           `群消息：${data.raw_message}`,
           `${data.self_id} <= ${data.group_id}, ${data.user_id}`,
@@ -321,14 +321,14 @@ AgentRuntime.tasker.push(
         )
       }
 
-      data.tasker = 'gsuidcore'
-      AgentRuntime.em('gsuidcore.message', data)
+      data.tasker = 'gsuidcore';
+      (globalThis as any).AgentRuntime.em('gsuidcore.message', data)
     }
 
     load() {
-      if (!Array.isArray(AgentRuntime.wsf[this.path])) AgentRuntime.wsf[this.path] = []
-      AgentRuntime.wsf[this.path].push((ws, ...args) =>
-        ws.on("message", data => this.message(data, ws, ...args)),
+      if (!Array.isArray((globalThis as any).AgentRuntime.wsf[this.path])) (globalThis as any).AgentRuntime.wsf[this.path] = [];
+      (globalThis as any).AgentRuntime.wsf[this.path].push((ws: any, ...args: any[]) =>
+        ws.on("message",(data: any) => (this.message as any)(data, ws, ...args)),
       )
     }
   })(),
