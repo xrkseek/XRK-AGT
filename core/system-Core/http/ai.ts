@@ -1,4 +1,3 @@
-// @ts-nocheck
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
@@ -6,6 +5,7 @@ import LLMFactory from '#factory/llm/LLMFactory.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import path from 'path';
 import crypto from 'crypto';
+// @ts-expect-error no @types/multer
 import multer from 'multer';
 import fs from 'fs/promises';
 import paths from '#utils/paths.js';
@@ -59,7 +59,7 @@ import {
   pipeResponsesStream
 } from '../lib/ai-gateway/index.js';
 
-function safePreview(value, { maxLen = 500 } = {}) {
+function safePreview(value: any, { maxLen = 500 }: any = {}) {
   if (value == null) return value;
   if (typeof value === 'string') {
     const s = value.replace(/\s+/g, ' ').trim();
@@ -73,8 +73,8 @@ function safePreview(value, { maxLen = 500 } = {}) {
   }
 }
 
-function redactSecrets(headers = {}) {
-  const out = {};
+function redactSecrets(headers: any = {}) {
+  const out: any = {};
   for (const [k, v] of Object.entries(headers || {})) {
     const key = String(k).toLowerCase();
     if (key === 'authorization' || key === 'api-key' || key === 'x-api-key') {
@@ -86,9 +86,9 @@ function redactSecrets(headers = {}) {
   return out;
 }
 
-function summarizeTools(tools) {
+function summarizeTools(tools: any) {
   if (!Array.isArray(tools)) return { type: typeof tools, count: 0, names: [] };
-  const names = [];
+  const names: any[] = [];
   for (const t of tools) {
     const name = t?.function?.name || t?.name || t?.id;
     if (name) names.push(String(name));
@@ -101,14 +101,14 @@ function summarizeTools(tools) {
   };
 }
 
-function summarizeV3Request(req, body, { contentType, messages, uploadedImagesCount = 0 } = {}) {
+function summarizeV3Request(req: any, body: any, { contentType, messages, uploadedImagesCount = 0 }: any = {}) {
   const rawWorkflow = pickFirst(body, ['workflow']);
   const workflowType = rawWorkflow == null ? null : (Array.isArray(rawWorkflow) ? 'array' : typeof rawWorkflow);
   const workflowPreview = rawWorkflow && typeof rawWorkflow === 'object'
     ? {
-        workflow: safePreview(rawWorkflow.workflow, { maxLen: 120 }),
-        workflowsCount: Array.isArray(rawWorkflow.workflows) ? rawWorkflow.workflows.length : 0,
-        streamsCount: Array.isArray(rawWorkflow.workflows) ? rawWorkflow.workflows.length : 0
+        workflow: safePreview((rawWorkflow as any).workflow, { maxLen: 120 }),
+        workflowsCount: Array.isArray((rawWorkflow as any).workflows) ? (rawWorkflow as any).workflows.length : 0,
+        streamsCount: Array.isArray((rawWorkflow as any).workflows) ? (rawWorkflow as any).workflows.length : 0
       }
     : safePreview(rawWorkflow, { maxLen: 200 });
 
@@ -160,17 +160,17 @@ function summarizeV3Request(req, body, { contentType, messages, uploadedImagesCo
  * - 流式：通过 client.chatStream + SSE 输出 chat.completion.chunk 事件，前端按 choices[0].delta.content 渲染
  * - 工作流/工具：仅负责把前端选择的“带 MCP 工具的工作流”转换为 streams 透传给 LLM 工厂，用于工具白名单控制
  */
-async function handleChatCompletionsV3(req, res) {
+async function handleChatCompletionsV3(req: any, res: any) {
   installMcpAuditHook();
   const contentType = req.headers['content-type'] || '';
   const body = req.body || {};
   let messages = Array.isArray(body.messages) ? body.messages : null;
-  const uploadedImages = [];
+  const uploadedImages: any[] = [];
 
   // 支持 multipart/form-data 格式（图片上传）
   if (contentType.includes('multipart/form-data')) {
     try {
-      const bot = req.agentRuntime ?? AgentRuntime;
+      const bot = req.agentRuntime ?? (globalThis as any).AgentRuntime;
       const maxFileSize = runtimeConfig?.server?.limits?.fileSize || '100mb';
       const mediaDir = path.join(paths.data, 'media');
       await fs.mkdir(mediaDir, { recursive: true });
@@ -179,20 +179,20 @@ async function handleChatCompletionsV3(req, res) {
         fileSize: maxFileSize,
         files: 8,
         storage: multer.diskStorage({
-          destination: (_req, _file, cb) => cb(null, mediaDir),
-          filename: (_req, file, cb) => {
+          destination: (_req: any, _file: any, cb: any) => cb(null, mediaDir),
+          filename: (_req: any, file: any, cb: any) => {
             const ext = path.extname(decodeMulterFilename(file.originalname)).slice(0, 20) || '.img';
             cb(null, `${crypto.randomUUID()}${ext}`);
           }
         }),
-        fileFilter: (_req, file, cb) => {
+        fileFilter: (_req: any, file: any, cb: any) => {
         cb(null, String(file?.mimetype || '').startsWith('image/'));
         }
       }).any();
 
       try {
-        await new Promise((resolve, reject) => upload(req, res, (err) => (err ? reject(err) : resolve())));
-      } catch (e) {
+        await new Promise<void>((resolve, reject) => upload(req, res, (err: any) => (err ? reject(err) : resolve())));
+      } catch (e: any) {
         const code = e?.code || e?.name || 'UPLOAD_ERROR';
         if (code === 'LIMIT_FILE_SIZE') {
           return HttpResponse.error(res, new Error(`图片超过大小限制（${maxFileSize}）`), 413, 'ai.v3.chat.completions');
@@ -249,7 +249,7 @@ async function handleChatCompletionsV3(req, res) {
             .filter(Boolean);
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       return HttpResponse.error(res, new Error(`解析 multipart/form-data 失败: ${e.message}`), 400, 'ai.v3.chat.completions');
     }
   }
@@ -261,7 +261,7 @@ async function handleChatCompletionsV3(req, res) {
   // HTTP 侧内容安全：对输入文本做违禁词检测（复用 data/bannedWords/global.json）
   const safetyCfg = runtimeConfig?.server?.contentSafety?.http || {};
   if (safetyCfg.enabled !== false && safetyCfg.checkAiInput !== false) {
-    const extractTexts = (msg) => {
+    const extractTexts = (msg: any) => {
         const out = [];
       const c = msg?.content;
       if (typeof c === 'string') out.push(c);
@@ -403,7 +403,7 @@ async function handleChatCompletionsV3(req, res) {
       if (sessionKey) {
         try {
           const harness = await importHarnessSdk();
-          if (hasHarnessSession(harness, sessionKey)) {
+          if (hasHarnessSession(harness as any, sessionKey)) {
             harnessMessages = slimMessagesForExistingSession(llmMessages);
           }
         } catch {
@@ -438,7 +438,7 @@ async function handleChatCompletionsV3(req, res) {
         });
       }
 
-      const harnessResult = await runWithAiConsoleContext(
+      const harnessResult: any = await runWithAiConsoleContext(
         { workspaceId: auditWorkspaceId },
         () => runHarnessModuleLoop({
           stream: {
@@ -456,7 +456,7 @@ async function handleChatCompletionsV3(req, res) {
             ...(effectiveStreams?.length ? { workflows: effectiveStreams } : {}),
             ...(sessionKey ? { sessionKey: String(sessionKey) } : {}),
             ...(liveHandler ? {
-              onSessionEvent(ev) {
+              onSessionEvent(ev: any) {
                 if (ev?.type === 'assistant/chunk') {
                   if (ev.kind === 'text' && ev.text) liveHandler.callback(ev.text);
                   else if (ev.kind === 'reasoning' && ev.text) {
@@ -491,7 +491,7 @@ async function handleChatCompletionsV3(req, res) {
       const mcpTools = Array.isArray(harnessResult?.mcpTools) ? harnessResult.mcpTools : [];
       const executedToolNames = Array.isArray(harnessResult?.executedToolNames)
         ? harnessResult.executedToolNames
-        : mcpTools.map((t) => t?.name).filter(Boolean);
+        : mcpTools.map((t: any) => t?.name).filter(Boolean);
 
       const promptText = extractMessageText(messages);
       const usage = harnessResult?.usage && typeof harnessResult.usage === 'object'
@@ -520,7 +520,7 @@ async function handleChatCompletionsV3(req, res) {
         ...(mcpTools.length > 0
           ? { mcp_tools: mcpTools }
           : (executedToolNames.length > 0
-            ? { mcp_tools: executedToolNames.map((name) => ({ name })) }
+            ? { mcp_tools: executedToolNames.map((name: any) => ({ name })) }
             : {})),
         ...(harnessResult?.sessionId ? { xrk_session_id: harnessResult.sessionId } : {}),
         ...(harnessResult?.compacted ? { xrk_compacted: true } : {}),
@@ -587,7 +587,7 @@ async function handleChatCompletionsV3(req, res) {
       res.write('data: [DONE]\n\n');
       res.end();
       return;
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog(
         'error',
         `[v1] harness loop 失败: ${error?.message || error}`,
@@ -616,7 +616,7 @@ async function handleChatCompletionsV3(req, res) {
 
   if (!streamFlag) {
     try {
-      const chatResult = await runWithAiConsoleContext(
+      const chatResult: any = await runWithAiConsoleContext(
         { workspaceId: auditWorkspaceId },
         () => client.chat(llmMessages, overrides)
       );
@@ -629,7 +629,7 @@ async function handleChatCompletionsV3(req, res) {
 
       // 对外返回 model=provider
       const responseModel = llmConfig.provider || 'unknown';
-      const message = { role: 'assistant', content: text || (toolCalls.length ? null : '') };
+      const message: any = { role: 'assistant', content: text || (toolCalls.length ? null : '') };
       if (toolCalls.length) message.tool_calls = toolCalls;
       const openaiPayload = {
         id: `chatcmpl_${Date.now()}`,
@@ -685,9 +685,9 @@ async function handleChatCompletionsV3(req, res) {
         overrides,
         id: msgId,
         model: modelName,
-        runWrapped: (run) => runWithAiConsoleContext({ workspaceId: auditWorkspaceId }, run)
+        runWrapped: (async (run: any) => runWithAiConsoleContext({ workspaceId: auditWorkspaceId }, run)) as any
       });
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `[v1/messages] 流式错误: ${error.message}`, 'ai.v1.messages');
       try {
         res.write(`event: error\ndata: ${JSON.stringify({ type: 'error', error: { type: 'api_error', message: error.message } })}\n\n`);
@@ -715,9 +715,9 @@ async function handleChatCompletionsV3(req, res) {
         maxOutputTokens: meta.max_output_tokens ?? null,
         toolChoice: meta.tool_choice ?? 'auto',
         tools: meta.tools || [],
-        runWrapped: (run) => runWithAiConsoleContext({ workspaceId: auditWorkspaceId }, run)
+        runWrapped: (async (run: any) => runWithAiConsoleContext({ workspaceId: auditWorkspaceId }, run)) as any
       });
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `[v1/responses] 流式错误: ${error.message}`, 'ai.v1.responses');
     } finally {
       restoreStreamWorkspace();
@@ -743,12 +743,12 @@ async function handleChatCompletionsV3(req, res) {
       usageMessages: messages,
       extractMessageText,
       estimateTokens,
-      runWrapped: (run) => runWithAiConsoleContext({ workspaceId: auditWorkspaceId }, run)
+      runWrapped: (async (run: any) => runWithAiConsoleContext({ workspaceId: auditWorkspaceId }, run)) as any
     });
 
     RuntimeUtil.makeLog('info', `[v3/chat/completions] chatStream完成: 总长度=${totalContent.length}`, 'ai.v3.stream');
     RuntimeUtil.makeLog('info', `[v3/chat/completions] 流式输出完成`, 'ai.v3.stream');
-  } catch (error) {
+  } catch (error: any) {
     RuntimeUtil.makeLog('error', `[v3/chat/completions] 流式输出错误: ${error.message}, stack=${error.stack?.substring(0, 200)}`, 'ai.v3.stream');
     writeOpenAiWorkflowError(res, { id, created: now, model: modelName, error });
   } finally {
@@ -758,7 +758,7 @@ async function handleChatCompletionsV3(req, res) {
   }
 }
 
-async function handleAnthropicMessages(req, res) {
+async function handleAnthropicMessages(req: any, res: any) {
   const raw = req.body || {};
   if (!Array.isArray(raw.messages)) {
     return HttpResponse.validationError(res, 'messages 参数无效');
@@ -771,7 +771,7 @@ async function handleAnthropicMessages(req, res) {
   return handleChatCompletionsV3(req, res);
 }
 
-async function handleResponses(req, res) {
+async function handleResponses(req: any, res: any) {
   const raw = req.body || {};
   if (raw.model == null || String(raw.model).trim() === '') {
     return HttpResponse.validationError(res, 'model 参数无效');
@@ -804,7 +804,7 @@ async function handleResponses(req, res) {
 }
 
 /** 无 store：不支持按 id 取回 */
-async function handleGetResponseById(req, res) {
+async function handleGetResponseById(req: any, res: any) {
   const id = decodeURIComponent(String(req.params?.responseId || req.params?.id || '').trim());
   return HttpResponse.json(res, {
     error: {
@@ -816,11 +816,11 @@ async function handleGetResponseById(req, res) {
   }, 404);
 }
 
-async function handleModels(_req, res) {
+async function handleModels(_req: any, res: any) {
   return HttpResponse.json(res, buildOpenAIModelsPayload());
 }
 
-async function handleModelById(req, res) {
+async function handleModelById(req: any, res: any) {
   const modelId = decodeURIComponent(String(req.params?.modelId || req.params?.id || '').trim());
   const payload = buildOpenAIModelPayload(modelId);
   if (!payload) {
@@ -830,27 +830,27 @@ async function handleModelById(req, res) {
 }
 
 const chatCompletionsHandler = HttpResponse.asyncHandler(
-  async (req, res) => handleChatCompletionsV3(req, res),
+  async (req: any, res: any) => handleChatCompletionsV3(req, res),
   'ai.chat.completions'
 );
 const modelsListHandler = HttpResponse.asyncHandler(
-  async (req, res) => handleModels(req, res),
+  async (req: any, res: any) => handleModels(req, res),
   'ai.models'
 );
 const modelByIdHandler = HttpResponse.asyncHandler(
-  async (req, res) => handleModelById(req, res),
+  async (req: any, res: any) => handleModelById(req, res),
   'ai.models.id'
 );
 const anthropicMessagesHandler = HttpResponse.asyncHandler(
-  async (req, res) => handleAnthropicMessages(req, res),
+  async (req: any, res: any) => handleAnthropicMessages(req, res),
   'ai.v1.messages'
 );
 const responsesHandler = HttpResponse.asyncHandler(
-  async (req, res) => handleResponses(req, res),
+  async (req: any, res: any) => handleResponses(req, res),
   'ai.v1.responses'
 );
 const getResponseByIdHandler = HttpResponse.asyncHandler(
-  async (req, res) => handleGetResponseById(req, res),
+  async (req: any, res: any) => handleGetResponseById(req, res),
   'ai.v1.responses.get'
 );
 

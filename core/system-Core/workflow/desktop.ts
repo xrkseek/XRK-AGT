@@ -1,4 +1,3 @@
-// @ts-nocheck
 import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
@@ -18,9 +17,9 @@ import {
 
 const IS_WINDOWS = process.platform === 'win32';
 const IS_DARWIN = process.platform === 'darwin';
-const execCommand = (command, options = {}) => {
-  return new Promise((resolve, reject) => {
-    execCb(command, { ...options, encoding: 'utf8' }, (error, stdout, stderr) => {
+const execCommand = (command: any, options: any = {}) => {
+  return new Promise<string>((resolve, reject) => {
+    execCb(command, { ...options, encoding: 'utf8' }, (error: any, stdout: any, stderr: any) => {
       if (error) {
         error.stderr = stderr;
         return reject(error);
@@ -42,6 +41,7 @@ const execCommand = (command, options = {}) => {
  * - 办公文档：tools.run + office-* skills
  */
 export default class DesktopStream extends AiWorkflow {
+  [key: string]: any;
 
   constructor() {
     super({
@@ -85,7 +85,7 @@ export default class DesktopStream extends AiWorkflow {
   }
 
   /** 使用系统默认方式打开文件或目录（Windows 用 start，macOS/Linux 用 open/xdg-open） */
-  async openPathDetached(fullPath) {
+  async openPathDetached(fullPath: any) {
     const resolved = path.resolve(fullPath);
     if (IS_WINDOWS) {
       const escaped = resolved.replace(/"/g, '""');
@@ -93,8 +93,8 @@ export default class DesktopStream extends AiWorkflow {
       return;
     }
     const bin = IS_DARWIN ? 'open' : 'xdg-open';
-    await new Promise((resolve, reject) => {
-      const child = spawn(bin, [resolved], { detached: true, stdio: 'ignore' });
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(bin as any, [resolved] as any, { detached: true, stdio: 'ignore' });
       child.on('error', reject);
       child.unref();
       child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${bin} 退出码 ${code}`))));
@@ -104,7 +104,7 @@ export default class DesktopStream extends AiWorkflow {
   /**
    * 统一参数获取：支持多种参数名（兼容MCP工具和内部调用）
    */
-  getParam(params, ...keys) {
+  getParam(params: any, ...keys: any) {
     if (!params) return;
     for (const key of keys) {
       if (params[key] !== undefined) {
@@ -117,7 +117,7 @@ export default class DesktopStream extends AiWorkflow {
   /**
    * 统一文件名安全处理
    */
-  sanitizeFileName(fileName) {
+  sanitizeFileName(fileName: any) {
     if (!fileName) return '';
     return fileName.replace(/[<>:"/\\|?*]/g, '_');
   }
@@ -135,7 +135,7 @@ export default class DesktopStream extends AiWorkflow {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, _context = {}) => {
+      handler: async (_args = {}, _context: any = {}) => {
         try {
           if (IS_WINDOWS) {
             await exec('powershell -NoProfile -Command "(New-Object -ComObject shell.application).MinimizeAll()"', {
@@ -164,7 +164,7 @@ export default class DesktopStream extends AiWorkflow {
             await exec('xdotool key Super_L+d', { timeout: 5000 });
             return this.successResponse({ message: '已发送显示桌面快捷键（xdotool）', platform: 'linux' });
           }
-        } catch (err) {
+        } catch (err: any) {
           RuntimeUtil.makeLog('error', `[desktop] show_desktop: ${err.message}`, 'DesktopStream');
           return this.errorResponse(
             'SHOW_DESKTOP_FAILED',
@@ -189,13 +189,13 @@ export default class DesktopStream extends AiWorkflow {
         },
         required: ['tool']
       },
-      handler: async (args = {}, _context = {}) => {
+      handler: async (args: any = {}, _context: any = {}) => {
         const { tool } = args;
         if (!tool) {
           return this.errorResponse('INVALID_PARAM', '工具名称不能为空');
         }
 
-        const toolNames = { notepad: '记事本/编辑器', calc: '计算器', taskmgr: '任务管理器/监视器' };
+        const toolNames: any = { notepad: '记事本/编辑器', calc: '计算器', taskmgr: '任务管理器/监视器' };
 
         try {
           if (IS_WINDOWS) {
@@ -207,7 +207,7 @@ export default class DesktopStream extends AiWorkflow {
             });
           }
           if (IS_DARWIN) {
-            const appMap = { notepad: 'TextEdit', calc: 'Calculator', taskmgr: 'Activity Monitor' };
+            const appMap: any = { notepad: 'TextEdit', calc: 'Calculator', taskmgr: 'Activity Monitor' };
             const app = appMap[tool];
             await exec(`open -a "${app.replace(/"/g, '\\"')}"`, { timeout: 15000 });
             return this.successResponse({
@@ -216,20 +216,21 @@ export default class DesktopStream extends AiWorkflow {
               platform: 'darwin'
             });
           }
-          const candidates = {
+          const candidatesMap: any = {
             notepad: ['gedit', 'kate', 'xed', 'mousepad', 'nano'],
             calc: ['gnome-calculator', 'qalculate-gtk', 'galculator', 'xcalc'],
             taskmgr: ['gnome-system-monitor', 'plasma-systemmonitor', 'ksysguard', 'btop', 'htop']
-          }[tool];
+          };
+          const candidates = candidatesMap[tool] || [];
           for (const bin of candidates) {
             try {
-              await exec(`command -v ${bin}`, { shell: true, timeout: 4000 });
+              await exec(`command -v ${bin}`, { shell: true, timeout: 4000 } as any);
             } catch {
               continue;
             }
             try {
-              await new Promise((resolve, reject) => {
-                const child = spawn(bin, [], { detached: true, stdio: 'ignore' });
+              await new Promise<void>((resolve, reject) => {
+                const child = spawn(bin as any, [] as any, { detached: true, stdio: 'ignore' });
                 child.once('error', reject);
                 child.once('spawn', () => {
                   child.unref();
@@ -249,7 +250,7 @@ export default class DesktopStream extends AiWorkflow {
             'OPEN_SYSTEM_TOOL_FAILED',
             `未找到可用程序，请安装 ${candidates.join(' / ')} 之一`
           );
-        } catch (err) {
+        } catch (err: any) {
           RuntimeUtil.makeLog('error', `[desktop] 打开系统工具失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('OPEN_SYSTEM_TOOL_FAILED', err.message);
         }
@@ -264,9 +265,9 @@ export default class DesktopStream extends AiWorkflow {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (_args = {}, context: any = {}) => {
         try {
-          const screenshot = (await import('screenshot-desktop')).default;
+          const screenshot = (await import('screenshot-desktop' as any)).default as any;
 
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
           const screenshotDir = path.join(paths.trash, 'screenshot');
@@ -293,9 +294,9 @@ export default class DesktopStream extends AiWorkflow {
           const e = context.e;
           if (e && typeof e.reply === 'function') {
             try {
-              const seg = segment;
+              const seg = (globalThis as any).segment ?? (globalThis as any).msgSegment;
               await e.reply([seg.image(screenshotPath)]);
-            } catch (err) {
+            } catch (err: any) {
               RuntimeUtil.makeLog(
                 'warn',
                 `[desktop.screenshot] 截图发送到会话失败: ${err.message}`,
@@ -311,7 +312,7 @@ export default class DesktopStream extends AiWorkflow {
             fileName: filename,
             size: stats.size
           });
-        } catch (err) {
+        } catch (err: any) {
           RuntimeUtil.makeLog('error', `[desktop] 截屏失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('SCREENSHOT_FAILED', err.message);
         }
@@ -326,7 +327,7 @@ export default class DesktopStream extends AiWorkflow {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, _context = {}) => {
+      handler: async (_args = {}, _context: any = {}) => {
         try {
           if (IS_WINDOWS) {
             await execCommand('rundll32.exe user32.dll,LockWorkStation');
@@ -348,14 +349,14 @@ export default class DesktopStream extends AiWorkflow {
           let last = '';
           for (const cmd of attempts) {
             try {
-              await exec(cmd, { shell: true, timeout: 8000 });
+              await exec(cmd, { shell: true, timeout: 8000 } as any);
               return this.successResponse({ message: '已请求锁屏', command: cmd, platform: 'linux' });
-            } catch (e) {
+            } catch (e: any) {
               last = e.message;
             }
           }
           return this.errorResponse('LOCK_SCREEN_FAILED', `锁屏失败：${last}`);
-        } catch (err) {
+        } catch (err: any) {
           RuntimeUtil.makeLog('error', `[desktop] 锁屏失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('LOCK_SCREEN_FAILED', err.message);
         }
@@ -370,7 +371,7 @@ export default class DesktopStream extends AiWorkflow {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (_args = {}, context: any = {}) => {
         try {
           // 使用systeminformation库获取系统信息（跨平台）
           const [cpu, mem] = await Promise.all([
@@ -400,7 +401,7 @@ export default class DesktopStream extends AiWorkflow {
           }
 
           return this.successResponse(systemInfo);
-        } catch (err) {
+        } catch (err: any) {
           RuntimeUtil.makeLog('error', `[desktop] 获取系统信息失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('SYSTEM_INFO_FAILED', err.message);
         }
@@ -435,13 +436,13 @@ export default class DesktopStream extends AiWorkflow {
         },
         required: ['url']
       },
-      handler: async (args = {}, _context = {}) => {
+      handler: async (args: any = {}, _context: any = {}) => {
         const url = this.getParam(args, 'url');
         if (!url) {
           return this.errorResponse('INVALID_PARAM', 'URL不能为空');
         }
 
-        const commands = {
+        const commands: any = {
           win32: `start "" "${url}"`,
           darwin: `open "${url}"`,
           linux: `xdg-open "${url}"`
@@ -451,7 +452,7 @@ export default class DesktopStream extends AiWorkflow {
           const command = commands[process.platform] || commands.linux;
           await execCommand(command, { shell: IS_WINDOWS ? 'cmd.exe' : undefined });
           return this.successResponse({ message: `已打开浏览器访问: ${url}`, url });
-        } catch (err) {
+        } catch (err: any) {
           RuntimeUtil.makeLog('error', `[desktop] 打开浏览器失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('OPEN_BROWSER_FAILED', err.message);
         }
@@ -474,7 +475,7 @@ export default class DesktopStream extends AiWorkflow {
         },
         required: ['action']
       },
-      handler: async (args = {}, _context = {}) => {
+      handler: async (args: any = {}, _context: any = {}) => {
         const { action } = args;
         if (!action) {
           return this.errorResponse('INVALID_PARAM', '操作类型不能为空');
@@ -482,7 +483,7 @@ export default class DesktopStream extends AiWorkflow {
 
         try {
           if (IS_WINDOWS) {
-            const commands = {
+            const commands: any = {
               shutdown: { cmd: 'shutdown /s /t 60', delay: 60 },
               shutdown_now: { cmd: 'shutdown /s /t 0', delay: 0 },
               restart: { cmd: 'shutdown /r /t 60', delay: 60 },
@@ -521,7 +522,7 @@ export default class DesktopStream extends AiWorkflow {
           }
 
           if (action === 'cancel') {
-            await exec('shutdown -c', { shell: true, timeout: 8000 });
+            await exec('shutdown -c', { shell: true, timeout: 8000 } as any);
             return this.successResponse({ message: '已取消关机/重启', action, platform: process.platform });
           }
           const linuxCmd =
@@ -530,13 +531,13 @@ export default class DesktopStream extends AiWorkflow {
               : action === 'shutdown'
                 ? 'shutdown -h +1'
                 : 'shutdown -r +1';
-          await exec(linuxCmd, { shell: true, timeout: 8000 });
+          await exec(linuxCmd, { shell: true, timeout: 8000 } as any);
           return this.successResponse({
             message: `已执行 ${linuxCmd}（部分发行版需 root 或 polkit 授权）`,
             action,
             platform: 'linux'
           });
-        } catch (err) {
+        } catch (err: any) {
           RuntimeUtil.makeLog('error', `[desktop] 电源控制失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('POWER_CONTROL_FAILED', err.message);
         }
@@ -551,7 +552,7 @@ export default class DesktopStream extends AiWorkflow {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (_args = {}, context: any = {}) => {
         try {
           // 使用systeminformation库获取磁盘空间（跨平台）
           const fsSize = await si.fsSize();
@@ -575,14 +576,14 @@ export default class DesktopStream extends AiWorkflow {
 
           if (context.stream) {
             context.stream.context = context.stream.context || {};
-            context.stream.context.diskSpace = disks.length > 0 ? disks.map(d => d.display) : null;
+            context.stream.context.diskSpace = disks.length > 0 ? disks.map((d: any) => d.display) : null;
           }
 
           return this.successResponse({
             disks,
             count: disks.length
           });
-        } catch (err) {
+        } catch (err: any) {
           RuntimeUtil.makeLog('error', `[desktop] 获取磁盘空间失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('DISK_SPACE_FAILED', err.message);
         }
@@ -604,7 +605,7 @@ export default class DesktopStream extends AiWorkflow {
         },
         required: ['appName']
       },
-      handler: async (args = {}, _context = {}) => {
+      handler: async (args: any = {}, _context: any = {}) => {
         const { appName } = args;
         if (!appName) {
           return this.errorResponse('INVALID_PARAM', '应用程序名称不能为空');
@@ -632,7 +633,7 @@ export default class DesktopStream extends AiWorkflow {
               });
             }
             try {
-              const child = spawn(appName, [], { detached: true, stdio: 'ignore', shell: true });
+              const child = spawn(appName as any, [] as any, { detached: true, stdio: 'ignore', shell: true });
               child.unref();
             } catch {
               await exec(`start "" "${String(appName).replace(/"/g, '""')}"`, { shell: 'cmd.exe' });
@@ -650,7 +651,7 @@ export default class DesktopStream extends AiWorkflow {
                 await fs.access(p);
                 await this.openPathDetached(p);
                 return this.successResponse({ message: `已打开路径: ${p}`, appName, path: p, platform: 'darwin' });
-              } catch (e2) {
+              } catch (e2: any) {
                 return this.errorResponse('OPEN_APPLICATION_FAILED', e2.message);
               }
             }
@@ -663,8 +664,8 @@ export default class DesktopStream extends AiWorkflow {
             return this.successResponse({ message: `已打开路径: ${p}`, appName, platform: 'linux' });
           } catch {
             try {
-              await new Promise((resolve, reject) => {
-                const child = spawn('/bin/sh', ['-lc', appName], { detached: true, stdio: 'ignore' });
+              await new Promise<void>((resolve, reject) => {
+                const child = spawn('/bin/sh' as any, ['-lc', appName] as any, { detached: true, stdio: 'ignore' });
                 child.once('error', reject);
                 child.once('spawn', () => {
                   child.unref();
@@ -672,11 +673,11 @@ export default class DesktopStream extends AiWorkflow {
                 });
               });
               return this.successResponse({ message: `已尝试启动: ${appName}`, appName, platform: 'linux' });
-            } catch (e3) {
+            } catch (e3: any) {
               return this.errorResponse('OPEN_APPLICATION_FAILED', e3.message);
             }
           }
-        } catch (err) {
+        } catch (err: any) {
           RuntimeUtil.makeLog('error', `[desktop] 打开应用程序失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('OPEN_APPLICATION_FAILED', err.message);
         }
@@ -692,7 +693,7 @@ export default class DesktopStream extends AiWorkflow {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, _context = {}) => {
+      handler: async (_args = {}, _context: any = {}) => {
         try {
           const result = await this.tools.cleanupProcesses();
           return this.successResponse({ 
@@ -700,7 +701,7 @@ export default class DesktopStream extends AiWorkflow {
             killed: result.killed || [],
             count: (result.killed || []).length
           });
-        } catch (err) {
+        } catch (err: any) {
           RuntimeUtil.makeLog('error', `[desktop] 清理进程失败: ${err.message}`, 'DesktopStream');
           return this.errorResponse('CLEANUP_PROCESSES_FAILED', err.message);
         }
@@ -717,7 +718,7 @@ export default class DesktopStream extends AiWorkflow {
       description:
         '读取系统剪贴板文本：Windows PowerShell Get-Clipboard；macOS pbpaste；Linux 优先 xclip 再 xsel（Wayland 需对应工具）。',
       inputSchema: { type: 'object', properties: {}, required: [] },
-      handler: async (_args = {}, _context = {}) => {
+      handler: async (_args = {}, _context: any = {}) => {
         try {
           const text = await this._readClipboardText();
           return this.successResponse({
@@ -725,7 +726,7 @@ export default class DesktopStream extends AiWorkflow {
             length: text.length,
             platform: process.platform
           });
-        } catch (err) {
+        } catch (err: any) {
           return this.errorResponse('CLIPBOARD_READ_FAILED', err.message);
         }
       },
@@ -741,7 +742,7 @@ export default class DesktopStream extends AiWorkflow {
         },
         required: ['text']
       },
-      handler: async (args = {}, _context = {}) => {
+      handler: async (args: any = {}, _context: any = {}) => {
         const text = this.getParam(args, 'text', 'content');
         if (text === undefined || text === null) {
           return this.errorResponse('INVALID_PARAM', 'text 不能为空');
@@ -753,7 +754,7 @@ export default class DesktopStream extends AiWorkflow {
         try {
           await this._writeClipboardText(s);
           return this.successResponse({ message: '已写入剪贴板', length: s.length });
-        } catch (err) {
+        } catch (err: any) {
           return this.errorResponse('CLIPBOARD_WRITE_FAILED', err.message);
         }
       },
@@ -773,7 +774,7 @@ export default class DesktopStream extends AiWorkflow {
         },
         required: ['targetPath']
       },
-      handler: async (args = {}, _context = {}) => {
+      handler: async (args: any = {}, _context: any = {}) => {
         const raw = this.getParam(args, 'targetPath', 'path', 'filePath');
         if (!raw || typeof raw !== 'string') {
           return this.errorResponse('INVALID_PARAM', 'targetPath 不能为空');
@@ -789,7 +790,7 @@ export default class DesktopStream extends AiWorkflow {
         try {
           await this.openPathDetached(resolved);
           return this.successResponse({ message: '已请求打开', path: resolved });
-        } catch (err) {
+        } catch (err: any) {
           return this.errorResponse('OPEN_PATH_FAILED', err.message);
         }
       },
@@ -818,9 +819,9 @@ export default class DesktopStream extends AiWorkflow {
     }
   }
 
-  async _writeClipboardText(text) {
+  async _writeClipboardText(text: any) {
     if (process.platform === 'win32') {
-      const b64 = Buffer.from(text, 'utf8').toBase64();
+      const b64 = (Buffer.from(text, 'utf8') as any).toBase64();
       await execCommand(
         `powershell -NoProfile -Command "$b='${b64}'; $t=[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b)); Set-Clipboard -Value $t"`,
         { shell: 'cmd.exe', timeout: 15000, maxBuffer: 20 * 1024 * 1024 }
@@ -828,8 +829,8 @@ export default class DesktopStream extends AiWorkflow {
       return;
     }
     if (process.platform === 'darwin') {
-      await new Promise((resolve, reject) => {
-        const child = spawn('pbcopy', [], { stdio: ['pipe', 'ignore', 'pipe'] });
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn('pbcopy' as any, [] as any, { stdio: ['pipe', 'ignore', 'pipe'] });
         child.on('error', reject);
         child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`pbcopy exit ${code}`))));
         child.stdin.write(text, 'utf8');
@@ -837,8 +838,8 @@ export default class DesktopStream extends AiWorkflow {
       });
       return;
     }
-    const pipeToClipboard = (cmd, args) =>
-      new Promise((resolve, reject) => {
+    const pipeToClipboard = (cmd: any, args: any) =>
+      new Promise<void>((resolve, reject) => {
         const child = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] });
         let err = '';
         child.stderr?.on('data', (c) => {
@@ -858,7 +859,7 @@ export default class DesktopStream extends AiWorkflow {
     }
   }
 
-  buildSystemPrompt(context) {
+  buildSystemPrompt(context: any) {
     const { question, e } = context;
     const persona =
       (question && (question.persona || question.PERSONA)) ||
@@ -899,7 +900,7 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
 `;
   }
 
-  async buildChatContext(e, question) {
+  async buildChatContext(e: any, question: any) {
     const messages = [];
 
     messages.push({
@@ -956,7 +957,7 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
   /**
    * 构建文件上下文提示
    */
-  buildFileContext(fileSearchResult, fileContent, commandOutput, context) {
+  buildFileContext(fileSearchResult: any, fileContent: any, commandOutput: any, context: any) {
     const sections = [];
 
     const fileSection = this.buildFileSection(fileSearchResult, fileContent, context);
@@ -971,7 +972,7 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
   /**
    * 构建文件部分
    */
-  buildFileSection(fileSearchResult, fileContent, context) {
+  buildFileSection(fileSearchResult: any, fileContent: any, context: any) {
     if (fileSearchResult?.found && fileContent) {
       const fileName = fileSearchResult.fileName || '文件';
       const filePath = fileSearchResult.path || '';
@@ -990,7 +991,7 @@ ${isMaster ? '【权限】\n你拥有主人权限，可以执行所有系统操�
   /**
    * 构建命令部分
    */
-  buildCommandSection(commandOutput, context) {
+  buildCommandSection(commandOutput: any, context: any) {
     if (!commandOutput || !context.commandSuccess) return '';
 
     const output = commandOutput.slice(0, 1000);
