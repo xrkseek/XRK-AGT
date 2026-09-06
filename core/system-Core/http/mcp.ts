@@ -1,11 +1,10 @@
-// @ts-nocheck
 import RuntimeUtil from '#utils/runtime-util.js';
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
 const getMCPServer = () => AiWorkflowLoader.mcpServer;
 
-const requireMCP = (res) => {
+const requireMCP = (res: any) => {
         const mcpServer = getMCPServer();
   if (!mcpServer) {
     HttpResponse.error(res, new Error('MCP服务未启用'), 503, 'mcp');
@@ -14,7 +13,7 @@ const requireMCP = (res) => {
   return mcpServer;
 };
 
-const setupSSEHeaders = (res) => {
+const setupSSEHeaders = (res: any) => {
         res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -22,14 +21,14 @@ const setupSSEHeaders = (res) => {
   res.setHeader('X-Accel-Buffering', 'no');
 };
 
-const jsonrpcHandler = HttpResponse.asyncHandler(async (req, res) => {
+const jsonrpcHandler = HttpResponse.asyncHandler(async (req: any, res: any) => {
         const mcpServer = requireMCP(res);
   if (!mcpServer) return;
   try {
     const stream = req.params?.stream ?? req.query?.stream;
     const response = await mcpServer.handleJSONRPC(req.body, { stream });
     return HttpResponse.json(res, response);
-  } catch (error) {
+  } catch (error: any) {
     HttpResponse.error(res, error, 500, 'mcp.jsonrpc');
   }
 }, 'mcp.jsonrpc');
@@ -48,7 +47,7 @@ export default {
     {
       method: 'GET',
       path: '/api/mcp/jsonrpc',
-      handler: (req, res) => {
+      handler: (req: any, res: any) => {
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
@@ -81,7 +80,7 @@ export default {
     {
       method: 'GET',
       path: '/api/mcp/tools',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
@@ -93,7 +92,7 @@ export default {
     {
       method: 'GET',
       path: '/api/mcp/tools/workflows',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
@@ -110,7 +109,7 @@ export default {
     {
       method: 'GET',
       path: '/api/mcp/tools/workflow/:workflowName',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { workflowName } = req.params;
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
@@ -126,7 +125,7 @@ export default {
     {
       method: 'POST',
       path: '/api/mcp/tools/call',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const startTime = Date.now();
         const { name, arguments: args } = req.body;
         
@@ -158,7 +157,7 @@ export default {
     {
       method: 'GET',
       path: '/api/mcp/connect',
-      handler: (req, res) => {
+      handler: (req: any, res: any) => {
         setupSSEHeaders(res);
 
         const mcpServer = getMCPServer();
@@ -196,7 +195,7 @@ export default {
     {
       method: 'GET',
       path: '/api/mcp/tools/:name',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { name } = req.params;
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
@@ -218,7 +217,7 @@ export default {
     {
       method: 'GET',
       path: '/api/mcp/resources',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
@@ -229,7 +228,7 @@ export default {
     {
       method: 'GET',
       path: '/api/mcp/resources/:uri',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { uri } = req.params;
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
@@ -245,7 +244,7 @@ export default {
     {
       method: 'GET',
       path: '/api/mcp/prompts',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const mcpServer = requireMCP(res);
         if (!mcpServer) return;
 
@@ -256,7 +255,7 @@ export default {
     {
       method: 'POST',
       path: '/api/mcp/prompts/:name',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { name } = req.params;
         const { arguments: args } = req.body;
         const mcpServer = requireMCP(res);
@@ -273,7 +272,7 @@ export default {
     {
       method: 'GET',
       path: '/api/mcp/health',
-      handler: HttpResponse.asyncHandler(async (req, res) => {
+      handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const mcpServer = getMCPServer();
         const isEnabled = mcpServer !== null;
         
@@ -292,7 +291,7 @@ export default {
   ],
 
   ws: {
-    '/mcp/ws': (ws) => {
+    '/mcp/ws': (ws: any) => {
         RuntimeUtil.makeLog('info', 'MCP WebSocket连接已建立', 'MCPApi');
 
       const mcpServer = getMCPServer();
@@ -315,7 +314,7 @@ export default {
         protocol: 'mcp-1.0'
       }));
 
-      ws.on('message', async (data) => {
+      ws.on('message', async (data: any) => {
         const startTime = Date.now();
         let message;
         try {
@@ -421,7 +420,7 @@ export default {
               message: `未知的消息类型: ${type}`
             }));
           }
-        } catch (error) {
+        } catch (error: any) {
           RuntimeUtil.makeLog('error', `MCP WebSocket消息处理失败: ${error.message}`, 'MCPApi');
           ws.send(JSON.stringify({
             jsonrpc: '2.0',
@@ -438,7 +437,7 @@ export default {
         RuntimeUtil.makeLog('info', 'MCP WebSocket连接已关闭', 'MCPApi');
       });
 
-      ws.on('error', (error) => {
+      ws.on('error', (error: any) => {
         RuntimeUtil.makeLog('error', `MCP WebSocket错误: ${error.message}`, 'MCPApi');
       });
     }
