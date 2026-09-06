@@ -1,5 +1,6 @@
-// @ts-nocheck
 import runtimeConfig from '#infrastructure/config/config.js'
+import { msgSegment } from '#utils/msg-segment.js'
+import PluginBase from '#infrastructure/plugins/plugin-base.js'
 import fs from "node:fs/promises"
 import path from "node:path"
 import lodash from "lodash"
@@ -8,8 +9,8 @@ import { isHttpRef, isEntryMediaRelPath, readImageBuffer, persistEntryMedia } fr
 import { collectForwardIds } from '#utils/onebot-message-seg.js'
 import { inlineBinaryFromRef, isPathLike } from '#utils/media-ref.js'
 
-export const messageMap = {}
-export const bannedWordsMap = {}
+export const messageMap: any = {}
+export const bannedWordsMap: any = {}
 
 const ENTRY_MEDIA_TYPES = new Set(['image', 'video', 'record', 'file'])
 
@@ -17,7 +18,7 @@ const ENTRY_MEDIA_TYPES = new Set(['image', 'video', 'record', 'file'])
 const ADD_CONTEXT_TIMEOUT = 300
 
 /** 规范化转发节点元信息 */
-function normalizeNodeMeta(node) {
+function normalizeNodeMeta(node: any) {
   return {
     nickname: node?.nickname || node?.sender?.nickname || node?.name || '匿名',
     user_id: node?.user_id || node?.sender?.user_id || node?.uin || 80000000,
@@ -25,14 +26,14 @@ function normalizeNodeMeta(node) {
   }
 }
 
-function getNodeMessages(node) {
+function getNodeMessages(node: any) {
   if (Array.isArray(node?.message)) return node.message
   if (Array.isArray(node?.content)) return node.content
   return []
 }
 
 /** 递归收集消息段中的本地媒体文件路径 */
-function collectSegmentFiles(segments, files) {
+function collectSegmentFiles(segments: any, files: any) {
   if (!Array.isArray(segments)) return
   for (const item of segments) {
     if (!item || typeof item !== 'object') continue
@@ -50,6 +51,8 @@ let bannedImagesPath = "data/bannedWords/images/"
 let configPath = "data/bannedWords/config/"
 
 export class add extends PluginBase {
+  [key: string]: any;
+  declare group_id: any;
   constructor() {
     super({
       name: "添加消息",
@@ -103,10 +106,10 @@ export class add extends PluginBase {
     configPath = filesCfg.bannedConfigPath || "data/bannedWords/config/"
     
     await Promise.all([
-      AgentRuntime.mkdir(messageDataPath),
-      AgentRuntime.mkdir(bannedWordsPath),
-      AgentRuntime.mkdir(bannedImagesPath),
-      AgentRuntime.mkdir(configPath)
+      (globalThis as any).AgentRuntime.mkdir(messageDataPath),
+      (globalThis as any).AgentRuntime.mkdir(bannedWordsPath),
+      (globalThis as any).AgentRuntime.mkdir(bannedImagesPath),
+      (globalThis as any).AgentRuntime.mkdir(configPath)
     ])
     await this.initAllBannedWords()
   }
@@ -126,17 +129,17 @@ export class add extends PluginBase {
   async initAllBannedWords() {
     try {
       const files = await fs.readdir(bannedWordsPath)
-      const jsonFiles = files.filter(f => f.endsWith('.json'))
+      const jsonFiles = files.filter((f: any) => f.endsWith('.json'))
       await Promise.all(
-        jsonFiles.map(f => this.initBannedWords(f.replace('.json', '')))
+        jsonFiles.map((f: any) => this.initBannedWords(f.replace('.json', '')))
       )
-    } catch (err) {
-      logger.error(`初始化违禁词失败: ${err.message}`, err)
+    } catch (err: any) {
+      (globalThis as any).logger.error(`初始化违禁词失败: ${err.message}`, err)
     }
   }
 
   /** 初始化群组违禁词 */
-  async initBannedWords(groupId) {
+  async initBannedWords(groupId: any) {
     if (!groupId || bannedWordsMap[groupId]) return
     
     // 从runtimeConfig读取默认配置
@@ -154,16 +157,16 @@ export class add extends PluginBase {
     }
 
     const filePath = `${bannedWordsPath}${groupId}.json`
-    if (!await AgentRuntime.fsStat(filePath)) return
+    if (!await (globalThis as any).AgentRuntime.fsStat(filePath)) return
 
     try {
       const data = JSON.parse(await fs.readFile(filePath, "utf8"))
       
       if (data.exact && Array.isArray(data.exact)) {
-        data.exact.forEach(word => bannedWordsMap[groupId].exact.add(word))
+        data.exact.forEach((word: any) => bannedWordsMap[groupId].exact.add(word))
       }
       if (data.fuzzy && Array.isArray(data.fuzzy)) {
-        data.fuzzy.forEach(word => bannedWordsMap[groupId].fuzzy.add(word))
+        data.fuzzy.forEach((word: any) => bannedWordsMap[groupId].fuzzy.add(word))
       }
       if (data.images && typeof data.images === 'object') {
         Object.entries(data.images).forEach(([hash, info]) => {
@@ -174,14 +177,14 @@ export class add extends PluginBase {
         Object.assign(bannedWordsMap[groupId].config, data.config)
       }
       
-      logger.info(`[违禁词] 成功加载群组 ${groupId} 的违禁词配置`)
-    } catch (err) {
-      logger.error(`加载违禁词失败 ${filePath}: ${err.message}`, err)
+      (globalThis as any).logger.info(`[违禁词] 成功加载群组 ${groupId} 的违禁词配置`)
+    } catch (err: any) {
+      (globalThis as any).logger.error(`加载违禁词失败 ${filePath}: ${err.message}`, err)
     }
   }
 
   /** 保存违禁词到文件 */
-  async saveBannedWords(groupId) {
+  async saveBannedWords(groupId: any) {
     if (!groupId || !bannedWordsMap[groupId]) return
     
     try {
@@ -193,13 +196,13 @@ export class add extends PluginBase {
       }
       
       await fs.writeFile(`${bannedWordsPath}${groupId}.json`, JSON.stringify(data, null, 2), 'utf8')
-    } catch (err) {
-      logger.error(`保存违禁词失败 ${groupId}: ${err.message}`, err)
+    } catch (err: any) {
+      (globalThis as any).logger.error(`保存违禁词失败 ${groupId}: ${err.message}`, err)
     }
   }
 
   /** 获取身份信息 */
-  getRoleInfo(userId) {
+  getRoleInfo(userId: any) {
     if (!this.e.isGroup) {
       return { role: 'member', roleName: '群员', isAdmin: false }
     }
@@ -211,15 +214,15 @@ export class add extends PluginBase {
       }
       
       const role = member.role || 'member'
-      const roleMap = { owner: '群主', admin: '管理员', member: '群员' }
+      const roleMap: any = { owner: '群主', admin: '管理员', member: '群员' }
       
       return {
         role,
         roleName: roleMap[role] || '群员',
         isAdmin: ['owner', 'admin'].includes(role)
       }
-    } catch (error) {
-      logger.debug(`获取身份信息失败: ${error.message}`)
+    } catch (error: any) {
+      (globalThis as any).logger.debug(`获取身份信息失败: ${error.message}`)
       return { role: 'member', roleName: '群员', isAdmin: false }
     }
   }
@@ -336,7 +339,7 @@ export class add extends PluginBase {
     }
 
     if (this.e.img?.length) {
-      const msg = [`正在添加图片违禁词...`]
+      const msg: any[] = [`正在添加图片违禁词...`]
       for (const img of this.e.img) {
         const result = await this.addImageBannedWord(img, this.group_id)
         msg.push(result.success 
@@ -345,7 +348,7 @@ export class add extends PluginBase {
         )
       }
       await this.saveBannedWords(this.group_id)
-      await this.reply(await AgentRuntime.makeForwardArray(msg.flat()))
+      await this.reply(await (globalThis as any).AgentRuntime.makeForwardArray(msg.flat()))
       return this.listBannedWords()
     }
     
@@ -353,7 +356,7 @@ export class add extends PluginBase {
   }
 
   /** 添加图片违禁词 */
-  async addImageBannedWord(imgUrl, groupId) {
+  async addImageBannedWord(imgUrl: any, groupId: any) {
     try {
       const refs = typeof imgUrl === 'object' && imgUrl !== null ? imgUrl : { url: imgUrl }
       const buffer = await readImageBuffer(refs, this._bindSendApi(), { persist: true })
@@ -361,7 +364,7 @@ export class add extends PluginBase {
 
       const hash = crypto.createHash('md5').update(buffer).digest('hex')
       const groupImgPath = `${bannedImagesPath}${groupId}/`
-      await AgentRuntime.mkdir(groupImgPath)
+      await (globalThis as any).AgentRuntime.mkdir(groupImgPath)
 
       const ext = String(refs.url || refs.file || '').match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] || 'jpg'
       const filePath = `${groupImgPath}${hash}.${ext}`
@@ -375,8 +378,8 @@ export class add extends PluginBase {
       })
       
       return { success: true, path: filePath, hash }
-    } catch (err) {
-      logger.error(`添加图片违禁词失败: ${err}`)
+    } catch (err: any) {
+      (globalThis as any).logger.error(`添加图片违禁词失败: ${err}`)
       return { success: false, error: err.message }
     }
   }
@@ -408,14 +411,14 @@ export class add extends PluginBase {
       const groupType = this.isGlobal ? '全局' : '群组'
       
       if (ctx.words.length) {
-        ctx.words.forEach(word => bannedWordsMap[this.group_id][type].add(word))
+        ctx.words.forEach((word: any) => bannedWordsMap[this.group_id][type].add(word))
         msg.push(`【${groupType}${typeName}违禁词】添加了 ${ctx.words.length} 个：`, 
-          ...ctx.words.map(w => `- ${w}`))
+          ...ctx.words.map((w: any) => `- ${w}`))
       }
       
       if (ctx.images.length) {
         msg.push(`【${groupType}图片违禁词】添加了 ${ctx.images.length} 个：`)
-        ctx.images.forEach(img => {
+        ctx.images.forEach((img: any) => {
           bannedWordsMap[this.group_id].images.set(img.hash, img.info)
           msg.push(msgSegment.image(img.info.path))
         })
@@ -423,7 +426,7 @@ export class add extends PluginBase {
       
       await this.saveBannedWords(this.group_id)
       msg.unshift(`✅ 成功添加 ${ctx.words.length + ctx.images.length} 个${groupType}违禁词`)
-      await this.reply(await AgentRuntime.makeForwardArray(msg))
+      await this.reply(await (globalThis as any).AgentRuntime.makeForwardArray(msg))
       return this.listBannedWords()
     }
 
@@ -483,15 +486,15 @@ export class add extends PluginBase {
       let deletedItem = ""
       
       if (this.isFuzzy) {
-        const wordsList = Array.from(bannedWordsMap[this.group_id].fuzzy)
+        const wordsList: any[] = Array.from(bannedWordsMap[this.group_id].fuzzy)
         if (num <= wordsList.length) {
           deletedItem = wordsList[num - 1]
           bannedWordsMap[this.group_id].fuzzy.delete(deletedItem)
           deleted = true
         }
       } else {
-        const exactList = Array.from(bannedWordsMap[this.group_id].exact)
-        const imagesList = Array.from(bannedWordsMap[this.group_id].images.entries())
+        const exactList: any[] = Array.from(bannedWordsMap[this.group_id].exact)
+        const imagesList: any[] = Array.from(bannedWordsMap[this.group_id].images.entries())
         const totalList = [...exactList, ...imagesList]
         
         if (num <= totalList.length) {
@@ -499,13 +502,13 @@ export class add extends PluginBase {
             deletedItem = exactList[num - 1]
             bannedWordsMap[this.group_id].exact.delete(deletedItem)
           } else {
-            const [hash, info] = imagesList[num - exactList.length - 1]
+            const [hash, info] = imagesList[num - exactList.length - 1] as any[]
             deletedItem = `图片违禁词 (${info.desc})`
             bannedWordsMap[this.group_id].images.delete(hash)
             try { 
               await fs.unlink(info.path) 
-            } catch (err) {
-              logger.debug(`删除图片文件失败: ${err.message}`)
+            } catch (err: any) {
+              (globalThis as any).logger.debug(`删除图片文件失败: ${err.message}`)
             }
           }
           deleted = true
@@ -576,7 +579,7 @@ export class add extends PluginBase {
         msg.push(`【群组图片违禁词】共${banned.images.size}个：`)
         for (const [, info] of banned.images) {
           msg.push(`${++totalNum}. ${info.desc}`)
-          await AgentRuntime.fsStat(info.path) && msg.push(msgSegment.image(info.path))
+          await (globalThis as any).AgentRuntime.fsStat(info.path) && msg.push(msgSegment.image(info.path))
         }
       }
       
@@ -599,7 +602,7 @@ export class add extends PluginBase {
         msg.push(`【全局图片违禁词】共${globalBanned.images.size}个：`)
         for (const [, info] of globalBanned.images) {
           msg.push(`G${++globalNum - totalNum}. ${info.desc}`)
-          await AgentRuntime.fsStat(info.path) && msg.push(msgSegment.image(info.path))
+          await (globalThis as any).AgentRuntime.fsStat(info.path) && msg.push(msgSegment.image(info.path))
         }
       }
       
@@ -623,7 +626,7 @@ export class add extends PluginBase {
         msg.push(`【全局图片违禁词】共${globalBanned.images.size}个：`)
         for (const [, info] of globalBanned.images) {
           msg.push(`${++totalNum}. ${info.desc}`)
-          await AgentRuntime.fsStat(info.path) && msg.push(msgSegment.image(info.path))
+          await (globalThis as any).AgentRuntime.fsStat(info.path) && msg.push(msgSegment.image(info.path))
         }
       }
       
@@ -650,7 +653,7 @@ export class add extends PluginBase {
       'G前缀表示全局违禁词，GF前缀表示全局模糊违禁词'
     )
 
-    return this.reply(await AgentRuntime.makeForwardArray(msg))
+    return this.reply(await (globalThis as any).AgentRuntime.makeForwardArray(msg))
   }
 
   /** 检查违禁词 */
@@ -735,17 +738,17 @@ export class add extends PluginBase {
   }
 
   /** 处理违禁词触发 */
-  async handleViolation(violationType, violatedWord, isGlobal = false) {
+  async handleViolation(violationType: any, violatedWord: any, isGlobal: any = false) {
     const { group_id: groupId, user_id: userId } = this.e
     
     const userRole = this.getRoleInfo(userId)
-    const botRole = this.getRoleInfo(this.e.self_id)
+    const botRole = this.getRoleInfo(this.e.self_id);
     
-    logger.info(`[违禁词检测] 用户 ${userId}(${userRole.roleName}) 触发${isGlobal ? '全局' : '群组'}${violationType}违禁词：${violatedWord}`)
+    (globalThis as any).logger.info(`[违禁词检测] 用户 ${userId}(${userRole.roleName}) 触发${isGlobal ? '全局' : '群组'}${violationType}违禁词：${violatedWord}`)
     
     await this.notifyMaster(groupId, userId, violationType, violatedWord, isGlobal, userRole)
     
-    this.e.recall && await this.e.recall().catch(err => logger.warn(`撤回消息失败: ${err}`))
+    this.e.recall && await this.e.recall().catch((err: any) => (globalThis as any).logger.warn(`撤回消息失败: ${err}`))
 
     const responses = this.getViolationResponse(userRole, botRole, groupId)
     const config = bannedWordsMap[groupId].config
@@ -755,8 +758,8 @@ export class add extends PluginBase {
       try {
         await this.e.group.muteMember(userId, config.muteTime * 60)
         await this.reply([msgSegment.at(userId), ` ${responses.mute}`])
-      } catch (err) {
-        logger.error(`执行禁言失败: ${err}`)
+      } catch (err: any) {
+        (globalThis as any).logger.error(`执行禁言失败: ${err}`)
         await this.reply([msgSegment.at(userId), ` ${responses.failMute}`])
       }
     } else {
@@ -767,10 +770,10 @@ export class add extends PluginBase {
   }
 
   /** 通知主人违禁词触发 */
-  async notifyMaster(groupId, userId, violationType, violatedWord, isGlobal, userRole) {
+  async notifyMaster(groupId: any, userId: any, violationType: any, violatedWord: any, isGlobal: any, userRole: any) {
     try {
       if (!this.e.isGroup || !this.e.group) {
-        logger.debug('非群组消息，跳过通知主人')
+        (globalThis as any).logger.debug('非群组消息，跳过通知主人')
         return
       }
       
@@ -798,14 +801,14 @@ export class add extends PluginBase {
         msgSegment.image(avatar)
       ]
       
-      await AgentRuntime.sendMasterMsg(notifyMsg)
-    } catch (err) {
-      logger.error(`通知主人失败: ${err.message}`, err)
+      await (globalThis as any).AgentRuntime.sendMasterMsg(notifyMsg)
+    } catch (err: any) {
+      (globalThis as any).logger.error(`通知主人失败: ${err.message}`, err)
     }
   }
 
   /** 获取违规响应文本 */
-  getViolationResponse(userRole, botRole, groupId) {
+  getViolationResponse(userRole: any, botRole: any, groupId: any): any {
     const muteTime = bannedWordsMap[groupId]?.config?.muteTime || 720
     
     const responses = {
@@ -834,7 +837,7 @@ export class add extends PluginBase {
   }
 
   /** 模糊匹配检查 */
-  checkFuzzyMatch(text, bannedWord) {
+  checkFuzzyMatch(text: any, bannedWord: any) {
     const chars = bannedWord.split('')
     let lastIndex = -1
     
@@ -848,14 +851,14 @@ export class add extends PluginBase {
   }
 
   /** 获取图片hash */
-  async getImageHash(imgUrl) {
+  async getImageHash(imgUrl: any) {
     try {
       const refs = typeof imgUrl === 'object' && imgUrl !== null ? imgUrl : { url: imgUrl }
       const buffer = await readImageBuffer(refs, this._bindSendApi(), { persist: true })
       if (!buffer?.length) return null
       return crypto.createHash('md5').update(buffer).digest('hex')
-    } catch (err) {
-      logger.error(`获取图片hash失败: ${err}`)
+    } catch (err: any) {
+      (globalThis as any).logger.error(`获取图片hash失败: ${err}`)
       return null
     }
   }
@@ -906,13 +909,13 @@ export class add extends PluginBase {
 
     if (this.e.isGroup) {
       this.group_id = this.e.group_id
-      // 缓存群号到Redis（30天）
-      redis.setEx(this.grpKey, 2592000, String(this.group_id))
+      // 缓存群号到Redis（30天）;
+      (globalThis as any).redis.setEx(this.grpKey, 2592000, String(this.group_id))
       return
     }
 
     // 从Redis获取缓存的群号
-    this.group_id = await redis.get(this.grpKey)
+    this.group_id = await (globalThis as any).redis.get(this.grpKey)
   }
 
   /** 权限检查 */
@@ -954,7 +957,7 @@ export class add extends PluginBase {
   }
 
   /** 过滤别名 */
-  trimAlias(msg) {
+  trimAlias(msg: any) {
     if (!msg) return msg
     
     const groupCfg = runtimeConfig.getGroup(this.group_id) || {}
@@ -1019,13 +1022,13 @@ export class add extends PluginBase {
     try {
       const segs = this.e.message || []
       const heavy = segs.some(
-        (s) => s && ['image', 'file', 'forward', 'video', 'record'].includes(s.type)
+        (s: any) => s && ['image', 'file', 'forward', 'video', 'record'].includes(s.type)
       )
       // 图片/转发需下载落盘，先回一句避免「卡住」感
       if (heavy) await this.reply('收到，正在保存…')
       currentMessage = await this.transformSegments(segs, 'store', { root: true })
-    } catch (err) {
-      logger.error(`添加词条内容失败: ${err.message}`, err)
+    } catch (err: any) {
+      (globalThis as any).logger.error(`添加词条内容失败: ${err.message}`, err)
       return this.reply(`添加失败：${err.message || '无法解析该消息（聊天记录可能已过期）'}`)
     }
 
@@ -1056,25 +1059,25 @@ export class add extends PluginBase {
     try {
       const obj = Object.fromEntries(messageMap[this.group_id])
       await fs.writeFile(`${messageDataPath}${this.group_id}.json`, JSON.stringify(obj, null, 2), 'utf8')
-    } catch (err) {
-      logger.error(`保存JSON失败 ${this.group_id}: ${err.message}`, err)
+    } catch (err: any) {
+      (globalThis as any).logger.error(`保存JSON失败 ${this.group_id}: ${err.message}`, err)
     }
   }
 
   _bindSendApi() {
     if (!this.e?.bot?.sendApi) return undefined
-    return (action, params) => this.e.bot.sendApi(action, params)
+    return (action: any, params: any) => this.e.bot.sendApi(action, params)
   }
 
   /** 词条媒体是否已落盘到 messageDataPath（相对路径 group/type/file） */
-  async isEntryMediaPersisted(item) {
+  async isEntryMediaPersisted(item: any) {
     const fileRef = String(item?.file ?? '').trim()
     if (!isEntryMediaRelPath(fileRef)) return false
-    return AgentRuntime.fsStat(`${messageDataPath}${fileRef}`)
+    return (globalThis as any).AgentRuntime.fsStat(`${messageDataPath}${fileRef}`)
   }
 
   /** 词条媒体是否仍需本地化（未写入 messageDataPath 的 HTTP / NapCat 临时引用） */
-  async needsMediaLocalization(item) {
+  async needsMediaLocalization(item: any) {
     if (!ENTRY_MEDIA_TYPES.has(item.type)) return false
     const fileRef = String(item.file ?? '').trim()
     const urlRef = String(item.url ?? '').trim()
@@ -1085,7 +1088,7 @@ export class add extends PluginBase {
   }
 
   /** 保存文件到 messageDataPath，返回相对路径；失败返回 null（不存 URL） */
-  async saveFile(data) {
+  async saveFile(data: any) {
     try {
       const rel = await persistEntryMedia(data, {
         baseDir: messageDataPath,
@@ -1093,12 +1096,12 @@ export class add extends PluginBase {
         sendApi: this._bindSendApi(),
       })
       if (!rel) {
-        const hint = String(data.file ?? data.url ?? '').slice(0, 80)
-        logger.error(`保存文件失败: 无法下载媒体 ${hint}`)
+        const hint = String(data.file ?? data.url ?? '').slice(0, 80);
+        (globalThis as any).logger.error(`保存文件失败: 无法下载媒体 ${hint}`)
       }
       return rel
-    } catch (err) {
-      logger.error(`保存文件失败: ${err.message}`, err)
+    } catch (err: any) {
+      (globalThis as any).logger.error(`保存文件失败: ${err.message}`, err)
       return null
     }
   }
@@ -1109,7 +1112,7 @@ export class add extends PluginBase {
   }
 
   /** 拉取并规范化转发节点（底层 adapter 负责嵌套展开，此处做媒体本地化） */
-  async fetchForwardNodes(seg, root = false) {
+  async fetchForwardNodes(seg: any, root: any = false): Promise<any> {
     const getter = this.getForwardGetter()
     if (!getter) throw new Error('当前环境不支持获取聊天记录')
 
@@ -1120,7 +1123,7 @@ export class add extends PluginBase {
     let lastErr
     try {
       nodes = await getter(ids[0], 0, ids.slice(1))
-    } catch (err) {
+    } catch (err: any) {
       lastErr = err
       nodes = undefined
     }
@@ -1129,7 +1132,7 @@ export class add extends PluginBase {
         try {
           nodes = await getter(id)
           if (Array.isArray(nodes) && nodes.length) break
-        } catch (err) {
+        } catch (err: any) {
           lastErr = err
         }
       }
@@ -1147,7 +1150,7 @@ export class add extends PluginBase {
   /**
    * 统一消息段变换：store=添加存储（展开 forward、本地化媒体），send=发送前解析路径
    */
-  async transformSegments(segments, mode = 'store', { root = false } = {}) {
+  async transformSegments(segments: any, mode: any = 'store', { root = false }: any = {}): Promise<any> {
     if (!Array.isArray(segments)) return []
     const out = []
 
@@ -1156,13 +1159,13 @@ export class add extends PluginBase {
       if (mode === 'store' && seg.type === 'at' && seg.qq == this.e.self_id) continue
 
       if (seg.type === 'forward') {
-        if (mode === 'send') logger.warn('[词条] 检测到未展开的 forward，尝试补救')
+        if (mode === 'send') (globalThis as any).logger.warn('[词条] 检测到未展开的 forward，尝试补救')
         try {
           const nodes = await this.fetchForwardNodes(seg, root)
           if (nodes.length) out.push({ type: 'node', data: nodes })
-        } catch (err) {
+        } catch (err: any) {
           if (mode === 'store') throw err
-          logger.error(`[词条] forward 补救失败: ${err.message}`)
+          (globalThis as any).logger.error(`[词条] forward 补救失败: ${err.message}`)
         }
         continue
       }
@@ -1206,24 +1209,24 @@ export class add extends PluginBase {
   }
 
   /** 解析词条存储的媒体本地路径（仅相对/绝对本地路径，不含 HTTP / 内联二进制） */
-  async resolveEntryMediaPath(item) {
+  async resolveEntryMediaPath(item: any) {
     const ref = String(item?.file ?? '').trim()
     if (!ref || isHttpRef(ref) || ref.startsWith('base64://') || inlineBinaryFromRef(ref)) return null
     if (isEntryMediaRelPath(ref)) {
       const localPath = `${messageDataPath}${ref}`
-      if (await AgentRuntime.fsStat(localPath)) return localPath
+      if (await (globalThis as any).AgentRuntime.fsStat(localPath)) return localPath
     }
     if (isPathLike(ref)) {
-      if (await AgentRuntime.fsStat(ref)) return ref
+      if (await (globalThis as any).AgentRuntime.fsStat(ref)) return ref
       const nested = `${messageDataPath}${ref}`
-      if (await AgentRuntime.fsStat(nested)) return nested
+      if (await (globalThis as any).AgentRuntime.fsStat(nested)) return nested
     }
     if (!ref.includes('/')) return ref
     return null
   }
 
   /** 获取关键词消息 */
-  getKeyWordMsg(keyWord) {
+  getKeyWordMsg(keyWord: any) {
     if (!keyWord) return []
     
     // 先查找精确匹配
@@ -1288,11 +1291,11 @@ export class add extends PluginBase {
 
     const msgToSend = await this.transformSegments([...msg], 'send')
     if (!msgToSend.length) {
-      logger.error(`[发送消息] 词条【${this.keyWord}】内容无法发送`)
+      (globalThis as any).logger.error(`[发送消息] 词条【${this.keyWord}】内容无法发送`)
       return this.reply('该词条内容无法发送（聊天记录引用可能已失效），请删除后重新添加')
     }
 
-    logger.mark(`[发送消息]${this.e.logText}[${this.keyWord}]`)
+    (globalThis as any).logger.mark(`[发送消息]${this.e.logText}[${this.keyWord}]`)
     const groupCfg = runtimeConfig.getGroup(this.group_id)
     return this.reply(msgToSend, Boolean(groupCfg.addReply), {
       at: Boolean(groupCfg.addAt),
@@ -1306,15 +1309,15 @@ export class add extends PluginBase {
     messageMap[this.group_id] = new Map()
 
     const filePath = `${messageDataPath}${this.group_id}.json`
-    if (!await AgentRuntime.fsStat(filePath)) return
+    if (!await (globalThis as any).AgentRuntime.fsStat(filePath)) return
 
     try {
       const message = JSON.parse(await fs.readFile(filePath, "utf8"))
       for (const key in message) {
         messageMap[this.group_id].set(key, message[key])
       }
-    } catch (err) {
-      logger.error(`JSON 格式错误：${filePath} - ${err.message}`, err)
+    } catch (err: any) {
+      (globalThis as any).logger.error(`JSON 格式错误：${filePath} - ${err.message}`, err)
     }
   }
 
@@ -1324,28 +1327,28 @@ export class add extends PluginBase {
     messageMap.global = new Map()
 
     const globalPath = `${messageDataPath}global.json`
-    if (!await AgentRuntime.fsStat(globalPath)) return
+    if (!await (globalThis as any).AgentRuntime.fsStat(globalPath)) return
 
     try {
       const message = JSON.parse(await fs.readFile(globalPath, "utf8"))
       for (const key in message) {
         messageMap.global.set(key, message[key])
       }
-    } catch (err) {
-      logger.error(`JSON 格式错误：${globalPath} - ${err.message}`, err)
+    } catch (err: any) {
+      (globalThis as any).logger.error(`JSON 格式错误：${globalPath} - ${err.message}`, err)
     }
   }
 
   /** 删除文件 */
-  async delFile(messages) {
+  async delFile(messages: any) {
     if (!Array.isArray(messages)) return
 
-    const files = []
+    const files: any[] = []
     for (const msg of Array.isArray(messages[0]) ? messages : [messages]) {
       collectSegmentFiles(Array.isArray(msg) ? msg : [msg], files)
     }
 
-    return Promise.allSettled(files.map(file => fs.rm(`${messageDataPath}${file}`).catch(() => {})))
+    return Promise.allSettled(files.map((file: any) => fs.rm(`${messageDataPath}${file}`).catch(() => {})))
   }
 
   /** #删除 */
@@ -1362,11 +1365,11 @@ export class add extends PluginBase {
 
     const num = parseInt(param)
     if (!isNaN(num) && num > 0) {
-      const allKeys = Array.from(messageMap[this.group_id].keys()).filter(key => 
+      const allKeys = Array.from(messageMap[this.group_id].keys()).filter((key: any) => 
         this.isFuzzy ? key.startsWith('[模糊]') : !key.startsWith('[模糊]')
       )
       if (num <= allKeys.length) {
-        const keyToDelete = allKeys[num - 1]
+        const keyToDelete: any = allKeys[num - 1]
         const messages = messageMap[this.group_id].get(keyToDelete)
         await this.delFile(messages)
         messageMap[this.group_id].delete(keyToDelete)
@@ -1430,7 +1433,7 @@ export class add extends PluginBase {
   }
 
   /** 将词条回复内容转为转发消息（图片/视频/语音显示真实媒体） */
-  async buildEntryPreview(content, prefix = '') {
+  async buildEntryPreview(content: any, prefix: any = '') {
     const parts = []
     if (prefix) parts.push(prefix)
 
@@ -1452,7 +1455,7 @@ export class add extends PluginBase {
             else if (item.type === 'video') parts.push(msgSegment.video(filePath))
             else parts.push(msgSegment.record(filePath))
           } else {
-            const labels = { image: '[图片]', video: '[视频]', record: '[语音]' }
+            const labels: any = { image: '[图片]', video: '[视频]', record: '[语音]' }
             parts.push(labels[item.type] || `[${item.type}]`)
           }
           break
@@ -1463,9 +1466,9 @@ export class add extends PluginBase {
         case 'node': {
           const nodes = Array.isArray(item.data) ? item.data : []
           if (!nodes.length) break
-          const hasNested = nodes.some(n => getNodeMessages(n).some(s => s?.type === 'node' || s?.type === 'forward'))
-          const summary = nodes.slice(0, 2).map(n => {
-            const text = getNodeMessages(n).filter(s => s.type === 'text').map(s => s.text || '').join('').slice(0, 15)
+          const hasNested = nodes.some((n: any) => getNodeMessages(n).some((s: any) => s?.type === 'node' || s?.type === 'forward'))
+          const summary = nodes.slice(0, 2).map((n: any) => {
+            const text = getNodeMessages(n).filter((s: any) => s.type === 'text').map((s: any) => s.text || '').join('').slice(0, 15)
             return `${n.nickname || '匿名'}:${text || '...'}`
           }).join(' | ')
           parts.push(`[聊天记录${nodes.length}条${hasNested ? '(含嵌套)' : ''}${summary ? ` ${summary}` : ''}]`)
@@ -1570,11 +1573,11 @@ export class add extends PluginBase {
       page > 1 && msg.push(`查看上一页：#词条列表${page - 1}`)
     }
 
-    return this.reply(await AgentRuntime.makeForwardArray(msg))
+    return this.reply(await (globalThis as any).AgentRuntime.makeForwardArray(msg))
   }
 
   /** 分页 */
-  pagination(pageNo, pageSize, array) {
+  pagination(pageNo: any, pageSize: any, array: any) {
     const offset = (pageNo - 1) * pageSize
     return array.slice(offset, offset + pageSize)
   }
