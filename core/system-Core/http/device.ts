@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Device HTTP/WebSocket 服务
  * 
@@ -19,6 +18,7 @@
  * - 支持多种协议：WebSocket（实时）、HTTP（文件访问）
  */
 
+// @ts-expect-error no @types/ws
 import WebSocket from 'ws';
 import RuntimeUtil from '#utils/runtime-util.js';
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
@@ -60,7 +60,7 @@ const deviceLogs = new Map();
 const deviceChatHistory = new Map();
 const DEVICE_CHAT_HISTORY_MAX = 50;
 
-function pushDeviceChatMessage(deviceId, { user_id, nickname, message, message_id, time }) {
+function pushDeviceChatMessage(deviceId: any, { user_id, nickname, message, message_id, time }: any) {
     if (!deviceId || message == null) return;
     let list = deviceChatHistory.get(deviceId);
     if (!list) {
@@ -84,7 +84,7 @@ function pushDeviceChatMessage(deviceId, { user_id, nickname, message, message_i
     }
 }
 
-function getDeviceChatHistory(deviceId, count = 20) {
+function getDeviceChatHistory(deviceId: any, count: any = 20) {
     const list = deviceChatHistory.get(deviceId);
     if (!Array.isArray(list) || list.length === 0) return [];
     const take = Math.min(Math.max(1, count), list.length);
@@ -100,7 +100,7 @@ const ttsQueueStatus = new Map();
 const CONNECTION_LOG_WINDOW_MS = 2000;
 const connectionLogTracker = new Map();
 
-function shouldLogConnection(remote) {
+function shouldLogConnection(remote: any) {
     const now = Date.now();
     const last = connectionLogTracker.get(remote) || 0;
     if (now - last < CONNECTION_LOG_WINDOW_MS) {
@@ -111,7 +111,7 @@ function shouldLogConnection(remote) {
 }
 
 /** 判断字符串是否为十六进制形式 */
-function isHexString(str) {
+function isHexString(str: any) {
     if (typeof str !== 'string') return false;
     const s = str.trim();
     return !!s && s.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(s);
@@ -124,7 +124,7 @@ function isHexString(str) {
  * @param {string} deviceId - 设备ID（日志用）
  * @returns {Buffer} PCM Buffer，失败或空则返回空 Buffer
  */
-function decodeAsrAudioPayload(payload, deviceId) {
+function decodeAsrAudioPayload(payload: any, deviceId: any) {
     try {
         if (!payload || typeof payload !== 'object') return Buffer.alloc(0);
 
@@ -184,8 +184,8 @@ function decodeAsrAudioPayload(payload, deviceId) {
             // 其他情况按 base64 处理（支持前缀 base64:）
             const b64 = s.startsWith('base64:') ? s.slice(7) : s;
             try {
-                return Buffer.from(Uint8Array.fromBase64(b64));
-            } catch (e) {
+                return Buffer.from((Uint8Array as any).fromBase64(b64));
+            } catch (e: any) {
                 RuntimeUtil.makeLog(
                     'error',
                     `❌ [ASR] base64 音频解码失败: ${e.message}`,
@@ -201,7 +201,7 @@ function decodeAsrAudioPayload(payload, deviceId) {
             deviceId
         );
         return Buffer.alloc(0);
-    } catch (e) {
+    } catch (e: any) {
         RuntimeUtil.makeLog(
             'error',
             `❌ [ASR] 解码音频数据异常: ${e.message}`,
@@ -217,9 +217,9 @@ const asrSessions = new Map();
 
 const LOG_THROTTLE_CACHE = new Map();
 const DEFAULT_LOG_THROTTLE = 1200;
-let __runtime = null;
+let __runtime: any = null;
 
-function shouldEmitThrottledLog(key, windowMs = DEFAULT_LOG_THROTTLE) {
+function shouldEmitThrottledLog(key: any, windowMs: any = DEFAULT_LOG_THROTTLE) {
     const now = Date.now();
     const previous = LOG_THROTTLE_CACHE.get(key);
     if (previous && now - previous < windowMs) {
@@ -237,7 +237,7 @@ function shouldEmitThrottledLog(key, windowMs = DEFAULT_LOG_THROTTLE) {
     return true;
 }
 
-function logWithThrottle(level, message, scope, key, windowMs = DEFAULT_LOG_THROTTLE) {
+function logWithThrottle(level: any, message: any, scope: any, key: any, windowMs: any = DEFAULT_LOG_THROTTLE) {
     if (shouldEmitThrottledLog(key, windowMs)) {
         RuntimeUtil.makeLog(level, message, scope);
     }
@@ -245,20 +245,21 @@ function logWithThrottle(level, message, scope, key, windowMs = DEFAULT_LOG_THRO
 
 // ==================== 设备管理器类 ====================
 class DeviceManager {
+  [key: string]: any;
     constructor() {
         this.cleanupInterval = null;
-        const systemConfig = getSystemConfig();
+        const systemConfig: any = getSystemConfig();
         this.AUDIO_SAVE_DIR = systemConfig.audio?.saveDir || './data/wav';
         this.bot = null;
         this._deviceEventListener = null;
         this.initializeDirectories();
     }
 
-    setBot(botInstance) {
+    setBot(botInstance: any) {
         this.bot = botInstance;
     }
 
-    getBot(override) {
+    getBot(override: any = null) {
         const runtime = override || this.bot;
         if (!runtime) {
             throw new Error('DeviceManager: AgentRuntime 实例未初始化');
@@ -273,13 +274,13 @@ class DeviceManager {
         initializeDirectories([this.AUDIO_SAVE_DIR]);
     }
 
-    attachDeviceEventBridge(botInstance = this.bot) {
+    attachDeviceEventBridge(botInstance: any = this.bot) {
         if (botInstance) {
             this.bot = botInstance;
         }
         if (!this.bot?.on) return;
         this.detachDeviceEventBridge();
-        this._deviceEventListener = (e) => {
+        this._deviceEventListener = (e: any) => {
         try {
                 if (!e || e.event_type !== 'asr_result') return;
                 const deviceId = e.device_id;
@@ -351,7 +352,7 @@ class DeviceManager {
      * @returns {Object} ASR客户端
      * @private
      */
-    _getASRClient(deviceId, config) {
+    _getASRClient(deviceId: any, config: any) {
         let client = asrClients.get(deviceId);
         if (!client || client.__provider !== config.provider) {
             client = ASRFactory.createClient(deviceId, config, this.getBot());
@@ -367,7 +368,7 @@ class DeviceManager {
      * @returns {Object} TTS客户端
      * @private
      */
-    _getTTSClient(deviceId, config) {
+    _getTTSClient(deviceId: any, config: any) {
         let client = ttsClients.get(deviceId);
         if (!client || client.__provider !== config.provider) {
             client = TTSFactory.createClient(deviceId, config, this.getBot());
@@ -385,7 +386,7 @@ class DeviceManager {
      * @param {Object} data - 会话数据
      * @returns {Promise<Object>} 处理结果
      */
-    async handleASRSessionStart(deviceId, data) {
+    async handleASRSessionStart(deviceId: any, data: any) {
         try {
             const {
                 session_id,
@@ -422,7 +423,7 @@ class DeviceManager {
                 try {
                     await client.endUtterance();
                     await new Promise(resolve => setTimeout(resolve, 200));
-                } catch (e) {
+                } catch (e: any) {
                     RuntimeUtil.makeLog('warn',
                         `⚠️ [ASR] 结束旧会话失败: ${e.message}`,
                         deviceId
@@ -461,7 +462,7 @@ class DeviceManager {
                     modelName: model_name || model || asr_model
                 });
                 asrSessions.get(session_id).asrStarted = true;
-            } catch (e) {
+            } catch (e: any) {
                 RuntimeUtil.makeLog('error',
                     `❌ [ASR] 启动utterance失败: ${e.message}`,
                     deviceId
@@ -472,7 +473,7 @@ class DeviceManager {
 
             return { success: true, session_id };
 
-        } catch (e) {
+        } catch (e: any) {
             RuntimeUtil.makeLog('error',
                 `❌ [ASR会话] 启动失败: ${e.message}`,
                 deviceId
@@ -487,7 +488,7 @@ class DeviceManager {
      * @param {Object} data - 音频数据
      * @returns {Promise<Object>} 处理结果
      */
-    async handleASRAudioChunk(deviceId, data) {
+    async handleASRAudioChunk(deviceId: any, data: any) {
         try {
             const { session_id, chunk_index, vad_state } = data;
             const asrConfig = getAsrConfig();
@@ -536,7 +537,7 @@ class DeviceManager {
                                 deviceId
                             );
 
-                            client.endUtterance().catch((e) => {
+                            client.endUtterance().catch((e: any) => {
         RuntimeUtil.makeLog('error',
                                     `❌ [ASR] 提前结束失败: ${e.message}`,
                                     deviceId
@@ -552,7 +553,7 @@ class DeviceManager {
 
             return { success: true, received: chunk_index };
 
-        } catch (e) {
+        } catch (e: any) {
             RuntimeUtil.makeLog('error',
                 `❌ [ASR] 处理音频块失败: ${e.message}`,
                 deviceId
@@ -567,7 +568,7 @@ class DeviceManager {
      * @param {Object} data - 会话数据
      * @returns {Promise<Object>} 处理结果
      */
-    async handleASRSessionStop(deviceId, data) {
+    async handleASRSessionStop(deviceId: any, data: any) {
         try {
             const { session_id, duration, session_number } = data;
             const asrConfig = getAsrConfig();
@@ -598,7 +599,7 @@ class DeviceManager {
                             `✓ [ASR会话#${session_number}] Utterance已结束`,
                             deviceId
                         );
-                    } catch (e) {
+                    } catch (e: any) {
                         RuntimeUtil.makeLog('warn',
                             `⚠️ [ASR] 结束utterance失败: ${e.message}`,
                             deviceId
@@ -634,7 +635,7 @@ class DeviceManager {
 
             return { success: true };
 
-        } catch (e) {
+        } catch (e: any) {
             RuntimeUtil.makeLog('error',
                 `❌ [ASR会话] 停止失败: ${e.message}`,
                 deviceId
@@ -649,7 +650,7 @@ class DeviceManager {
      * @param {Object} session - 会话对象
      * @private
      */
-    async _waitForFinalTextAsync(deviceId, session) {
+    async _waitForFinalTextAsync(deviceId: any, session: any) {
         const maxWaitMs = typeof session.maxWaitMs === 'number' && session.maxWaitMs > 0
             ? session.maxWaitMs
             : 3000;  // 默认最多等待3秒（可通过配置调整）
@@ -707,7 +708,7 @@ class DeviceManager {
      * @returns {Promise<void>}
      * @private
      */
-    async _processAIResponse(deviceId, question, options = {}) {
+    async _processAIResponse(deviceId: any, question: any, options: any = {}) {
         try {
             const startTime = Date.now();
             const fromASR = options.fromASR === true;
@@ -834,7 +835,7 @@ class DeviceManager {
                 try {
                     await deviceBot.emotion(emotionCode);
                     RuntimeUtil.makeLog('info', `✓ [设备] 表情: ${emotionCode}`, deviceId);
-                } catch (e) {
+                } catch (e: any) {
                     RuntimeUtil.makeLog('error', `❌ [设备] 表情显示失败: ${e.message}`, deviceId);
                 }
             }
@@ -852,7 +853,7 @@ class DeviceManager {
                             RuntimeUtil.makeLog('error', `❌ [TTS] 语音合成失败`, deviceId);
                             await this._sendAIError(deviceId);
                         }
-                    } catch (e) {
+                    } catch (e: any) {
                         RuntimeUtil.makeLog('error', `❌ [TTS] 语音合成异常: ${e.message}`, deviceId);
                         await this._sendAIError(deviceId);
                     }
@@ -870,12 +871,12 @@ class DeviceManager {
                         spacing: 2
                     });
                     RuntimeUtil.makeLog('info', `✓ [设备] 文字: ${aiResult.text}`, deviceId);
-                } catch (e) {
+                } catch (e: any) {
                     RuntimeUtil.makeLog('error', `❌ [设备] 文字显示失败: ${e.message}`, deviceId);
                 }
             }
 
-        } catch (e) {
+        } catch (e: any) {
             RuntimeUtil.makeLog('error', `❌ [AI] 处理失败: ${e.message}`, deviceId);
             await this._sendAIError(deviceId);
         }
@@ -886,14 +887,14 @@ class DeviceManager {
      * @param {string} deviceId - 设备ID
      * @private
      */
-    async _sendAIError(deviceId) {
+    async _sendAIError(deviceId: any) {
         try {
             const runtimeBot = this.getBot();
             const deviceBot = runtimeBot[deviceId];
             if (deviceBot && deviceBot.sendCommand) {
                 await deviceBot.sendCommand('ai_error', {}, 1);
             }
-        } catch (e) {
+        } catch (e: any) {
             RuntimeUtil.makeLog('error', `❌ [AI] 发送错误通知失败: ${e.message}`, deviceId);
         }
     }
@@ -905,7 +906,7 @@ class DeviceManager {
      * @param {string} deviceId - 设备ID
      * @returns {Object} 统计对象
      */
-    initDeviceStats(deviceId) {
+    initDeviceStats(deviceId: any) {
         const stats = {
             device_id: deviceId,
             connected_at: Date.now(),
@@ -923,7 +924,7 @@ class DeviceManager {
      * @param {string} deviceId - 设备ID
      * @param {string} type - 统计类型
      */
-    updateDeviceStats(deviceId, type) {
+    updateDeviceStats(deviceId: any, type: any) {
         const stats = deviceStats.get(deviceId);
         if (!stats) return;
 
@@ -941,9 +942,9 @@ class DeviceManager {
      * @param {Object} data - 附加数据
      * @returns {Object} 日志条目
      */
-    addDeviceLog(deviceId, level, message, data = {}) {
+    addDeviceLog(deviceId: any, level: any, message: any, data: any = {}) {
         message = String(message).substring(0, 500);
-        const systemConfig = getSystemConfig();
+        const systemConfig: any = getSystemConfig();
 
         const entry = {
             timestamp: Date.now(),
@@ -989,16 +990,16 @@ class DeviceManager {
      * @param {Object} filter - 过滤条件
      * @returns {Array} 日志列表
      */
-    getDeviceLogs(deviceId, filter = {}) {
+    getDeviceLogs(deviceId: any, filter: any = {}) {
         let logs = deviceLogs.get(deviceId) || [];
 
         if (filter.level) {
-            logs = logs.filter(l => l.level === filter.level);
+            logs = logs.filter((l: any) => l.level === filter.level);
         }
 
         if (filter.since) {
             const timestamp = new Date(filter.since).getTime();
-            logs = logs.filter(l => l.timestamp >= timestamp);
+            logs = logs.filter((l: any) => l.timestamp >= timestamp);
         }
 
         if (filter.limit) {
@@ -1015,7 +1016,7 @@ class DeviceManager {
      * @param {WebSocket} ws - WebSocket连接
      * @returns {Promise<Object>} 设备对象
      */
-    async registerDevice(deviceData, AgentRuntime, ws) {
+    async registerDevice(deviceData: any, AgentRuntime: any, ws: any = null) {
         const runtimeBot = this.getBot(AgentRuntime);
         const {
             device_id,
@@ -1033,7 +1034,7 @@ class DeviceManager {
         }
 
         const existedDevice = devices.get(device_id);
-        const systemConfig = getSystemConfig();
+        const systemConfig: any = getSystemConfig();
         const now = Date.now();
         const heartbeatTimeoutMs = (systemConfig.heartbeat?.timeout || 1800) * 1000;
 
@@ -1122,7 +1123,7 @@ class DeviceManager {
      * @param {string} deviceId - 设备ID
      * @param {WebSocket} ws - WebSocket实例
      */
-    setupWebSocket(deviceId, ws) {
+    setupWebSocket(deviceId: any, ws: any) {
         const oldWs = deviceWebSockets.get(deviceId);
         if (oldWs && oldWs !== ws) {
             clearInterval(oldWs.heartbeatTimer);
@@ -1146,7 +1147,7 @@ class DeviceManager {
         ws.lastPong = Date.now();
         ws.messageQueue = [];
 
-        const systemConfig = getSystemConfig();
+        const systemConfig: any = getSystemConfig();
         ws.heartbeatTimer = setInterval(() => {
         const device = devices.get(deviceId);
             const now = Date.now();
@@ -1194,7 +1195,7 @@ class DeviceManager {
             this.updateDeviceStats(deviceId, 'heartbeat');
         });
 
-        ws.on('error', (error) => {
+        ws.on('error', (error: any) => {
         RuntimeUtil.makeLog('error',
                 `❌ [WebSocket错误] ${error.message}`,
                 deviceId
@@ -1209,7 +1210,7 @@ class DeviceManager {
      * @param {string} deviceId - 设备ID
      * @param {WebSocket} ws - WebSocket实例
      */
-    handleDeviceDisconnect(deviceId, ws) {
+    handleDeviceDisconnect(deviceId: any, ws: any) {
         clearInterval(ws.heartbeatTimer);
 
         const device = devices.get(deviceId);
@@ -1248,7 +1249,7 @@ class DeviceManager {
      * @param {WebSocket} ws - WebSocket实例
      * @returns {Object} AgentRuntime实例
      */
-    createDeviceBot(deviceId, deviceInfo, ws, botOverride) {
+    createDeviceBot(deviceId: any, deviceInfo: any, ws: any, botOverride: any) {
         const runtimeBot = this.getBot(botOverride);
         // 确保设备名称，Web客户端使用友好名称
         const deviceName = deviceInfo.device_type === 'web' 
@@ -1278,14 +1279,14 @@ class DeviceManager {
                 reconnects: 0
             },
 
-            addLog: (level, message, data = {}) =>
+            addLog: (level: any, message: any, data: any = {}) =>
                 this.addDeviceLog(deviceId, level, message, data),
 
-            getLogs: (filter = {}) => this.getDeviceLogs(deviceId, filter),
+            getLogs: (filter: any = {}) => this.getDeviceLogs(deviceId, filter),
 
             clearLogs: () => deviceLogs.set(deviceId, []),
 
-            sendMsg: async (msg) => {
+            sendMsg: async (msg: any) => {
         const emotion = findEmotionFromKeywords(msg);
                 if (emotion) {
                     return await this.sendCommand(deviceId, 'display_emotion', { emotion }, 1);
@@ -1306,7 +1307,7 @@ class DeviceManager {
             },
 
             /** 以聊天回复形式发到 Web 客户端（Event/聊天窗口展示），与事件里的 reply 同格式 */
-            reply: async (segmentsOrText) => {
+            reply: async (segmentsOrText: any) => {
         const ws = deviceWebSockets.get(deviceId);
                 if (!ws || ws.readyState !== WebSocket.OPEN) return false;
                 try {
@@ -1321,19 +1322,19 @@ class DeviceManager {
                     };
                     ws.send(JSON.stringify(replyMsg));
                     return true;
-                } catch (err) {
+                } catch (err: any) {
                     RuntimeUtil.makeLog('error', `reply失败: ${err.message}`, deviceId);
                     return false;
                 }
             },
 
-            sendCommand: async (cmd, params = {}, priority = 0) =>
+            sendCommand: async (cmd: any, params: any = {}, priority: any = 0) =>
                 await this.sendCommand(deviceId, cmd, params, priority),
 
             // TTS音频发送：带后端背压（按 ws.bufferedAmount 排队/限速），避免一下子全发导致前端挤压/丢包
             // 同一设备维度串行发送，不阻塞上游
             // 优先使用二进制传输（借鉴 xiaozhi）：hex 转 ArrayBuffer 直接发送，带宽约减半、解析更快
-            sendAudioChunk: (hex) => {
+            sendAudioChunk: (hex: any) => {
         const ws = deviceWebSockets.get(deviceId);
                 if (ws && ws.readyState === WebSocket.OPEN && typeof hex === 'string' && hex.length > 0) {
                     const bytes = hex.length / 2;
@@ -1388,10 +1389,10 @@ class DeviceManager {
                                 })(),
                                 deviceId
                             );
-                        }).catch((e) => {
+                        }).catch((e: any) => {
         RuntimeUtil.makeLog('error', `[TTS传输] WebSocket发送队列异常: ${e.message}`, deviceId);
                         });
-                    } catch (e) {
+                    } catch (e: any) {
                         RuntimeUtil.makeLog('error', `[TTS传输] WebSocket发送失败: ${e.message}`, deviceId);
                     }
                 } else {
@@ -1403,7 +1404,7 @@ class DeviceManager {
                 }
             },
 
-            display: async (text, options = {}) =>
+            display: async (text: any, options: any = {}) =>
                 await this.sendCommand(
                     deviceId,
                     'display',
@@ -1418,7 +1419,7 @@ class DeviceManager {
                     1
                 ),
 
-            emotion: async (emotionName) => {
+            emotion: async (emotionName: any) => {
         if (!SUPPORTED_EMOTIONS.includes(emotionName)) {
                     throw new Error(`未知表情: ${emotionName}`);
                 }
@@ -1434,7 +1435,7 @@ class DeviceManager {
                 await this.sendCommand(deviceId, 'display_clear', {}, 1),
 
             camera: {
-                startStream: async (options = {}) =>
+                startStream: async (options: any = {}) =>
                     await this.sendCommand(deviceId, 'camera_start_stream', {
                         fps: options.fps || 10,
                         quality: options.quality || 12,
@@ -1458,7 +1459,7 @@ class DeviceManager {
             reboot: async () =>
                 await this.sendCommand(deviceId, 'reboot', {}, 99),
 
-            hasCapability: (cap) => hasCapability(deviceInfo, cap),
+            hasCapability: (cap: any) => hasCapability(deviceInfo, cap),
 
             getStatus: () => {
         const device = devices.get(deviceId);
@@ -1492,13 +1493,13 @@ class DeviceManager {
      * @param {number} priority - 优先级
      * @returns {Promise<Object>} 命令结果
      */
-    async sendCommand(deviceId, command, parameters = {}, priority = 0) {
+    async sendCommand(deviceId: any, command: any, parameters: any = {}, priority: any = 0) {
         const device = devices.get(deviceId);
         if (!device) {
             throw new Error('设备未找到');
         }
 
-        const systemConfig = getSystemConfig();
+        const systemConfig: any = getSystemConfig();
 
         const cmd = {
             id: generateCommandId(),
@@ -1513,13 +1514,13 @@ class DeviceManager {
         const ws = deviceWebSockets.get(deviceId);
 
         if (ws && ws.readyState === WebSocket.OPEN) {
-            return new Promise((resolve) => {
+            return new Promise<any>((resolve) => {
         const timeout = setTimeout(() => {
         commandCallbacks.delete(cmd.id);
                     resolve({ success: true, command_id: cmd.id, timeout: true });
                 }, systemConfig.command?.timeout || 5000);
 
-                commandCallbacks.set(cmd.id, (result) => {
+                commandCallbacks.set(cmd.id, (result: any) => {
         clearTimeout(timeout);
                     resolve({ success: true, command_id: cmd.id, result });
                 });
@@ -1527,7 +1528,7 @@ class DeviceManager {
                 try {
                     ws.send(JSON.stringify({ type: 'command', command: cmd }));
                     device.stats.commands_executed++;
-                } catch (e) {
+                } catch (e: any) {
                     clearTimeout(timeout);
                     commandCallbacks.delete(cmd.id);
                     resolve({ success: false, command_id: cmd.id, error: e.message });
@@ -1554,7 +1555,7 @@ class DeviceManager {
     }
 
     /** 标记设备活跃（OneBot 风格：心跳/消息/通知统一更新） */
-    markDeviceActive(ws, deviceId) {
+    markDeviceActive(ws: any, deviceId: any) {
         if (ws) ws.isAlive = true; if (ws) ws.lastPong = Date.now();
         const device = devices.get(deviceId);
         if (device) {
@@ -1564,7 +1565,7 @@ class DeviceManager {
     }
 
     /** 向 WebSocket 发送错误响应 */
-    sendWsError(ws, message) {
+    sendWsError(ws: any, message: any) {
         try {
             ws.send(JSON.stringify({ type: 'error', message }));
         } catch {}
@@ -1577,7 +1578,7 @@ class DeviceManager {
      * @param {Object} AgentRuntime - AgentRuntime实例
      * @returns {Promise<void>}
      */
-    async processWebSocketMessage(ws, data, AgentRuntime) {
+    async processWebSocketMessage(ws: any, data: any, AgentRuntime: any) {
         const runtimeBot = this.getBot(AgentRuntime);
         try {
             const { type, device_id, ...payload } = data;
@@ -1770,12 +1771,12 @@ class DeviceManager {
                         channel: messagePayload.channel,
                         meta: messagePayload.meta,
                         /** 与 QQ 一致：供 ChatStream.syncHistoryFromAdapter 拉取近期对话并参与 LLM 上下文。签名 (message_seq, count, reverseOrder) */
-                        getChatHistory: (_message_seq, count = 20, _reverseOrder) =>
+                        getChatHistory: (_message_seq: any, count: any = 20, _reverseOrder: any) =>
                             getDeviceChatHistory(deviceId, count),
                         /** 获取当前消息所回复的那条（从 message 中第一个 reply 段解析），便于插件处理媒体等 */
                         getReply: async () => {
         const msg = messagePayload.message;
-                            const seg = Array.isArray(msg) ? msg.find(s => s && s.type === 'reply') : null;
+                            const seg = Array.isArray(msg) ? msg.find((s: any) => s && s.type === 'reply') : null;
                             if (!seg) return null;
                             return {
                                 id: seg.id ?? seg.message_id,
@@ -1803,7 +1804,7 @@ class DeviceManager {
                          * @param {string|Array|Object} segmentsOrText - Tasker 发送的消息内容
                          * @returns {Promise<boolean>} 是否发送成功
                          */
-                        reply: async (segmentsOrText) => {
+                        reply: async (segmentsOrText: any) => {
         try {
                                 const ws = deviceWebSockets.get(deviceId);
                                 if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -1812,7 +1813,7 @@ class DeviceManager {
                                 }
                                 
                                 // 标准化输入：tasker 发送的 segments 格式
-                                let segments = [];
+                                let segments: any[] = [];
                                 let title = '';
                                 let description = '';
                                 
@@ -1846,7 +1847,7 @@ class DeviceManager {
                                 }
 
                                 // 处理 segments：路径/Buffer 转 web URL
-                                segments = segments.map((seg) => {
+                                segments = segments.map((seg: any) => {
         // 字符串类型：转换为 text segment（防御性处理）
                                     if (typeof seg === 'string') {
                                         return { type: 'text', text: seg };
@@ -1895,7 +1896,7 @@ class DeviceManager {
                                         const filePath = seg.file || seg.data?.file;
                                         if (Buffer.isBuffer(filePath)) {
                                             const mime = seg.type === 'image' ? (filePath[0] === 0x89 && filePath[1] === 0x50 ? 'image/png' : 'image/jpeg') : seg.type === 'video' ? 'video/mp4' : 'application/octet-stream';
-                                            return { type: seg.type, url: `data:${mime};base64,${filePath.toBase64()}`, data: {}, name: seg.name };
+                                            return { type: seg.type, url: `data:${mime};base64,${(filePath as any).toBase64()}`, data: {}, name: seg.name };
                                         }
                                         if (!filePath || typeof filePath !== 'string') {
                                             RuntimeUtil.makeLog('warn', `[reply] ${seg.type} segment 缺少 file 或 url`, deviceId);
@@ -1909,7 +1910,7 @@ class DeviceManager {
                                         const url = normalizedPath.startsWith(trashPath)
                                             ? `/api/trash/${path.relative(trashPath, normalizedPath).replace(/\\/g, '/')}`
                                             : path.isAbsolute(filePath)
-                                                ? `/api/device/file/${Buffer.from(filePath, 'utf8').toBase64({ alphabet: 'base64url' })}`
+                                                ? `/api/device/file/${(Buffer.from(filePath, 'utf8') as any).toBase64({ alphabet: 'base64url' })}`
                                                 : `/api/trash/${filePath.replace(/\\/g, '/')}`;
                                         return { type: seg.type, url, data: { file: filePath }, name: seg.name };
                                     }
@@ -1930,7 +1931,7 @@ class DeviceManager {
                                     (segments[0].messages && Array.isArray(segments[0].messages))
                                 );
                                 
-                                const replyMsg = {
+                                const replyMsg: any = {
                                     type: isForward ? 'forward' : 'reply',
                                     device_id: deviceId,
                                     channel: messagePayload.channel || 'device',
@@ -2004,7 +2005,7 @@ class DeviceManager {
                                     });
                                 }
                                 return true;
-                            } catch (err) {
+                            } catch (err: any) {
                                 RuntimeUtil.makeLog('error', `reply失败: ${err.message}`, deviceId);
                                 return false;
                             }
@@ -2073,7 +2074,7 @@ class DeviceManager {
                         );
                     }
             }
-        } catch (e) {
+        } catch (e: any) {
             RuntimeUtil.makeLog('error', `❌ [WebSocket] 处理消息失败: ${e.message}`, ws.device_id);
             this.sendWsError(ws, e.message);
         }
@@ -2083,9 +2084,9 @@ class DeviceManager {
      * 检查离线设备
      * @param {Object} AgentRuntime - AgentRuntime实例
      */
-    checkOfflineDevices(AgentRuntime) {
+    checkOfflineDevices(AgentRuntime: any = null) {
         const runtimeBot = this.getBot(AgentRuntime);
-        const systemConfig = getSystemConfig();
+        const systemConfig: any = getSystemConfig();
         const timeout = (systemConfig.heartbeat?.timeout || 1800) * 1000;
         const now = Date.now();
 
@@ -2139,7 +2140,7 @@ class DeviceManager {
      * @param {string} deviceId - 设备ID
      * @returns {Object|null} 设备信息
      */
-    getDevice(deviceId) {
+    getDevice(deviceId: any) {
         const device = devices.get(deviceId);
         if (!device) return null;
 
@@ -2163,7 +2164,7 @@ export default {
         {
             method: 'POST',
             path: '/api/device/register',
-            handler: HttpResponse.asyncHandler(async (req, res, AgentRuntime) => {
+            handler: HttpResponse.asyncHandler(async (req: any, res: any, AgentRuntime: any) => {
                     const device = await deviceManager.registerDevice(
                         {
                             ...req.body,
@@ -2178,7 +2179,7 @@ export default {
         {
             method: 'POST',
             path: '/api/device/:deviceId/ai',
-            handler: HttpResponse.asyncHandler(async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const deviceId = req.params.deviceId;
                     const { text, workflow, persona, profile, llm, model, llmProfile } = req.body || {};
                     if (!text || !String(text).trim()) {
@@ -2202,7 +2203,7 @@ export default {
         {
             method: 'GET',
             path: '/api/devices',
-            handler: HttpResponse.asyncHandler(async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const list = deviceManager.getDeviceList();
                 HttpResponse.success(res, { devices: list, count: list.length });
             }, 'device.list')
@@ -2211,7 +2212,7 @@ export default {
         {
             method: 'GET',
             path: '/api/device/:deviceId',
-            handler: HttpResponse.asyncHandler(async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const device = deviceManager.getDevice(req.params.deviceId);
                 if (device) {
                     HttpResponse.success(res, { device });
@@ -2224,10 +2225,10 @@ export default {
         {
             method: 'GET',
             path: '/api/device/:deviceId/asr/sessions',
-            handler: HttpResponse.asyncHandler(async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const sessions = Array.from(asrSessions.entries())
-                    .filter(([, s]) => s.deviceId === req.params.deviceId)
-                    .map(([sid, s]) => ({
+                    .filter(([, s]: any) => s.deviceId === req.params.deviceId)
+                    .map(([sid, s]: any) => ({
                         session_id: sid,
                         device_id: s.deviceId,
                         session_number: s.sessionNumber,
@@ -2244,7 +2245,7 @@ export default {
         {
             method: 'GET',
             path: '/api/device/:deviceId/asr/recordings',
-            handler: HttpResponse.asyncHandler(async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const recordings = await getAudioFileList(
                         deviceManager.AUDIO_SAVE_DIR,
                         req.params.deviceId
@@ -2253,7 +2254,7 @@ export default {
                 HttpResponse.success(res, {
                         recordings,
                         count: recordings.length,
-                        total_size: recordings.reduce((s, r) => s + r.size, 0)
+                        total_size: recordings.reduce((s: any, r: any) => s + r.size, 0)
                     });
             }, 'device.asr.recordings')
         },
@@ -2261,7 +2262,7 @@ export default {
         {
             method: 'POST',
             path: '/api/device/tts',
-            handler: HttpResponse.asyncHandler(async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
         const { device_id, text } = req.body || {};
                 if (!text || !String(text).trim()) {
                     return HttpResponse.validationError(res, '缺少文本内容');
@@ -2283,7 +2284,7 @@ export default {
                     } else {
                         HttpResponse.error(res, new Error('TTS合成失败'), 500, 'device.tts');
                     }
-                } catch (e) {
+                } catch (e: any) {
                     HttpResponse.error(res, e, 500, 'device.tts');
                 }
             }, 'device.tts')
@@ -2292,7 +2293,7 @@ export default {
         {
             method: 'GET',
             path: '/api/trash/*',
-            handler: HttpResponse.asyncHandler(async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
                 const filePath = req.params[0];
                 if (!filePath || filePath.includes('..')) {
                     return HttpResponse.validationError(res, '无效的文件路径');
@@ -2301,7 +2302,7 @@ export default {
                 let resolvedPath;
                 try {
                     resolvedPath = InputValidator.validatePath(filePath, paths.trash);
-                } catch (e) {
+                } catch (e: any) {
                     return HttpResponse.validationError(res, e.message || '无效的文件路径');
                 }
 
@@ -2319,7 +2320,7 @@ export default {
                     '.svg': 'image/svg+xml'
                 };
 
-                const contentType = contentTypeMap[ext] || 'application/octet-stream';
+                const contentType = (contentTypeMap as any)[ext] || 'application/octet-stream';
                 res.setHeader('Content-Type', contentType);
                 res.setHeader('Cache-Control', 'public, max-age=3600');
 
@@ -2329,7 +2330,7 @@ export default {
         {
             method: 'GET',
             path: '/api/device/file/:fileId',
-            handler: HttpResponse.asyncHandler(async (req, res) => {
+            handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
                 const fileId = req.params.fileId;
                 if (!fileId) {
                     return HttpResponse.validationError(res, '文件ID不能为空');
@@ -2337,7 +2338,7 @@ export default {
 
                 let filePath;
                 try {
-                    filePath = Buffer.from(Uint8Array.fromBase64(fileId, { alphabet: 'base64url' })).toString('utf8');
+                    filePath = Buffer.from((Uint8Array as any).fromBase64(fileId, { alphabet: 'base64url' })).toString('utf8');
                 } catch {
                     return HttpResponse.validationError(res, '无效的文件ID');
                 }
@@ -2345,7 +2346,7 @@ export default {
                 let normalizedPath;
                 try {
                     normalizedPath = InputValidator.assertPathUnderRoots(filePath, DEVICE_FILE_ROOTS);
-                } catch (e) {
+                } catch (e: any) {
                     const msg = e.message || '无效的文件路径';
                     if (msg.includes('拒绝')) {
                         return HttpResponse.forbidden(res, msg);
@@ -2374,7 +2375,7 @@ export default {
                     '.ico': 'image/x-icon'
                 };
 
-                const contentType = contentTypeMap[ext] || 'application/octet-stream';
+                const contentType = (contentTypeMap as any)[ext] || 'application/octet-stream';
                 res.setHeader('Content-Type', contentType);
                 res.setHeader('Cache-Control', 'public, max-age=3600');
                 res.setHeader('Content-Disposition', `inline; filename="${path.basename(normalizedPath)}"`);
@@ -2386,7 +2387,7 @@ export default {
 
     ws: {
         device: [
-            (ws, req, AgentRuntime) => {
+            (ws: any, req: any, AgentRuntime: any) => {
         const remote = req.socket?.remoteAddress || req.headers['x-real-ip'] || 'unknown';
                 if (shouldLogConnection(remote)) {
                     RuntimeUtil.makeLog('info',
@@ -2395,11 +2396,11 @@ export default {
                     );
                 }
 
-                ws.on('message', msg => {
+                ws.on('message', (msg: any) => {
                     try {
                         const data = JSON.parse(msg);
                         deviceManager.processWebSocketMessage(ws, data, AgentRuntime);
-                    } catch (e) {
+                    } catch (e: any) {
                         RuntimeUtil.makeLog('error',
                             `❌ [WebSocket] 消息解析失败: ${e.message}`,
                             ws.device_id
@@ -2418,7 +2419,7 @@ export default {
                     }
                 });
 
-                ws.on('error', (e) => {
+                ws.on('error', (e: any) => {
         RuntimeUtil.makeLog('error',
                         `❌ [WebSocket] 错误: ${e.message}`,
                         ws.device_id || 'unknown'
@@ -2428,7 +2429,7 @@ export default {
         ]
     },
 
-    init(app, AgentRuntime) {
+    init(app: any, AgentRuntime: any) {
         if (__runtime) __runtime.dispose();
         __runtime = new Disposables();
         deviceManager.setBot(AgentRuntime);
