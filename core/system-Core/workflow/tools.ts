@@ -1,4 +1,3 @@
-// @ts-nocheck
 import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import path from 'path';
@@ -23,6 +22,7 @@ const IS_WINDOWS = process.platform === 'win32';
  * 细则见 `.xrk/skills/core/agent-tools/SKILL.md`、`docs/mcp-guide.md`。
  */
 export default class ToolsStream extends AiWorkflow {
+  [key: string]: any;
   /** 工作区级会话待办（对齐 OpenCode todowrite / Cline plan） */
   sessionTodos = new Map();
 
@@ -92,7 +92,7 @@ export default class ToolsStream extends AiWorkflow {
         },
         required: ['filePath']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const { filePath } = args;
         if (!filePath) return { success: false, error: '文件路径不能为空' };
 
@@ -145,7 +145,7 @@ export default class ToolsStream extends AiWorkflow {
         },
         required: ['pattern']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const { pattern, filePath } = args;
         if (!pattern) return { success: false, error: '搜索关键词不能为空' };
 
@@ -185,7 +185,7 @@ export default class ToolsStream extends AiWorkflow {
         },
         required: ['filePath', 'oldText', 'newText']
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         const { filePath, oldText, newText, replaceAll = false } = args;
         if (!filePath) return { success: false, error: '文件路径不能为空' };
         const result = await this.tools.searchReplace(filePath, oldText, newText, { replaceAll });
@@ -227,7 +227,7 @@ export default class ToolsStream extends AiWorkflow {
         },
         required: ['filePath', 'content']
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         const { filePath, content, overwrite = false } = args;
         if (!filePath) return { success: false, error: '文件路径不能为空' };
         if (content === undefined) return { success: false, error: '文件内容不能为空' };
@@ -262,7 +262,7 @@ export default class ToolsStream extends AiWorkflow {
         },
         required: ['filePath']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const { filePath } = args;
         if (!filePath) return { success: false, error: '文件路径不能为空' };
 
@@ -279,7 +279,7 @@ export default class ToolsStream extends AiWorkflow {
               message: '文件删除成功'
             }
           };
-        } catch (error) {
+        } catch (error: any) {
           return { success: false, error: error.message };
         }
       },
@@ -309,7 +309,7 @@ export default class ToolsStream extends AiWorkflow {
         },
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const { dirPath = null, includeHidden = false, type = 'all' } = args;
         const result = await this.tools.listDir(dirPath, { includeHidden, type });
         
@@ -342,7 +342,7 @@ export default class ToolsStream extends AiWorkflow {
         },
         required: ['command']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         if (!this.fileToolsCfg.runEnabled) {
           return { success: false, error: 'run 已在 ai-workflow.tools.file.runEnabled 中关闭' };
         }
@@ -373,7 +373,7 @@ export default class ToolsStream extends AiWorkflow {
               platform: process.platform
             }
           };
-        } catch (err) {
+        } catch (err: any) {
           return { success: false, error: err.message, stderr: err.stderr || '' };
         }
       },
@@ -398,7 +398,7 @@ export default class ToolsStream extends AiWorkflow {
         },
         required: ['patch']
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         const patch = String(args.patch || '');
         if (!patch.trim()) return { success: false, error: 'patch 不能为空' };
         const result = await applyEditBlocks(this.workspace, patch, { dryRun: !!args.dryRun });
@@ -431,7 +431,7 @@ export default class ToolsStream extends AiWorkflow {
         },
         required: ['command']
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         if (!this.fileToolsCfg.runEnabled) {
           return { success: false, error: 'verify 需要 tools.file.runEnabled=true' };
         }
@@ -449,7 +449,7 @@ export default class ToolsStream extends AiWorkflow {
               stderr: String(stderr || '').slice(0, maxOut)
             }
           };
-        } catch (err) {
+        } catch (err: any) {
           return {
             success: false,
             error: err.message,
@@ -482,7 +482,7 @@ export default class ToolsStream extends AiWorkflow {
         },
         required: []
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         try {
           const map = await buildRepoMapLite(this.workspace, {
             query: args.query || '',
@@ -493,8 +493,8 @@ export default class ToolsStream extends AiWorkflow {
             raw: map.text,
             data: { files: map.files, count: map.files.length }
           };
-        } catch (err) {
-          return { success: false, error: Error.isError(err) ? err.message : String(err) };
+        } catch (err: any) {
+          return { success: false, error: (Error as any).isError(err) ? err.message : String(err) };
         }
       },
       enabled: true
@@ -526,7 +526,7 @@ export default class ToolsStream extends AiWorkflow {
         },
         required: ['todos']
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         const todos = Array.isArray(args.todos) ? args.todos : null;
         if (!todos) return { success: false, error: 'todos 必须为数组' };
         const normalized = [];
@@ -556,7 +556,7 @@ export default class ToolsStream extends AiWorkflow {
 
   }
 
-  async trySearchAndReadFile(filePath) {
+  async trySearchAndReadFile(filePath: any) {
     const searchResults = await this.tools.searchFiles(path.basename(filePath), {
       maxDepth: 2,
       fileExtensions: null
@@ -569,11 +569,11 @@ export default class ToolsStream extends AiWorkflow {
     return await this.tools.readFile(searchResults[0]);
   }
 
-  async executeCommand(command) {
+  async executeCommand(command: any) {
     const safeCommand = InputValidator.validateCommand(command);
     const timeout = this.fileToolsCfg.runTimeoutMs ?? 120_000;
     const fullCommand = this.buildFullCommand(safeCommand, this.workspace);
-    const opts = {
+    const opts: any = {
       maxBuffer: 10 * 1024 * 1024,
       cwd: this.workspace,
       timeout,
@@ -585,10 +585,10 @@ export default class ToolsStream extends AiWorkflow {
       opts.shell = '/bin/sh';
     }
     const { stdout, stderr } = await exec(fullCommand, opts);
-    return { output: (stdout ?? '').trim(), stderr: (stderr ?? '').trim() };
+    return { output: String(stdout ?? '').trim(), stderr: String(stderr ?? '').trim() };
   }
 
-  buildFullCommand(command, workspace) {
+  buildFullCommand(command: any, workspace: any) {
     const isPowerShellCmd = /^(Get-|Set-|New-|Remove-|Test-|Invoke-|Start-|Stop-)/i.test(command);
     if (IS_WINDOWS) {
       const ws = workspace.replace(/'/g, "''");

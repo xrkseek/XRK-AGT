@@ -1,4 +1,3 @@
-// @ts-nocheck
 import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import RuntimeUtil from '#utils/runtime-util.js';
@@ -13,7 +12,7 @@ import {
   createLocalFontScreenshotHelper
 } from '#infrastructure/crawl/index.js';
 
-function resolveBrowserScreenshotSavePath(relPath) {
+function resolveBrowserScreenshotSavePath(relPath: any) {
   const ws = AiWorkflowLoader.getWorkflow('tools')?.workspace;
   if (!ws || typeof relPath !== 'string' || !relPath.trim()) return null;
   const root = path.resolve(ws);
@@ -24,11 +23,12 @@ function resolveBrowserScreenshotSavePath(relPath) {
 
 /** Playwright 受控浏览器 MCP。 */
 export default class BrowserStream extends AiWorkflow {
+  [key: string]: any;
   /** @type {PlaywrightAgentSession | null} */
-  session = null;
+  session: any = null;
 
   /** @type {ReturnType<typeof buildBrowserRuntime>} */
-  browserRuntime;
+  browserRuntime: any = null;
 
   constructor() {
     super({
@@ -77,10 +77,10 @@ export default class BrowserStream extends AiWorkflow {
       const helper = createLocalFontScreenshotHelper({
         fontUrlBase: rt.screenshotFontUrlBase,
         fontDir: rt.screenshotFontDir,
-        fonts: fontFiles.map((file) => ({ family: path.basename(file, path.extname(file)), file }))
+        fonts: fontFiles.map((file: any) => ({ family: path.basename(file, path.extname(file)), file }))
       });
       this.session.attachScreenshotHelper(helper);
-    } catch (e) {
+    } catch (e: any) {
       RuntimeUtil.makeLog(
         'warn',
         `[${this.name}] 截图字体助手未启用: ${e?.message || e}`,
@@ -120,7 +120,7 @@ export default class BrowserStream extends AiWorkflow {
         try {
           await this.ensureSession();
           return this.successResponse({ message: '浏览器会话已就绪' });
-        } catch (e) {
+        } catch (e: any) {
           const msg = e?.message || String(e);
           RuntimeUtil.makeLog('error', `[${this.name}] browser_start: ${msg}`, 'BrowserStream');
           return this.errorResponse('BROWSER_START_FAILED', msg);
@@ -144,14 +144,14 @@ export default class BrowserStream extends AiWorkflow {
         },
         required: ['url']
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         const url = typeof args.url === 'string' ? args.url.trim() : '';
         if (!url) return this.errorResponse('INVALID_PARAM', 'url 必填');
         const waitUntil = ['load', 'domcontentloaded', 'networkidle', 'commit'].includes(args.waitUntil)
           ? args.waitUntil
           : 'load';
         try {
-          const s = await this.ensureSession();
+          const s: any = await this.ensureSession();
           await s.goto(url, {
             waitUntil,
             timeoutMs: this.browserRuntime.navigationTimeoutMs,
@@ -159,7 +159,7 @@ export default class BrowserStream extends AiWorkflow {
           });
           const title = await s.title();
           return this.successResponse({ url, title });
-        } catch (e) {
+        } catch (e: any) {
           if (e instanceof SsrFBlockedError || e?.name === 'SsrFBlockedError') {
             return this.errorResponse('SSRF_BLOCKED', e.message);
           }
@@ -187,7 +187,7 @@ export default class BrowserStream extends AiWorkflow {
             truncated = true;
           }
           return this.successResponse({ title, text, truncated, maxChars: this.browserRuntime.maxTextChars });
-        } catch (e) {
+        } catch (e: any) {
           return this.errorResponse('BROWSER_PAGE_TEXT_FAILED', e?.message || String(e));
         }
       },
@@ -212,7 +212,7 @@ export default class BrowserStream extends AiWorkflow {
         },
         required: []
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         try {
           if (!this.session) {
             return this.errorResponse('NO_SESSION', '请先 browser_start 或 browser_goto');
@@ -252,7 +252,7 @@ export default class BrowserStream extends AiWorkflow {
             headless: this.browserRuntime.headless,
             savedPath
           });
-        } catch (e) {
+        } catch (e: any) {
           return this.errorResponse('BROWSER_SCREENSHOT_FAILED', e?.message || String(e));
         }
       },
@@ -277,7 +277,7 @@ export default class BrowserStream extends AiWorkflow {
         },
         required: []
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         try {
           if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start 或 browser_goto');
           const out = await this.session.roleSnapshot({
@@ -293,7 +293,7 @@ export default class BrowserStream extends AiWorkflow {
             refs: out.refs,
             stats: out.stats
           });
-        } catch (e) {
+        } catch (e: any) {
           return this.errorResponse('BROWSER_SNAPSHOT_FAILED', e?.message || String(e));
         }
       },
@@ -351,7 +351,7 @@ export default class BrowserStream extends AiWorkflow {
         },
         required: ['kind']
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         try {
           if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start 或 browser_goto');
           const result = await this.session.runAct({
@@ -359,7 +359,7 @@ export default class BrowserStream extends AiWorkflow {
             ssrfPolicy: this.browserRuntime.ssrfPolicy
           });
           return this.successResponse(result);
-        } catch (e) {
+        } catch (e: any) {
           if (e instanceof SsrFBlockedError || e?.name === 'SsrFBlockedError') {
             return this.errorResponse('SSRF_BLOCKED', e.message);
           }
@@ -377,7 +377,7 @@ export default class BrowserStream extends AiWorkflow {
           if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
           const tabs = await this.session.listTabs();
           return this.successResponse({ tabs });
-        } catch (e) {
+        } catch (e: any) {
           return this.errorResponse('BROWSER_TABS_FAILED', e?.message || String(e));
         }
       },
@@ -393,7 +393,7 @@ export default class BrowserStream extends AiWorkflow {
         },
         required: []
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         try {
           await this.ensureSession();
           const url = typeof args.url === 'string' ? args.url.trim() : '';
@@ -401,7 +401,7 @@ export default class BrowserStream extends AiWorkflow {
             ssrfPolicy: this.browserRuntime.ssrfPolicy
           });
           return this.successResponse(out);
-        } catch (e) {
+        } catch (e: any) {
           if (e instanceof SsrFBlockedError || e?.name === 'SsrFBlockedError') {
             return this.errorResponse('SSRF_BLOCKED', e.message);
           }
@@ -418,12 +418,12 @@ export default class BrowserStream extends AiWorkflow {
         properties: { index: { type: 'number', description: '标签 index，默认当前页' } },
         required: []
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         try {
           if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
           const out = await this.session.closeTab(args.index);
           return this.successResponse(out);
-        } catch (e) {
+        } catch (e: any) {
           return this.errorResponse('BROWSER_TAB_CLOSE_FAILED', e?.message || String(e));
         }
       },
@@ -437,13 +437,13 @@ export default class BrowserStream extends AiWorkflow {
         properties: { index: { type: 'number' } },
         required: ['index']
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         try {
           if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
           if (typeof args.index !== 'number') return this.errorResponse('INVALID_PARAM', 'index 必填');
           const out = await this.session.focusTab(Math.floor(args.index));
           return this.successResponse(out);
-        } catch (e) {
+        } catch (e: any) {
           return this.errorResponse('BROWSER_TAB_FOCUS_FAILED', e?.message || String(e));
         }
       },
@@ -457,12 +457,12 @@ export default class BrowserStream extends AiWorkflow {
         properties: { limit: { type: 'number', default: 50 } },
         required: []
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         try {
           if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
           const limit = typeof args.limit === 'number' ? Math.floor(args.limit) : 50;
           return this.successResponse({ messages: this.session.getConsoleMessages(limit) });
-        } catch (e) {
+        } catch (e: any) {
           return this.errorResponse('BROWSER_CONSOLE_FAILED', e?.message || String(e));
         }
       },
@@ -476,12 +476,12 @@ export default class BrowserStream extends AiWorkflow {
         properties: { limit: { type: 'number', default: 100 } },
         required: []
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         try {
           if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
           const limit = typeof args.limit === 'number' ? Math.floor(args.limit) : 100;
           return this.successResponse({ requests: this.session.getNetworkRequests(limit) });
-        } catch (e) {
+        } catch (e: any) {
           return this.errorResponse('BROWSER_NETWORK_FAILED', e?.message || String(e));
         }
       },
@@ -499,7 +499,7 @@ export default class BrowserStream extends AiWorkflow {
         },
         required: ['accept']
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         try {
           if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
           this.session.armDialog({
@@ -508,7 +508,7 @@ export default class BrowserStream extends AiWorkflow {
             timeoutMs: args.timeoutMs
           });
           return this.successResponse({ armed: true });
-        } catch (e) {
+        } catch (e: any) {
           return this.errorResponse('BROWSER_DIALOG_ARM_FAILED', e?.message || String(e));
         }
       },
@@ -526,7 +526,7 @@ export default class BrowserStream extends AiWorkflow {
         },
         required: ['accept']
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         try {
           if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
           const record = await this.session.respondDialog({
@@ -535,7 +535,7 @@ export default class BrowserStream extends AiWorkflow {
             dialogId: args.dialogId
           });
           return this.successResponse({ dialog: record });
-        } catch (e) {
+        } catch (e: any) {
           return this.errorResponse('BROWSER_DIALOG_RESPOND_FAILED', e?.message || String(e));
         }
       },
@@ -549,7 +549,7 @@ export default class BrowserStream extends AiWorkflow {
         try {
           if (!this.session) return this.errorResponse('NO_SESSION', '请先 browser_start');
           return this.successResponse(this.session.getObservedBrowserState());
-        } catch (e) {
+        } catch (e: any) {
           return this.errorResponse('BROWSER_OBSERVED_STATE_FAILED', e?.message || String(e));
         }
       },
