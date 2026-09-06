@@ -1,4 +1,3 @@
-// @ts-nocheck
 import path from 'path';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
@@ -50,6 +49,7 @@ import { chatSessionHistory } from '#utils/chat-session-history.js';
 import { resolveTaskerId } from '#utils/event-keys.js';
 import { summarizeToolForHistory } from '#utils/mcp-tool-result-text.js';
 import { readMediaBuffer } from '#utils/entry-media.js';
+import { msgSegment } from '#utils/msg-segment.js';
 import {
   buildAgtUserContent,
   extractVisionFromEvent,
@@ -57,18 +57,18 @@ import {
   visionRefToLocator
 } from '#utils/llm/vision-content.js';
 
-function historyPlatform(e) {
+function historyPlatform(e: any) {
   return resolveTaskerId(e) || (e?.isDevice ? 'device' : e?.isStdin ? 'stdin' : 'onebot');
 }
 const EMOTIONS_DIR = path.join(process.cwd(), 'resources/aiimages');
 const IMAGE_SEND_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
 
-function randomRange(min, max) {
+function randomRange(min: any, max: any) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 /** 剥离历史遗留的「使用了/执行了」调试前缀，避免再喂给模型 */
-function stripLegacyToolUsagePrefix(text) {
+function stripLegacyToolUsagePrefix(text: any) {
   return String(text ?? '')
     .replace(/^［使用了:[^］]*］\s*/u, '')
     .replace(/^\[执行了:[^\]]*\]\s*/u, '')
@@ -76,13 +76,14 @@ function stripLegacyToolUsagePrefix(text) {
 }
 
 /** 聊天工作流：群聊/互动/群管 MCP 工具 */
-export default class ChatStream extends AiWorkflow {
-  static emotionImages = {};
+export default class ChatStream extends AiWorkflow  {
+  [key: string]: any;
+  static emotionImages: any = {};
   /** 笔录单例（勿再 new Map：FileLoader ?t= 热重载会拆出多份静态字段） */
   static get messageHistory() {
     return chatSessionHistory;
   }
-  static cleanupTimer = null;
+  static cleanupTimer: any = null;
   /**
    * 已通过用户可见动作体现的工具，不再重复记【我·工具】（基名匹配）。
    */
@@ -127,8 +128,8 @@ export default class ChatStream extends AiWorkflow {
       if (!ChatStream.cleanupTimer) {
         ChatStream.cleanupTimer = setInterval(() => this.cleanupCache(), 300000);
       }
-    } catch (error) {
-      const botError = errorHandler.handle(
+    } catch (error: any) {
+      const botError: any = errorHandler.handle(
         error,
         { context: 'ChatStream.init', code: ErrorCodes.SYSTEM_ERROR },
         true
@@ -150,8 +151,8 @@ export default class ChatStream extends AiWorkflow {
       try {
         await RuntimeUtil.mkdir(emotionDir);
         const files = await fs.promises.readdir(emotionDir);
-        const imageFiles = files.filter((file) => EMOTION_IMAGE_EXTS.test(file));
-        ChatStream.emotionImages[emotion] = imageFiles.map((file) =>
+        const imageFiles = files.filter((file: any) => EMOTION_IMAGE_EXTS.test(file));
+        ChatStream.emotionImages[emotion] = imageFiles.map((file: any) =>
           path.join(emotionDir, file)
         );
       } catch {
@@ -165,7 +166,7 @@ export default class ChatStream extends AiWorkflow {
    * @param {Object} context - 上下文对象
    * @returns {Object|null} 如果不是群聊返回错误对象，否则返回null
    */
-  _requireGroup(context) {
+  _requireGroup(context: any) {
     if (!context.e?.isGroup) {
       return { success: false, error: '非群聊环境' };
     }
@@ -173,7 +174,7 @@ export default class ChatStream extends AiWorkflow {
   }
 
   /** 群管写操作：机器人须为群主/管理员 */
-  async _requireGroupAdmin(context) {
+  async _requireGroupAdmin(context: any) {
     const groupCheck = this._requireGroup(context);
     if (groupCheck) return groupCheck;
     const role = await this.getBotRole(context.e);
@@ -184,7 +185,7 @@ export default class ChatStream extends AiWorkflow {
   }
 
   /** 查询类工具返回：附 data，提示勿重复调用 */
-  _queryToolRawDetail(description, data, e) {
+  _queryToolRawDetail(description: any, data: any, e: any) {
     const MAX = 4000;
     let dataStr = '{}';
     try {
@@ -201,7 +202,7 @@ export default class ChatStream extends AiWorkflow {
     return `${head}\n\ndata:\n${dataStr}`;
   }
 
-  _normalizeTargetQq(qq) {
+  _normalizeTargetQq(qq: any) {
     const s = String(qq ?? '').trim();
     if (!/^\d{5,10}$/.test(s)) return null;
     const n = parseInt(s, 10);
@@ -209,7 +210,7 @@ export default class ChatStream extends AiWorkflow {
     return String(n);
   }
 
-  async _pickFriendSender(e, qq) {
+  async _pickFriendSender(e: any, qq: any) {
     const targetQq = this._normalizeTargetQq(qq);
     if (!targetQq) return { error: 'qq 须为 5-10 位数字' };
     const bot = e?.bot;
@@ -231,7 +232,7 @@ export default class ChatStream extends AiWorkflow {
     return { friend, targetQq, displayName: info.remark || info.nickname || targetQq };
   }
 
-  _relayPrivateFail(targetQq, message) {
+  _relayPrivateFail(targetQq: any, message: any) {
     const detail = String(message?.message || message || '私聊发送失败').trim();
     const normalized = detail.startsWith('QQ ') ? detail : `私聊未发出：${detail}`;
     return {
@@ -241,7 +242,7 @@ export default class ChatStream extends AiWorkflow {
     };
   }
 
-  async _wrapRelayPrivateHandler(targetQq, fn, delay = 300) {
+  async _wrapRelayPrivateHandler(targetQq: any, fn: any, delay: any = 300) {
     try {
       const result = await fn();
       if (result?.success === false) {
@@ -249,25 +250,25 @@ export default class ChatStream extends AiWorkflow {
       }
       if (delay > 0) await RuntimeUtil.sleep(delay);
       return result;
-    } catch (err) {
+    } catch (err: any) {
       return this._relayPrivateFail(targetQq, err);
     }
   }
 
-  _relayFromWhere(e) {
+  _relayFromWhere(e: any) {
     return e?.isGroup && e?.group_id ? `群 ${e.group_id}` : '当前会话';
   }
 
-  _relayPrivateAck(e, picked, detail) {
+  _relayPrivateAck(e: any, picked: any, detail: any) {
     return actionAck(`你已从${this._relayFromWhere(e)}向好友 ${picked.displayName}(${picked.targetQq}) ${detail}`);
   }
 
   /** 向好友发协议正文（| 分句 / at 标记不适用好友） */
-  async _relayPrivateOutbound(friend, { content, imagePaths = [] } = {}) {
+  async _relayPrivateOutbound(friend: any, { content, imagePaths = [] }: any = {}) {
     const text = String(content ?? '').trim();
     const parts = text ? splitProtocolParts(text) : [''];
     let totalSent = 0;
-    const allSentContent = [];
+    const allSentContent: any[] = [];
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       const { displayText, segments } = resolveOutgoingMessage(part, { fallbackReplyId: null });
@@ -284,7 +285,7 @@ export default class ChatStream extends AiWorkflow {
     return { totalSent, allSentContent };
   }
 
-  async _relayPrivateImageSend(friend, absPath, text = '') {
+  async _relayPrivateImageSend(friend: any, absPath: any, text: any = '') {
     const caption = String(text ?? '').trim();
     if (!caption) {
       await friend.sendMsg([msgSegment.image(absPath)]);
@@ -295,7 +296,7 @@ export default class ChatStream extends AiWorkflow {
     return this._relayPrivateOutbound(friend, { content: caption, imagePaths: [absPath] });
   }
 
-  async _relayPrivateFileSend(friend, absPath, displayName, text = '') {
+  async _relayPrivateFileSend(friend: any, absPath: any, displayName: any, text: any = '') {
     const caption = String(text ?? '').trim();
     if (caption) {
       const forbidden = replyContentForbidden(caption);
@@ -309,14 +310,14 @@ export default class ChatStream extends AiWorkflow {
   }
 
   /** 好友管理写操作：仅主人 */
-  _requireMaster(context) {
+  _requireMaster(context: any) {
     if (context.e?.isMaster !== true) {
       return { success: false, error: '需要主人权限' };
     }
     return null;
   }
 
-  _getTurnState(context) {
+  _getTurnState(context: any) {
     const turn = context?.turnState ?? getWorkflowRequestContext()?.turnState;
     if (turn) return turn;
     RuntimeUtil.makeLog('warn', '[ChatStream] 无请求级 turnState，reply 队列可能串线', 'ChatStream');
@@ -329,12 +330,12 @@ export default class ChatStream extends AiWorkflow {
    * @param {number} [delay=300] - 执行后的延迟（毫秒）
    * @returns {Promise<Object>} 返回结果对象
    */
-  async _wrapHandler(fn, delay = 300) {
+  async _wrapHandler(fn: any, delay: any = 300) {
     try {
       const result = await fn();
       if (delay > 0) await RuntimeUtil.sleep(delay);
       return result;
-    } catch (error) {
+    } catch (error: any) {
       return { success: false, error: error.message };
     }
   }
@@ -345,14 +346,14 @@ export default class ChatStream extends AiWorkflow {
   }
 
   /** 解析工作区内文件路径（send_file / send_image） */
-  _resolveWorkspaceFile(_context, filePath, { requireImage = false, rejectImage = false } = {}) {
+  _resolveWorkspaceFile(_context: any, filePath: any, { requireImage = false, rejectImage = false }: any = {}) {
     const rel = String(filePath ?? '').trim();
     if (!rel) return { error: 'filePath 不能为空' };
     const baseTools = new BaseTools(this._chatWorkspaceAbs());
     let absPath;
     try {
       absPath = baseTools.resolvePath(rel);
-    } catch (err) {
+    } catch (err: any) {
       return { error: err.message || '路径无效' };
     }
     if (!fs.existsSync(absPath)) return { error: `文件不存在: ${rel}` };
@@ -367,7 +368,7 @@ export default class ChatStream extends AiWorkflow {
   }
 
   /** 将相对路径解析到工作区内（禁止逃逸） */
-  _resolveWorkspaceWriteAbs(relPath) {
+  _resolveWorkspaceWriteAbs(relPath: any) {
     const rel = String(relPath ?? '').trim().replace(/\\/g, '/');
     if (!rel) throw new Error('相对路径不能为空');
     const root = path.resolve(this._chatWorkspaceAbs());
@@ -379,7 +380,7 @@ export default class ChatStream extends AiWorkflow {
     return absPath;
   }
 
-  async _fetchMessageById(e, msgId) {
+  async _fetchMessageById(e: any, msgId: any) {
     if (!e || !msgId) return null;
     const id = String(msgId).trim();
     if (!id) return null;
@@ -397,8 +398,8 @@ export default class ChatStream extends AiWorkflow {
 
     const historyKey = ChatStream.getEventHistoryKey(e);
     if (historyKey) {
-      const history = ChatStream.messageHistory.get(historyKey) || [];
-      const cached = history.find((m) => ChatStream.historyEntryId(m) === id);
+      const history = (ChatStream.messageHistory.get(historyKey as any) as any) || [];
+      const cached = history.find((m: any) => ChatStream.historyEntryId(m) === id);
       if (cached?._rawMessage && Array.isArray(cached._rawMessage) && cached._rawMessage.length > 0) {
         return {
           message_id: cached.message_id,
@@ -421,7 +422,7 @@ export default class ChatStream extends AiWorkflow {
             message: flattenMessageSegs(data.message)
           };
         }
-      } catch (err) {
+      } catch (err: any) {
         RuntimeUtil.makeLog('debug', `[ChatStream] get_msg 失败 msgId=${id}: ${err?.message}`, 'ChatStream');
       }
     }
@@ -441,8 +442,8 @@ export default class ChatStream extends AiWorkflow {
 
     // 最后回退：仅有历史文本、无段数据（无法再下载媒体，但仍可供引用摘要）
     if (historyKey) {
-      const history = ChatStream.messageHistory.get(historyKey) || [];
-      const cached = history.find((m) => ChatStream.historyEntryId(m) === id);
+      const history = (ChatStream.messageHistory.get(historyKey as any) as any) || [];
+      const cached = history.find((m: any) => ChatStream.historyEntryId(m) === id);
       if (cached) {
         return {
           message_id: cached.message_id,
@@ -457,8 +458,8 @@ export default class ChatStream extends AiWorkflow {
     return null;
   }
 
-  _extractMessageAssets(message) {
-    const assets = [];
+  _extractMessageAssets(message: any) {
+    const assets: any[] = [];
     if (!Array.isArray(message)) return assets;
     for (const seg of message) {
       if (!seg || typeof seg !== 'object') continue;
@@ -505,7 +506,7 @@ export default class ChatStream extends AiWorkflow {
     return assets;
   }
 
-  _guessAssetExtension(asset) {
+  _guessAssetExtension(asset: any) {
     if (asset?.type === 'file' && asset.name) {
       const ext = path.extname(asset.name);
       if (ext) return ext;
@@ -525,7 +526,7 @@ export default class ChatStream extends AiWorkflow {
    * 段 → 历史文本 + 媒体标记（图片/文件用标记；reply 保留 [回复:id]）
    * 兼容事件扁平段与 get_msg 的 data 嵌套段。
    */
-  _segmentsToHistoryParts(segments) {
+  _segmentsToHistoryParts(segments: any) {
     if (!Array.isArray(segments)) {
       return { text: '', hasImage: false, hasFile: false, hasFace: false };
     }
@@ -533,7 +534,7 @@ export default class ChatStream extends AiWorkflow {
     let hasFile = false;
     let hasFace = false;
     const text = flattenMessageSegs(segments)
-      .map((seg) => {
+      .map((seg: any) => {
         if (!seg || typeof seg !== 'object') return '';
         switch (seg.type) {
           case 'text':
@@ -573,10 +574,10 @@ export default class ChatStream extends AiWorkflow {
     return { text, hasImage, hasFile, hasFace };
   }
 
-  async _downloadMessageAssetToWorkspace(e, asset, relPath) {
+  async _downloadMessageAssetToWorkspace(e: any, asset: any, relPath: any) {
     const absPath = this._resolveWorkspaceWriteAbs(relPath);
     await fsPromises.mkdir(path.dirname(absPath), { recursive: true });
-    const sendApi = e.bot?.sendApi ? (action, params) => e.bot.sendApi(action, params) : undefined;
+    const sendApi = e.bot?.sendApi ? ((action: any, params: any) => e.bot.sendApi(action, params)) : undefined;
 
     if (asset.type === 'face') {
       throw new Error('内置 QQ 表情（face）无法下载；请用 emotion 或让用户发图片/自定义表情包');
@@ -603,7 +604,7 @@ export default class ChatStream extends AiWorkflow {
     }
 
     const candidates = [asset.file, asset.file_id, asset.id, asset.url, asset.path]
-      .map((x) => String(x ?? '').trim())
+      .map((x: any) => String(x ?? '').trim())
       .filter(Boolean);
 
     for (const ref of candidates) {
@@ -664,7 +665,7 @@ export default class ChatStream extends AiWorkflow {
   }
 
   /** 解析本轮「回复/引用」目标，供 [当前消息] 强调 */
-  async _resolveInboundReplyContext(e) {
+  async _resolveInboundReplyContext(e: any) {
     const replyId = ChatStream.getReplySegmentId(e);
     if (replyId == null && e?.source?.id == null && e?.source?.message_id == null) return null;
 
@@ -709,7 +710,7 @@ export default class ChatStream extends AiWorkflow {
   }
 
   /** 去掉 question 里已拼过的回复装饰，避免与 [引用消息] 块重复 */
-  static stripInboundReplyDecorators(text) {
+  static stripInboundReplyDecorators(text: any) {
     let s = String(text ?? '');
     s = s.replace(/^\[回复:\d+\]\s*/u, '');
     s = s.replace(/^\[回复[^\]]*的"[^"]*"\]\s*/u, '');
@@ -722,7 +723,7 @@ export default class ChatStream extends AiWorkflow {
    * 组装 [当前消息] 文本行（含引用强调）
    * @returns {Promise<{ text: string, images: string[], replyImages: string[] }|null>}
    */
-  async _buildCurrentMessagePayload(e, userMessage) {
+  async _buildCurrentMessagePayload(e: any, userMessage: any) {
     if (!e || !userMessage) return null;
     const currentMsgId = ChatStream.resolveEventMessageId(e) || '未知';
     const currentUserNickname = e.sender?.card || e.sender?.nickname || e.user?.name || '用户';
@@ -812,7 +813,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const e = context.e;
         if (!e) return { success: false, error: '缺少事件上下文' };
         const targetQq = String(args.qq || e.user_id || e.device_id || '').trim();
@@ -851,7 +852,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['emotionType'],
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const e = context.e;
         if (!e?.reply) return { success: false, error: '当前环境无法发送' };
         const t = normalizeEmotionType(args.emotionType);
@@ -903,7 +904,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['filePath'],
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const e = context.e;
         const resolved = this._resolveWorkspaceFile(context, args.filePath, { rejectImage: true });
         if (resolved.error) return { success: false, error: resolved.error };
@@ -932,14 +933,14 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['filePath'],
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const e = context.e;
         const resolved = this._resolveWorkspaceFile(context, args.filePath, { requireImage: true });
         if (resolved.error) return { success: false, error: resolved.error };
         if (!e?.reply) return { success: false, error: '当前环境无法发送消息' };
         return this._wrapHandler(async () => {
           const mid = args.messageId != null ? String(args.messageId).trim() : '';
-          const payload = [];
+          const payload: any[] = [];
           if (mid) payload.push({ type: 'reply', id: mid });
           payload.push(msgSegment.image(resolved.absPath));
           await e.reply(payload);
@@ -963,7 +964,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['messageId']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const e = context.e;
         if (!e) return { success: false, error: '事件对象不存在' };
         const msgId = String(args.messageId ?? '').trim();
@@ -974,8 +975,7 @@ export default class ChatStream extends AiWorkflow {
           return { success: false, error: '无法获取消息，可能已过期' };
         }
         const segments = Array.isArray(messageData.message) ? messageData.message : [];
-        const assets = this._extractMessageAssets(segments).filter(
-          (a) => ['image', 'file', 'mface', 'video', 'record'].includes(a.type)
+        const assets = this._extractMessageAssets(segments).filter((a: any) => ['image', 'file', 'mface', 'video', 'record'].includes(a.type)
         );
         if (assets.length === 0) {
           return { success: false, error: '该消息没有可下载的图片/视频/语音/文件/表情包' };
@@ -1002,7 +1002,7 @@ export default class ChatStream extends AiWorkflow {
               ? `已保存到 ${relPath}。发图用 send_image；内置表情包用 emotion。`
               : `已保存到 ${relPath}。当前会话发文件用 send_file；私聊传文件用 relayPrivateFile。`;
           return { success: true, data, raw: hint };
-        } catch (err) {
+        } catch (err: any) {
           return { success: false, error: err.message };
         }
       },
@@ -1019,7 +1019,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['qq', 'content']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const e = context.e;
         const picked = await this._pickFriendSender(e, args.qq);
         if (picked.error) return this._relayPrivateFail(String(args.qq ?? ''), picked.error);
@@ -1052,14 +1052,14 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['qq', 'filePath']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const e = context.e;
         const picked = await this._pickFriendSender(e, args.qq);
         if (picked.error) return this._relayPrivateFail(String(args.qq ?? ''), picked.error);
         const resolved = this._resolveWorkspaceFile(context, args.filePath, { requireImage: true });
         if (resolved.error) return { success: false, error: resolved.error };
         return this._wrapRelayPrivateHandler(picked.targetQq, async () => {
-          const sendResult = await this._relayPrivateImageSend(picked.friend, resolved.absPath, args.text);
+          const sendResult: any = await this._relayPrivateImageSend(picked.friend, resolved.absPath, args.text);
           if (sendResult.error) return { success: false, error: sendResult.error };
           return {
             success: true,
@@ -1082,7 +1082,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['qq', 'filePath']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const e = context.e;
         const picked = await this._pickFriendSender(e, args.qq);
         if (picked.error) return this._relayPrivateFail(String(args.qq ?? ''), picked.error);
@@ -1090,7 +1090,7 @@ export default class ChatStream extends AiWorkflow {
         if (resolved.error) return { success: false, error: resolved.error };
         return this._wrapRelayPrivateHandler(picked.targetQq, async () => {
           const displayName = String(args.name ?? resolved.displayName).trim() || resolved.displayName;
-          const sendResult = await this._relayPrivateFileSend(
+          const sendResult: any = await this._relayPrivateFileSend(
             picked.friend, resolved.absPath, displayName, args.text
           );
           if (sendResult.error) return { success: false, error: sendResult.error };
@@ -1114,7 +1114,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['qq', 'emotionType']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const e = context.e;
         const picked = await this._pickFriendSender(e, args.qq);
         if (picked.error) return this._relayPrivateFail(String(args.qq ?? ''), picked.error);
@@ -1128,7 +1128,7 @@ export default class ChatStream extends AiWorkflow {
           };
         }
         return this._wrapRelayPrivateHandler(picked.targetQq, async () => {
-          const sendResult = await this._relayPrivateImageSend(picked.friend, image, args.text);
+          const sendResult: any = await this._relayPrivateImageSend(picked.friend, image, args.text);
           if (sendResult.error) return { success: false, error: sendResult.error };
           const displayText = sendResult.allSentContent?.join(' | ') || '';
           const summary = displayText
@@ -1165,7 +1165,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['content']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const e = context.e;
         const turn = this._getTurnState(context);
         const rawContent = prependReplyAtMarkers(
@@ -1204,7 +1204,7 @@ export default class ChatStream extends AiWorkflow {
         try {
           // 已解析的 replyId（显式或 content 内 [回复:…]）；无则不挂引用
           await this.sendMessages(e, rawContent, { fallbackReplyId: replyId });
-        } catch (err) {
+        } catch (err: any) {
           return { success: false, error: err?.message || '发送失败' };
         }
 
@@ -1235,7 +1235,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['emojiType'],
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const e = context.e;
         if (!e?.isGroup) return { success: false, error: '非群聊环境' };
 
@@ -1246,9 +1246,8 @@ export default class ChatStream extends AiWorkflow {
         let msgId = String(args.msgId ?? '').trim();
         if (!msgId) {
           const historyKey = ChatStream.getEventHistoryKey(e);
-          const history = historyKey ? (ChatStream.messageHistory.get(historyKey) || []) : [];
-          const last = [...history].reverse().find(
-            (m) => String(m.user_id) !== String(e.self_id) && m.message_id,
+          const history = historyKey ? ((ChatStream.messageHistory.get(historyKey as any) as any) || []) : [];
+          const last = [...history].reverse().find((m: any) => String(m.user_id) !== String(e.self_id) && m.message_id,
           );
           if (last) msgId = String(last.message_id);
         }
@@ -1274,7 +1273,7 @@ export default class ChatStream extends AiWorkflow {
             raw: actionAck(`你已在群 ${gid} 对消息 ${msgId} 发送了 ${emojiType} 表情回应。`),
             data: { msgId, emojiId, emojiType }
           };
-        } catch (error) {
+        } catch (error: any) {
           return { success: false, error: error.message };
         }
       },
@@ -1298,7 +1297,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['qq']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1332,7 +1331,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['qq', 'duration']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1356,7 +1355,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['qq']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1375,7 +1374,7 @@ export default class ChatStream extends AiWorkflow {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (_args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1394,7 +1393,7 @@ export default class ChatStream extends AiWorkflow {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (_args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1422,7 +1421,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['card']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1455,7 +1454,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['name']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1480,7 +1479,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['filePath'],
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const adminCheck = await this._requireGroupAdmin(context);
         if (adminCheck) return adminCheck;
 
@@ -1527,7 +1526,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['qq']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1551,7 +1550,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['qq']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1584,7 +1583,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['qq', 'title']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1613,7 +1612,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['qq']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1637,7 +1636,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['msgId']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1673,7 +1672,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['msgId']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1710,7 +1709,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['content']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1729,7 +1728,7 @@ export default class ChatStream extends AiWorkflow {
               return { success: true, message: '发送群公告成功', data: { content } };
             }
           } else if (context.e.bot?.sendApi) {
-            const apiParams = { group_id: context.e.group_id, content };
+            const apiParams: any = { group_id: context.e.group_id, content };
             if (image) apiParams.image = image;
             const result = await context.e.bot.sendApi('_send_group_notice', apiParams);
             if (result?.status === 'ok') {
@@ -1754,7 +1753,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['msgId']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         if (!context.e) {
           return { success: false, error: '事件对象不存在' };
         }
@@ -1822,7 +1821,7 @@ export default class ChatStream extends AiWorkflow {
             }
             return { success: true, message: '消息撤回成功', data: { msgId: args.msgId } };
           });
-        } catch (error) {
+        } catch (error: any) {
           return { success: false, error: error.message };
         }
       },
@@ -1836,7 +1835,7 @@ export default class ChatStream extends AiWorkflow {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (_args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1868,7 +1867,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['msgId']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         
@@ -1905,7 +1904,7 @@ export default class ChatStream extends AiWorkflow {
         properties: { msgId: { type: 'number' } },
         required: ['msgId']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const adminCheck = await this._requireGroupAdmin(context);
         if (adminCheck) return adminCheck;
         const msgId = String(args.msgId ?? '').trim();
@@ -1927,7 +1926,7 @@ export default class ChatStream extends AiWorkflow {
         properties: { msgId: { type: 'number' } },
         required: ['msgId']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const adminCheck = await this._requireGroupAdmin(context);
         if (adminCheck) return adminCheck;
         const msgId = String(args.msgId ?? '').trim();
@@ -1945,7 +1944,7 @@ export default class ChatStream extends AiWorkflow {
     this.registerMCPTool('listAnnouncements', {
       description: '获取当前群公告列表。仅群聊。',
       inputSchema: { type: 'object', properties: {}, required: [] },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (_args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         const e = context.e;
@@ -1960,7 +1959,7 @@ export default class ChatStream extends AiWorkflow {
     this.registerMCPTool('getGroupInfo', {
       description: '获取群基础信息（群名、群号、成员数等）。仅群聊。',
       inputSchema: { type: 'object', properties: {}, required: [] },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (_args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         const e = context.e;
@@ -1973,7 +1972,7 @@ export default class ChatStream extends AiWorkflow {
           }
           if (!info) return { success: false, error: '无法获取群信息' };
           return { success: true, data: info, raw: this._queryToolRawDetail('群基础信息', info, e) };
-        } catch (error) {
+        } catch (error: any) {
           return { success: false, error: error.message };
         }
       },
@@ -1987,7 +1986,7 @@ export default class ChatStream extends AiWorkflow {
         properties: { qq: { type: 'number' } },
         required: ['qq']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         const e = context.e;
@@ -2010,7 +2009,7 @@ export default class ChatStream extends AiWorkflow {
             data: info,
             raw: this._queryToolRawDetail(`成员 ${qq} 的信息`, info, e)
           };
-        } catch (error) {
+        } catch (error: any) {
           return { success: false, error: error.message };
         }
       },
@@ -2024,7 +2023,7 @@ export default class ChatStream extends AiWorkflow {
         properties: { qq: { type: 'number', description: '目标 QQ' } },
         required: ['qq']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const e = context.e;
         const qq = String(args.qq ?? '').trim();
         if (!qq) return { success: false, error: 'QQ号不能为空' };
@@ -2039,7 +2038,7 @@ export default class ChatStream extends AiWorkflow {
           }
           if (!info) return { success: false, error: '无法获取好友信息' };
           return { success: true, data: info, raw: this._queryToolRawDetail(`QQ ${qq} 的资料`, info, e) };
-        } catch (error) {
+        } catch (error: any) {
           return { success: false, error: error.message };
         }
       },
@@ -2057,23 +2056,23 @@ export default class ChatStream extends AiWorkflow {
         },
         required: []
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         const e = context.e;
         await this.syncHistoryFromAdapter(e);
         const historyKey = ChatStream.getEventHistoryKey(e);
-        const history = ChatStream.messageHistory.get(historyKey) || [];
+        const history = (ChatStream.messageHistory.get(historyKey as any) as any) || [];
         const msgId = String(args.messageId ?? '').trim();
         if (msgId) {
-          const one = history.find((m) => String(m.message_id || m.real_id) === msgId);
+          const one = history.find((m: any) => String(m.message_id || m.real_id) === msgId);
           if (!one) return { success: false, error: '本地历史无此消息，可能已过期' };
-          let assets = [];
+          let assets: any[] = [];
           const messageData = await this._fetchMessageById(e, msgId);
           if (messageData?.message) {
             assets = this._extractMessageAssets(messageData.message)
-              .filter((a) => a.type === 'image' || a.type === 'file' || a.type === 'mface')
-              .map((a, index) => ({
+              .filter((a: any) => a.type === 'image' || a.type === 'file' || a.type === 'mface')
+              .map((a: any, index: any) => ({
                 index,
                 type: a.type,
                 name: a.name || undefined,
@@ -2104,7 +2103,7 @@ export default class ChatStream extends AiWorkflow {
         const data = {
           limit,
           count: slice.length,
-          messages: slice.map((m) => ({
+          messages: slice.map((m: any) => ({
             message_id: m.message_id || m.real_id,
             user_id: m.user_id,
             nickname: m.nickname,
@@ -2136,7 +2135,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['qq', 'remark']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const masterCheck = this._requireMaster(context);
         if (masterCheck) return masterCheck;
         const qq = String(args.qq ?? '').trim();
@@ -2164,7 +2163,7 @@ export default class ChatStream extends AiWorkflow {
         properties: { qq: { type: 'number' } },
         required: ['qq']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const masterCheck = this._requireMaster(context);
         if (masterCheck) return masterCheck;
         const qq = String(args.qq ?? '').trim();
@@ -2191,7 +2190,7 @@ export default class ChatStream extends AiWorkflow {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (_args: any = {}, context: any = {}) => {
         const e = context.e;
         const bot = e?.bot;
         if (!bot || typeof bot.getFriendMap !== 'function') {
@@ -2200,9 +2199,9 @@ export default class ChatStream extends AiWorkflow {
 
         try {
           const map = await bot.getFriendMap();
-          const friends = [];
+          const friends: any[] = [];
           if (map && typeof map.forEach === 'function') {
-            map.forEach((info, uid) => {
+            map.forEach((info: any, uid: any) => {
               if (!uid) return;
               const qq = String(uid);
               const nickname = info?.nickname || '';
@@ -2221,7 +2220,7 @@ export default class ChatStream extends AiWorkflow {
             success: true,
             data: { friends }
           };
-        } catch (error) {
+        } catch (error: any) {
           return { success: false, error: error.message };
         }
       },
@@ -2235,11 +2234,12 @@ export default class ChatStream extends AiWorkflow {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (_args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
 
-        const group = context.e.group;
+        const e = context.e;
+        const group = e.group;
         if (!group) {
           return { success: false, error: '群对象不存在' };
         }
@@ -2251,10 +2251,10 @@ export default class ChatStream extends AiWorkflow {
             memberMap = await group.getMemberMap();
           }
 
-          const members = [];
+          const members: any[] = [];
 
           if (memberMap && typeof memberMap.forEach === 'function') {
-            memberMap.forEach((info, uid) => {
+            memberMap.forEach((info: any, uid: any) => {
               if (!uid) return;
               const qq = String(uid);
               const role = info?.role || 'member';
@@ -2301,7 +2301,7 @@ export default class ChatStream extends AiWorkflow {
             success: true,
             data: { members }
           };
-        } catch (error) {
+        } catch (error: any) {
           return { success: false, error: error.message };
         }
       },
@@ -2311,7 +2311,7 @@ export default class ChatStream extends AiWorkflow {
     this.registerMCPTool('listEssence', {
       description: '列出当前群精华消息。仅群聊。',
       inputSchema: { type: 'object', properties: {}, required: [] },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (_args: any = {}, context: any = {}) => {
         const groupCheck = this._requireGroup(context);
         if (groupCheck) return groupCheck;
         const e = context.e;
@@ -2332,7 +2332,7 @@ export default class ChatStream extends AiWorkflow {
             data: { essence: data },
             raw: this._queryToolRawDetail('群精华消息', data, e)
           };
-        } catch (error) {
+        } catch (error: any) {
           return { success: false, error: error.message };
         }
       },
@@ -2361,7 +2361,7 @@ export default class ChatStream extends AiWorkflow {
         },
         required: ['action']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const masterCheck = this._requireMaster(context);
         if (masterCheck) return masterCheck;
         const e = context.e;
@@ -2374,8 +2374,8 @@ export default class ChatStream extends AiWorkflow {
         if (action === 'list') {
           const typeFilter = args.type ? String(args.type).trim() : '';
           const rows = pending
-            .filter((r) => r && (!typeFilter || r.request_type === typeFilter))
-            .map((r) => ({
+            .filter((r: any) => r && (!typeFilter || r.request_type === typeFilter))
+            .map((r: any) => ({
               flag: r.flag,
               type: r.request_type,
               sub_type: r.sub_type,
@@ -2397,7 +2397,7 @@ export default class ChatStream extends AiWorkflow {
         const flag = String(args.flag ?? '').trim();
         if (!flag) return { success: false, error: 'approve/deny 须提供 flag' };
         const approve = action === 'approve';
-        const hit = pending.find((r) => String(r?.flag) === flag);
+        const hit = pending.find((r: any) => String(r?.flag) === flag);
 
         return this._wrapHandler(async () => {
           if (hit && typeof hit.approve === 'function') {
@@ -2435,7 +2435,7 @@ export default class ChatStream extends AiWorkflow {
           }
 
           if (Array.isArray(bot.request_list)) {
-            bot.request_list = bot.request_list.filter((r) => String(r?.flag) !== flag);
+            bot.request_list = bot.request_list.filter((r: any) => String(r?.flag) !== flag);
           }
           return {
             success: true,
@@ -2450,7 +2450,7 @@ export default class ChatStream extends AiWorkflow {
   /**
    * 获取随机表情
    */
-  getRandomEmotionImage(emotion) {
+  getRandomEmotionImage(emotion: any) {
     const images = ChatStream.emotionImages[emotion];
     if (!images || images.length === 0) return null;
     return images[Math.floor(Math.random() * images.length)];
@@ -2459,7 +2459,7 @@ export default class ChatStream extends AiWorkflow {
   /**
    * 记录消息到历史，统一使用 getEventHistoryKey 作为 key，群聊/私聊/设备互不冲突；最多保留 50 条。
    */
-  recordMessage(e) {
+  recordMessage(e: any) {
     if (!e) return;
     const historyKey = ChatStream.getEventHistoryKey(e);
     if (!historyKey) return;
@@ -2516,21 +2516,21 @@ export default class ChatStream extends AiWorkflow {
       };
 
       if (!ChatStream.messageHistory.has(historyKey)) ChatStream.messageHistory.set(historyKey, []);
-      const history = ChatStream.messageHistory.get(historyKey);
+      const history: any = ChatStream.messageHistory.get(historyKey as any);
       // sync 可能已写入同 message_id，避免末尾重复两条
-      if (history.some((m) => ChatStream.historyEntryId(m) === messageId)) return;
+      if (history.some((m: any) => ChatStream.historyEntryId(m) === messageId)) return;
       history.push(msgData);
       if (history.length > 50) ChatStream.messageHistory.set(historyKey, history.slice(-50));
 
       if (this.embeddingConfig?.enabled && message && message.length > 5) {
         this.storeMessageMemory(historyKey, msgData).catch(() => {});
       }
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('debug', `记录消息失败: ${error.message}`, 'ChatStream');
     }
   }
 
-  async getBotRole(e) {
+  async getBotRole(e: any) {
     if (!e.isGroup) return '成员';
     const member = e.group?.pickMember(e.self_id);
     const roleValue = member?.role;
@@ -2545,7 +2545,7 @@ export default class ChatStream extends AiWorkflow {
    * @param {object} e
    * @param {string} text
    */
-  recordAIResponse(e, text) {
+  recordAIResponse(e: any, text: any) {
     if (!text || !text.trim()) return;
 
     const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'AgentRuntime';
@@ -2561,7 +2561,7 @@ export default class ChatStream extends AiWorkflow {
 
     const historyKey = ChatStream.getEventHistoryKey(e);
     if (historyKey) {
-      const history = ChatStream.messageHistory.get(historyKey) || [];
+      const history = (ChatStream.messageHistory.get(historyKey as any) as any) || [];
       history.push(msgData);
       if (history.length > 50) history.shift();
       ChatStream.messageHistory.set(historyKey, history);
@@ -2570,7 +2570,7 @@ export default class ChatStream extends AiWorkflow {
       this.storeMessageMemory(historyKey, msgData).catch(() => {});
   }
 
-  async buildSystemPrompt(context) {
+  async buildSystemPrompt(context: any = {}): Promise<any> {
     const { e, question } = context;
     const persona =
       question?.persona ||
@@ -2620,7 +2620,7 @@ export default class ChatStream extends AiWorkflow {
   }
 
   /** 动态轮次上下文（独立 user 消息，不污染可缓存的 system 前缀） */
-  _buildVolatileTurnContext(e, question) {
+  _buildVolatileTurnContext(e: any, question: any) {
     if (!e) return '';
     const dateStr = question?.dateStr || new Date().toLocaleString('zh-CN');
     const botName = e.bot?.nickname || e.bot?.info?.nickname || e.bot?.name || 'AgentRuntime';
@@ -2636,7 +2636,7 @@ export default class ChatStream extends AiWorkflow {
     return `【本轮上下文】\n${parts.join('\n')}`;
   }
 
-  async buildEnhancedContext(e, question, messages) {
+  async buildEnhancedContext(e: any, question: any, messages: any) {
     const enhanced = [...messages];
     const ctx = question && typeof question === 'object' ? { ...question } : {};
     if (e && ctx.botRole == null) {
@@ -2650,7 +2650,7 @@ export default class ChatStream extends AiWorkflow {
   }
 
   /** 从消息段取出可用的图片引用（委托标准层） */
-  _imageRefFromSegment(seg) {
+  _imageRefFromSegment(seg: any) {
     const { images } = extractVisionFromSegments(seg ? [seg] : []);
     return images[0] ? visionRefToLocator(images[0]) : null;
   }
@@ -2658,17 +2658,17 @@ export default class ChatStream extends AiWorkflow {
   /**
    * 通道无关提取：段 / e.img / getReply → string[]（兼容既有 payload）
    */
-  async _extractImagesFromEvent(e) {
+  async _extractImagesFromEvent(e: any) {
     const { images, replyImages } = await extractVisionFromEvent(e, { skipStickers: true });
-    const toLocators = (list) =>
-      list.map((x) => visionRefToLocator(x)).filter(Boolean);
+    const toLocators = (list: any) =>
+      list.map((x: any) => visionRefToLocator(x)).filter(Boolean);
 
     const outImages = toLocators(images);
     const outReply = toLocators(replyImages);
 
     if (
       (Array.isArray(e?.message) &&
-        e.message.some((s) => s?.type === 'image' || s?.type === 'mface')) &&
+        e.message.some((s: any) => s?.type === 'image' || s?.type === 'mface')) &&
       outImages.length === 0 &&
       outReply.length === 0
     ) {
@@ -2682,12 +2682,12 @@ export default class ChatStream extends AiWorkflow {
     return { images: outImages, replyImages: outReply };
   }
 
-  async buildChatContext(e, question) {
+  async buildChatContext(e: any, question: any) {
     if (Array.isArray(question)) {
       return question;
     }
 
-    const messages = [];
+    const messages: any[] = [];
     messages.push({
       role: 'system',
       content: await this.buildSystemPrompt({ e, question })
@@ -2710,7 +2710,7 @@ export default class ChatStream extends AiWorkflow {
     return messages;
   }
 
-  extractQueryFromMessages(messages) {
+  extractQueryFromMessages(messages: any) {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (msg.role === 'user') {
@@ -2727,7 +2727,7 @@ export default class ChatStream extends AiWorkflow {
   /**
    * 统一：根据事件得到历史缓存的 key（群=group_id，设备=device_${device_id}，私聊=private_${user_id}）
    */
-  static getEventHistoryKey(e) {
+  static getEventHistoryKey(e: any) {
     if (!e) return null;
     if (e.isGroup === true && e.group_id != null) return String(e.group_id);
     if (e.isDevice === true && e.device_id) return `device_${e.device_id}`;
@@ -2739,8 +2739,8 @@ export default class ChatStream extends AiWorkflow {
    * 从事件消息段中取“被回复消息”的 id（与 e.getReply() 同源，仅同步取 id）
    * 插件需完整内容/媒体时请用 e.getReply()。
    */
-  static getReplySegmentId(e) {
-    const seg = e?.message && Array.isArray(e.message) ? e.message.find(s => s && s.type === 'reply') : null;
+  static getReplySegmentId(e: any) {
+    const seg = e?.message && Array.isArray(e.message) ? e.message.find((s: any) => s && s.type === 'reply') : null;
     const id = segReplyId(seg) || (e?.source?.message_id != null || e?.source?.id != null
       ? String(e.source.message_id ?? e.source.id).trim()
       : '');
@@ -2748,7 +2748,7 @@ export default class ChatStream extends AiWorkflow {
   }
 
   /** 当前触发消息 ID（NapCat：message_id === real_id；勿用 real_seq / source） */
-  static resolveEventMessageId(e) {
+  static resolveEventMessageId(e: any) {
     if (!e) return null;
     const id = e.message_id ?? e.real_id;
     const s = id != null ? String(id).trim() : '';
@@ -2756,7 +2756,7 @@ export default class ChatStream extends AiWorkflow {
   }
 
   /** 历史条目引用 ID（与 resolveEventMessageId 同为 message_id 优先） */
-  static historyEntryId(msg) {
+  static historyEntryId(msg: any) {
     if (!msg) return '';
     const id = msg.message_id ?? msg.real_id;
     return id != null ? String(id).trim() : '';
@@ -2766,7 +2766,7 @@ export default class ChatStream extends AiWorkflow {
    * 统一：解析事件的聊天历史来源，供 syncHistoryFromAdapter / mergeMessageHistory 使用
    * @returns {{ historyKey: string, getter: function } | null}
    */
-  getHistorySource(e) {
+  getHistorySource(e: any) {
     const historyKey = ChatStream.getEventHistoryKey(e);
     if (!historyKey) return null;
     // e.getChatHistory 多为已 bind；e.group.getChatHistory 必须 bind，否则 this 丢失会静默空结果
@@ -2780,7 +2780,7 @@ export default class ChatStream extends AiWorkflow {
     return { historyKey, getter };
   }
 
-  async syncHistoryFromAdapter(e) {
+  async syncHistoryFromAdapter(e: any) {
     const source = this.getHistorySource(e);
     if (!source) return;
     const { historyKey, getter } = source;
@@ -2795,12 +2795,12 @@ export default class ChatStream extends AiWorkflow {
         rawHistory = await getter(50);
       }
 
-      const history = ChatStream.messageHistory.get(historyKey) || [];
+      const history = (ChatStream.messageHistory.get(historyKey as any) as any) || [];
       const existingIds = new Set(
-        history.map(msg => String(msg.message_id || msg.real_id || ''))
+        history.map((msg: any) => String(msg.message_id || msg.real_id || ''))
       );
 
-      const newMessages = [];
+      const newMessages: any[] = [];
       for (const msg of Array.isArray(rawHistory) ? rawHistory : []) {
         if (!msg || typeof msg !== 'object') continue;
         const mid = msg.message_id || msg.real_id || msg.message_seq;
@@ -2848,7 +2848,7 @@ export default class ChatStream extends AiWorkflow {
           'ChatStream'
         );
       }
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog(
         'debug',
         `[ChatStream.syncHistoryFromAdapter] 获取聊天记录失败: ${error.message}`,
@@ -2857,9 +2857,9 @@ export default class ChatStream extends AiWorkflow {
     }
   }
 
-  static _shouldRecordToolInHistory(toolName) {
+  static _shouldRecordToolInHistory(toolName: any) {
     const base = String(toolName || '').split('.').pop();
-    return Boolean(base) && !ChatStream.TOOL_HISTORY_SKIP.has(base);
+    return Boolean(base) && !ChatStream.TOOL_HISTORY_SKIP.has(base as string);
   }
 
   /**
@@ -2868,7 +2868,7 @@ export default class ChatStream extends AiWorkflow {
    * @param {object} [e]
    * @returns {string}
    */
-  _formatHistoryMessage(msg, e = null) {
+  _formatHistoryMessage(msg: any, e: any = null) {
     const msgId = ChatStream.historyEntryId(msg) || '未知';
     const raw = stripLegacyToolUsagePrefix((msg.message || '').replace(/\n/g, ' '));
     const selfId = e?.self_id != null ? String(e.self_id) : null;
@@ -2907,7 +2907,7 @@ export default class ChatStream extends AiWorkflow {
    * @param {unknown} result
    * @param {Record<string, unknown>|null} [args]
    */
-  recordToolCallResult(e, toolName, result, args = null) {
+  recordToolCallResult(e: any, toolName: any, result: any, args: any = null) {
     if (!ChatStream._shouldRecordToolInHistory(toolName)) return;
     const historyKey = ChatStream.getEventHistoryKey(e);
     if (!historyKey) return;
@@ -2925,16 +2925,16 @@ export default class ChatStream extends AiWorkflow {
         isTool: true,
         toolName: String(toolName || '')
       };
-      const history = ChatStream.messageHistory.get(historyKey) || [];
+      const history = (ChatStream.messageHistory.get(historyKey as any) as any) || [];
       history.push(msgData);
       if (history.length > 50) history.shift();
       ChatStream.messageHistory.set(historyKey, history);
-    } catch (err) {
+    } catch (err: any) {
       RuntimeUtil.makeLog('debug', `recordToolCallResult: ${err?.message}`, 'ChatStream');
     }
   }
 
-  async mergeMessageHistory(messages, e) {
+  async mergeMessageHistory(messages: any, e: any) {
     if (!e || messages.length < 2) return messages;
 
     const userMessage = messages[messages.length - 1];
@@ -2948,16 +2948,16 @@ export default class ChatStream extends AiWorkflow {
     if (source) {
       await this.syncHistoryFromAdapter(e);
       const { historyKey } = source;
-      const history = ChatStream.messageHistory.get(historyKey) || [];
+      const history = (ChatStream.messageHistory.get(historyKey as any) as any) || [];
       const currentMsgId = ChatStream.resolveEventMessageId(e) || '';
 
       // @/前缀：当前句单独走 [当前消息]，从历史去掉避免重复
       // 全局旁观：只给历史，且必须留下触发句及其 [ID:…]，否则模型只能乱抓旧 ID
       const baseHistory = isGlobalTrigger || !currentMsgId
         ? history
-        : history.filter((msg) => ChatStream.historyEntryId(msg) !== currentMsgId);
+        : history.filter((msg: any) => ChatStream.historyEntryId(msg) !== currentMsgId);
 
-      const uniqueHistory = [];
+      const uniqueHistory: any[] = [];
       const seenIds = new Set();
       for (let i = baseHistory.length - 1; i >= 0; i--) {
         const msg = baseHistory[i];
@@ -2984,7 +2984,7 @@ export default class ChatStream extends AiWorkflow {
         const head = uniqueHistory.slice(0, keepFirst);
         const tailBudget = Math.max(1, historyLimit - head.length);
         const tail = uniqueHistory.slice(-tailBudget);
-        const seen = new Set(head.map((m) => ChatStream.historyEntryId(m)).filter(Boolean));
+        const seen = new Set(head.map((m: any) => ChatStream.historyEntryId(m)).filter(Boolean));
         recentMessages = [...head];
         for (const m of tail) {
           const id = ChatStream.historyEntryId(m);
@@ -3001,7 +3001,7 @@ export default class ChatStream extends AiWorkflow {
         mergedMessages.push({
           role: 'user',
           content:
-            `${sectionLabel}\n${recentMessages.map((m) => this._formatHistoryMessage(m, e)).join('\n')}` +
+            `${sectionLabel}\n${recentMessages.map((m: any) => this._formatHistoryMessage(m, e)).join('\n')}` +
             historyFooter
         });
       }
@@ -3031,14 +3031,14 @@ export default class ChatStream extends AiWorkflow {
   }
 
   /** 合并 LLM 正文与 reply 工具拟定内容（有拟定则始终以拟定为准，忽略 LLM 收尾摘要） */
-  _resolveOutboundText(llmText, turn) {
+  _resolveOutboundText(llmText: any, turn: any) {
     if (turn?.replyFlushed) return '';
     const queued = String(turn?.queuedReplyContent ?? '').trim();
     if (queued) return queued;
     return (llmText ?? '').toString().trim();
   }
 
-  async execute(e, question, config) {
+  async execute(e: any, question: any, config: any) {
     // 保留 process() 写入的 strictToolStreams / toolStreamNames，只刷新 turnState
     const parent = getWorkflowRequestContext() || {};
     return runWithWorkflowRequestContext({
@@ -3050,7 +3050,7 @@ export default class ChatStream extends AiWorkflow {
         if (e) this.recordMessage(e);
 
         const messages = await assembleChatLlmMessages(this, e, question);
-        const turn = getWorkflowRequestContext()?.turnState;
+        const turn: any = getWorkflowRequestContext()?.turnState;
         // /recipes 等斜杠已直接回复
         if (turn?.slashShortCircuit) {
           return turn.lastOutboundSummary || '';
@@ -3076,7 +3076,7 @@ export default class ChatStream extends AiWorkflow {
           if (turn) turn.lastOutboundSummary = historyText;
         }
         return trimmed || '';
-      } catch (error) {
+      } catch (error: any) {
         RuntimeUtil.makeLog('error', `工作流执行失败[${this.name}]: ${error.message}`, 'ChatStream');
         return null;
       }
@@ -3090,7 +3090,7 @@ export default class ChatStream extends AiWorkflow {
    * @param {string} cleanText
    * @param {{ fallbackReplyId?: string|null, replyFallbackOnAllParts?: boolean }} [opts]
    */
-  async sendMessages(e, cleanText, { fallbackReplyId = null, replyFallbackOnAllParts = true } = {}) {
+  async sendMessages(e: any, cleanText: any, { fallbackReplyId = null, replyFallbackOnAllParts = true }: any = {}) {
     if (!cleanText?.trim() || !e?.reply) return;
 
     const parts = splitProtocolParts(cleanText);
@@ -3114,7 +3114,7 @@ export default class ChatStream extends AiWorkflow {
   }
 
   cleanupCache() {
-    for (const [historyKey, messages] of ChatStream.messageHistory.entries()) {
+    for (const [historyKey, messages] of ChatStream.messageHistory.entries() as any) {
       if (!messages || messages.length === 0) {
         ChatStream.messageHistory.delete(historyKey);
         continue;
@@ -3127,7 +3127,7 @@ export default class ChatStream extends AiWorkflow {
    * 清除指定会话的 chat 历史（对齐 XRK-Yunzai ChatStream.clearConversation）
    * @param {string} scopeId - getEventHistoryKey 或 group/user id
    */
-  static async clearConversation(scopeId, { e: _e = null } = {}) {
+  static async clearConversation(scopeId: any, { e: _e = null }: any = {}) {
     const key = String(scopeId);
     const result = { success: true, cleared: { history: false, memory: false } };
     try {
@@ -3136,7 +3136,7 @@ export default class ChatStream extends AiWorkflow {
         result.cleared.history = true;
       }
       RuntimeUtil.makeLog('debug', `[ChatStream] clearConversation scope=${key}`, 'ChatStream');
-    } catch (error) {
+    } catch (error: any) {
       result.success = false;
       RuntimeUtil.makeLog('error', `[ChatStream] clearConversation: ${error.message}`, 'ChatStream');
     }

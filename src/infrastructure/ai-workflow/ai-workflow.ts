@@ -331,7 +331,7 @@ export default class AiWorkflow {
    * @param {Object} context - 上下文
    * @returns {string}
    */
-  buildSystemPrompt(_opts: any = {}) {
+  buildSystemPrompt(_opts: any = {}): any {
     return '';
   }
 
