@@ -1,5 +1,5 @@
-// @ts-nocheck
 import fs from "node:fs/promises"
+import PluginBase from '#infrastructure/plugins/plugin-base.js'
 import path from "node:path"
 import lodash from "lodash"
 import moment from "moment"
@@ -23,6 +23,7 @@ let maxPerForward = 30
 let maxLineLength = 300
 
 export class sendLog extends PluginBase {
+  [key: string]: any;
   constructor() {
     super({
       name: "发送日志",
@@ -72,19 +73,19 @@ export class sendLog extends PluginBase {
         return await this.replyError(errorMsg)
       }
 
-      await this.sendLogBatches(logs, logName, keyWord, requestLineNum, logFile, filterLevel)
+      await this.sendLogBatches(logs, logName, keyWord, requestLineNum, logFile, filterLevel);
       
-      logger.info(`[sendLog] 成功发送${logName}，共${logs.length}条`)
+      (globalThis as any).logger.info(`[sendLog] 成功发送${logName}，共${logs.length}条`)
       return true
       
-    } catch (error) {
-      logger.error(`[sendLog] 发送日志失败: ${error.message}`, error)
+    } catch (error: any) {;
+      (globalThis as any).logger.error(`[sendLog] 发送日志失败: ${error.message}`, error)
       await this.e.reply(`❌ 发送日志时发生错误: ${error.message}`)
       return false
     }
   }
 
-  async sendLogBatches(logs, logName, keyWord, requestLineNum, logFile, filterLevel) {
+  async sendLogBatches(logs: any, logName: any, keyWord: any, requestLineNum: any, logFile: any, filterLevel: any) {
     const timestamp = moment().format("YYYY-MM-DD HH:mm:ss")
     const fileName = path.basename(logFile)
     const totalBatches = Math.ceil(logs.length / maxPerForward)
@@ -122,7 +123,7 @@ export class sendLog extends PluginBase {
     }
   }
 
-  buildBatchForwardData(batchLogs, logName, keyWord, filterLevel, timestamp, fileName, batchNum, totalBatches, startIdx, totalCount) {
+  buildBatchForwardData(batchLogs: any, logName: any, keyWord: any, filterLevel: any, timestamp: any, fileName: any, batchNum: any, totalBatches: any, startIdx: any, totalCount: any) {
     const messages = []
     
     if (batchNum === 1) {
@@ -130,7 +131,7 @@ export class sendLog extends PluginBase {
       messages.push({
         message: headerInfo,
         nickname: "📋 日志信息",
-        user_id: AgentRuntime.uin
+        user_id: (globalThis as any).AgentRuntime.uin
       })
       
       if (keyWord || filterLevel) {
@@ -138,7 +139,7 @@ export class sendLog extends PluginBase {
         messages.push({
           message: statsInfo,
           nickname: "📊 筛选统计",
-          user_id: AgentRuntime.uin
+          user_id: (globalThis as any).AgentRuntime.uin
         })
       }
     }
@@ -146,10 +147,10 @@ export class sendLog extends PluginBase {
     messages.push({
       message: `📦 第 ${batchNum}/${totalBatches} 批\n📍 日志范围: #${startIdx + 1} - #${startIdx + batchLogs.length}\n共 ${batchLogs.length} 条日志`,
       nickname: `批次 ${batchNum}/${totalBatches}`,
-      user_id: AgentRuntime.uin
+      user_id: (globalThis as any).AgentRuntime.uin
     })
     
-    batchLogs.forEach((log, idx) => {
+    batchLogs.forEach((log: any, idx: any) => {
       const logNum = startIdx + idx + 1
       const level = this.extractLogLevel(log)
       const nickname = level ? `${level} [${logNum}]` : `日志 [${logNum}]`
@@ -157,7 +158,7 @@ export class sendLog extends PluginBase {
       messages.push({
         message: this.truncateLog(log),
         nickname: nickname,
-        user_id: AgentRuntime.uin
+        user_id: (globalThis as any).AgentRuntime.uin
       })
     })
     
@@ -165,25 +166,25 @@ export class sendLog extends PluginBase {
       messages.push({
         message: this.buildUsageInfo(),
         nickname: "💡 使用说明",
-        user_id: AgentRuntime.uin
+        user_id: (globalThis as any).AgentRuntime.uin
       })
     }
     
     return messages
   }
 
-  truncateLog(log) {
+  truncateLog(log: any) {
     if (log.length <= maxLineLength) {
       return log
     }
     return log.substring(0, maxLineLength - 3) + '...'
   }
 
-  extractLogLevel(logLine) {
+  extractLogLevel(logLine: any) {
     const levelMatch = logLine.match(/\[([A-Z]+)\]/i)
     if (levelMatch) {
       const level = levelMatch[1].toUpperCase()
-      const config = levelConfig[level]
+      const config = (levelConfig as any)[level]
       if (config) {
         return `${config.emoji} ${level}`
       }
@@ -191,7 +192,7 @@ export class sendLog extends PluginBase {
     return null
   }
 
-  normalizeLogType(type) {
+  normalizeLogType(type: any) {
     if (!type) return "运行"
     
     const typeMap = {
@@ -203,11 +204,11 @@ export class sendLog extends PluginBase {
       '运行': 'ALL'
     }
     
-    return typeMap[type.toLowerCase()] || 'ALL'
+    return (typeMap as any)[type.toLowerCase()] || 'ALL'
   }
 
-  async getLogConfig(logType) {
-    const config = {
+  async getLogConfig(logType: any) {
+    const config: any = {
       logFile: null,
       filterLevel: null,
       logName: '运行日志'
@@ -240,7 +241,7 @@ export class sendLog extends PluginBase {
     return config
   }
 
-  async findLogFile(prefix = 'app') {
+  async findLogFile(prefix: any = 'app') {
     try {
       const currentDate = moment().format("YYYY-MM-DD")
       const todayLogFile = path.join(logDir, `${prefix}.${currentDate}.log`)
@@ -253,7 +254,7 @@ export class sendLog extends PluginBase {
         // 查找最近的日志文件
         const files = await fs.readdir(logDir)
         const logFiles = files
-          .filter(file => file.startsWith(`${prefix}.`) && file.endsWith('.log'))
+          .filter((file: any) => file.startsWith(`${prefix}.`) && file.endsWith('.log'))
           .sort((a, b) => b.localeCompare(a))
         
         if (logFiles.length > 0) {
@@ -262,27 +263,27 @@ export class sendLog extends PluginBase {
 
         return null
       }
-    } catch (error) {
-      logger.error(`[sendLog] 查找${prefix}日志文件失败: ${error.message}`, error)
+    } catch (error: any) {;
+      (globalThis as any).logger.error(`[sendLog] 查找${prefix}日志文件失败: ${error.message}`, error)
       return null
     }
   }
 
-  async getLog(logFile, requestLineNum = 100, keyWord = "", filterLevel = null) {
+  async getLog(logFile: any, requestLineNum: any = 100, keyWord: any = "", filterLevel: any = null) {
     try {
       const content = await fs.readFile(logFile, "utf8")
-      let lines = content.split("\n").filter(line => line.trim())
+      let lines = content.split("\n").filter((line: any) => line.trim())
 
       // 级别过滤
       if (filterLevel) {
         const levelPattern = new RegExp(`\\[${filterLevel}\\]`, 'i')
-        lines = lines.filter(line => levelPattern.test(line))
+        lines = lines.filter((line: any) => levelPattern.test(line))
       }
 
       // 关键词过滤
       if (keyWord) {
         const lowerKeyword = keyWord.toLowerCase()
-        lines = lines.filter(line => line.toLowerCase().includes(lowerKeyword))
+        lines = lines.filter((line: any) => line.toLowerCase().includes(lowerKeyword))
       }
 
       // 限制数量并反转顺序（最新在前）
@@ -290,13 +291,13 @@ export class sendLog extends PluginBase {
 
       return lines.map((line) => this.formatLogLine(line))
       
-    } catch (err) {
-      logger.error(`[sendLog] 读取日志文件失败: ${logFile} - ${err.message}`, err)
+    } catch (err: any) {;
+      (globalThis as any).logger.error(`[sendLog] 读取日志文件失败: ${logFile} - ${err.message}`, err)
       return []
     }
   }
 
-  formatLogLine(line) {
+  formatLogLine(line: any) {
     if (!line) return ""
     
     // 截断长度
@@ -308,7 +309,7 @@ export class sendLog extends PluginBase {
     const levelMatch = formattedLine.match(/\[([A-Z]+)\]/i)
     if (levelMatch) {
       const level = levelMatch[1].toUpperCase()
-      const config = levelConfig[level]
+      const config = (levelConfig as any)[level]
       if (config) {
         return `${config.emoji} ${formattedLine}`
       }
@@ -322,7 +323,7 @@ export class sendLog extends PluginBase {
     return formattedLine
   }
 
-  buildErrorMessage(logName, keyWord, filterLevel) {
+  buildErrorMessage(logName: any, keyWord: any, filterLevel: any) {
     if (keyWord) {
       return `未找到包含"${keyWord}"的${logName}记录`
     }
@@ -332,7 +333,7 @@ export class sendLog extends PluginBase {
     return `暂无${logName}记录`
   }
 
-  buildHeaderInfo(logName, keyWord, filterLevel, timestamp, fileName, count) {
+  buildHeaderInfo(logName: any, keyWord: any, filterLevel: any, timestamp: any, fileName: any, count: any) {
     const titleEmoji = this.getTitleEmoji(logName, filterLevel)
     let title = `${titleEmoji} ${logName}`
     
@@ -353,9 +354,9 @@ export class sendLog extends PluginBase {
     ].join("\n")
   }
 
-  getTitleEmoji(logName, filterLevel) {
-    if (filterLevel && levelConfig[filterLevel]) {
-      return levelConfig[filterLevel].emoji
+  getTitleEmoji(logName: any, filterLevel: any) {
+    if (filterLevel && (levelConfig as any)[filterLevel]) {
+      return (levelConfig as any)[filterLevel].emoji
     }
     
     const emojiMap = {
@@ -365,10 +366,10 @@ export class sendLog extends PluginBase {
       '运行日志': '📋'
     }
     
-    return emojiMap[logName] || '📄'
+    return (emojiMap as any)[logName] || '📄'
   }
 
-  buildStatsInfo(keyWord, filterLevel, count) {
+  buildStatsInfo(keyWord: any, filterLevel: any, count: any) {
     const lines = []
     
     if (keyWord) {
@@ -389,7 +390,7 @@ export class sendLog extends PluginBase {
   }
 
   buildUsageInfo() {
-    const platformInfo = logger.platform?.() || {}
+    const platformInfo = (globalThis as any).logger.platform?.() || {}
     const agtCfg = runtimeConfig.agt || {}
     const logCfg = agtCfg.logging || {}
     
@@ -414,13 +415,13 @@ export class sendLog extends PluginBase {
     ].join("\n")
   }
 
-  async makeForwardMsg(e, msgList) {
+  async makeForwardMsg(e: any, msgList: any) {
     if (!msgList || msgList.length === 0) return null
     
-    const msgs = msgList.map((msg, i) => ({
+    const msgs = msgList.map((msg: any, i: any) => ({
       message: msg.message,
       nickname: msg.nickname || "日志系统",
-      user_id: String(msg.user_id || AgentRuntime.uin.toString()),
+      user_id: String(msg.user_id || (globalThis as any).AgentRuntime.uin.toString()),
       time: Math.floor(Date.now() / 1000) - (msgList.length - i) * 2
     }))
     
@@ -428,17 +429,17 @@ export class sendLog extends PluginBase {
       const makeForward = e.group?.makeForwardMsg || 
                          e.friend?.makeForwardMsg || 
                          e.bot?.makeForwardMsg ||
-                         AgentRuntime.makeForwardMsg
+                         (globalThis as any).AgentRuntime.makeForwardMsg
       
-      const context = e.group || e.friend || e.bot || AgentRuntime
+      const context = e.group || e.friend || e.bot || (globalThis as any).AgentRuntime
       return await makeForward.call(context, msgs)
-    } catch (error) {
-      logger.error(`[sendLog] 生成转发消息失败: ${error.message}`, error)
+    } catch (error: any) {;
+      (globalThis as any).logger.error(`[sendLog] 生成转发消息失败: ${error.message}`, error)
       return null
     }
   }
 
-  async replyError(errorMsg) {
+  async replyError(errorMsg: any) {
     try {
       const errorInfo = [
         "❌ 操作失败",
@@ -452,20 +453,20 @@ export class sendLog extends PluginBase {
       const forwardMsg = await this.makeForwardMsg(this.e, [{
         message: errorInfo,
         nickname: "错误提示",
-        user_id: AgentRuntime.uin
+        user_id: (globalThis as any).AgentRuntime.uin
       }])
       
       await this.e.reply(forwardMsg || `❌ ${errorMsg}`)
       
-    } catch (error) {
-      logger.error(`[sendLog] 回复错误信息失败:`, error)
+    } catch (error: any) {;
+      (globalThis as any).logger.error(`[sendLog] 回复错误信息失败:`, error)
       await this.e.reply(`❌ ${errorMsg}`)
     }
     
     return false
   }
 
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms))
+  sleep(ms: any) {
+    return new Promise((resolve: any) => setTimeout(resolve, ms))
   }
 }

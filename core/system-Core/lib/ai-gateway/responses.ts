@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * OpenAI Responses API（/v1/responses）↔ 内部 Chat Completions。
  *
@@ -22,11 +21,11 @@ const BUILTIN_TOOL_TYPES = new Set([
   'mcp'
 ]);
 
-function newId(prefix) {
+function newId(prefix: any) {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function contentPartToOpenAI(part) {
+function contentPartToOpenAI(part: any) {
   if (part == null) return null;
   if (typeof part === 'string') return { type: 'text', text: part };
 
@@ -48,7 +47,7 @@ function contentPartToOpenAI(part) {
   return null;
 }
 
-function normalizeMessageContent(content) {
+function normalizeMessageContent(content: any) {
   if (content == null) return '';
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) {
@@ -69,7 +68,7 @@ function normalizeMessageContent(content) {
  * Responses `input` → Chat `messages`
  * input 可为：纯字符串 | Message/Item 数组
  */
-export function responsesInputToMessages(input, { instructions } = {}) {
+export function responsesInputToMessages(input: any, { instructions }: any = {}) {
   const messages = [];
   if (instructions != null && String(instructions).trim()) {
     messages.push({ role: 'system', content: String(instructions) });
@@ -171,7 +170,7 @@ export function responsesInputToMessages(input, { instructions } = {}) {
 }
 
 /** Responses function tool → Chat Completions tools[] */
-function mapResponsesTools(tools) {
+function mapResponsesTools(tools: any) {
   if (!Array.isArray(tools) || !tools.length) return undefined;
   return tools.map((t) => {
     if (!t || typeof t !== 'object') return null;
@@ -200,13 +199,13 @@ function mapResponsesTools(tools) {
 /**
  * Responses 请求体 → 内部 Chat Completions 请求体
  */
-export function responsesRequestToOpenAIBody(body = {}) {
+export function responsesRequestToOpenAIBody(body: any = {}) {
   if (body.previous_response_id) {
     // 网关无 store：无法续写服务端状态；依赖客户端把历史放进 input
   }
 
   const messages = responsesInputToMessages(body.input, { instructions: body.instructions });
-  const out = {
+  const out: any = {
     model: body.model,
     messages,
     stream: Boolean(body.stream),
@@ -231,7 +230,7 @@ export function responsesRequestToOpenAIBody(body = {}) {
   return out;
 }
 
-function buildUsage(completionUsage = {}) {
+function buildUsage(completionUsage: any = {}) {
   const input = completionUsage.prompt_tokens ?? completionUsage.input_tokens ?? 0;
   const output = completionUsage.completion_tokens ?? completionUsage.output_tokens ?? 0;
   return {
@@ -247,7 +246,7 @@ function buildUsage(completionUsage = {}) {
   };
 }
 
-function messageOutputItem({ msgId, text, toolCalls }) {
+function messageOutputItem({ msgId, text, toolCalls }: any) {
   if (Array.isArray(toolCalls) && toolCalls.length) {
     return toolCalls.map((tc) => ({
       id: tc.id || newId('fc'),
@@ -278,7 +277,7 @@ function messageOutputItem({ msgId, text, toolCalls }) {
  * Chat Completions JSON → Responses 对象
  * @see API reference Response object
  */
-export function openAIChatToResponsesObject(completion, {
+export function openAIChatToResponsesObject(completion: any, {
   model,
   instructions = null,
   temperature = null,
@@ -287,7 +286,7 @@ export function openAIChatToResponsesObject(completion, {
   toolChoice = 'auto',
   tools = [],
   status = 'completed'
-} = {}) {
+}: any = {}) {
   const choice = completion?.choices?.[0];
   const msg = choice?.message || {};
   const text = msg.content ?? '';
@@ -328,7 +327,7 @@ export function openAIChatToResponsesObject(completion, {
   };
 }
 
-function mapIncompleteReason(finishReason) {
+function mapIncompleteReason(finishReason: any) {
   const r = String(finishReason || '').toLowerCase();
   if (r === 'length') return 'max_output_tokens';
   if (r === 'content_filter') return 'content_filter';
@@ -344,7 +343,7 @@ export const initResponsesSSE = initGatewaySSE;
  * → output_text.delta* → output_text.done → content_part.done
  * → output_item.done → completed
  */
-export async function pipeResponsesStream(res, {
+export async function pipeResponsesStream(res: any, {
   client,
   messages,
   overrides,
@@ -355,8 +354,8 @@ export async function pipeResponsesStream(res, {
   maxOutputTokens = null,
   toolChoice = 'auto',
   tools = [],
-  runWrapped = (run) => run()
-}) {
+  runWrapped = (run: any) => run()
+}: any) {
   let seq = 0;
   const nextSeq = () => {
     seq += 1;
@@ -393,7 +392,7 @@ export async function pipeResponsesStream(res, {
     metadata: {}
   };
 
-  const emit = (type, extra = {}) => {
+  const emit = (type: any, extra: any = {}) => {
     writeNamedSSE(res, type, { type, sequence_number: nextSeq(), ...extra });
   };
 
@@ -418,7 +417,7 @@ export async function pipeResponsesStream(res, {
   let total = '';
   try {
     await runWrapped(async () => {
-      await client.chatStream(messages, (delta) => {
+      await client.chatStream(messages, (delta: any) => {
         if (typeof delta !== 'string' || !delta) return;
         total += delta;
         emit('response.output_text.delta', {
@@ -429,7 +428,7 @@ export async function pipeResponsesStream(res, {
         });
       }, overrides);
     });
-  } catch (error) {
+  } catch (error: any) {
     emit('response.failed', {
       response: {
         ...baseResponse,
