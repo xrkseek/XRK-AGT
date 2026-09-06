@@ -1,4 +1,3 @@
-// @ts-nocheck
 import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
 import {
   buildWebFetchRuntime,
@@ -16,11 +15,12 @@ const PROVIDER_IDS = WEB_SEARCH_PROVIDERS.map((p) => p.id);
  * Web 能力（web_fetch + web_search）挂载为 MCP
  */
 export default class WebStream extends AiWorkflow {
+  [key: string]: any;
   /** @type {ReturnType<typeof buildWebFetchRuntime>} */
-  webFetchRuntime;
+  webFetchRuntime: any = null;
 
   /** @type {ReturnType<typeof buildWebSearchRuntime>} */
-  webSearchRuntime;
+  webSearchRuntime: any = null;
 
   constructor() {
     super({
@@ -112,7 +112,7 @@ export default class WebStream extends AiWorkflow {
         },
         required: ['query']
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         const query = typeof args.query === 'string' ? args.query.trim() : '';
         if (!query) return { success: false, error: 'query required' };
         try {
@@ -120,7 +120,7 @@ export default class WebStream extends AiWorkflow {
           if (typeof args.provider === 'string' && args.provider.trim()) {
             rt.provider = args.provider.trim().toLowerCase();
           }
-          const out = await runWebSearch(args, rt);
+          const out: any = await runWebSearch(args, rt);
           if (out.result?.error) {
             return { success: false, error: out.result.message || out.result.error, data: out };
           }
@@ -132,7 +132,7 @@ export default class WebStream extends AiWorkflow {
               fallbackFrom: out.fallbackFrom
             }
           };
-        } catch (e) {
+        } catch (e: any) {
           return { success: false, error: e.message || String(e) };
         }
       },
@@ -181,7 +181,7 @@ export default class WebStream extends AiWorkflow {
         },
         required: ['url']
       },
-      handler: async (args = {}) => {
+      handler: async (args: any = {}) => {
         const rt = runtimeBase();
         const url = typeof args.url === 'string' ? args.url.trim() : '';
         if (!url) return { success: false, error: 'url required' };
@@ -213,7 +213,7 @@ export default class WebStream extends AiWorkflow {
             firecrawlTimeoutSeconds: rt.firecrawlTimeoutSeconds
           });
           return { success: true, data: result };
-        } catch (e) {
+        } catch (e: any) {
           return { success: false, error: e.message || String(e) };
         }
       },
@@ -232,7 +232,7 @@ export default class WebStream extends AiWorkflow {
   }
 }
 
-function resolveMaxCharsForRequest(requestMax, cap) {
+function resolveMaxCharsForRequest(requestMax: any, cap: any) {
   const fallback = DEFAULT_FETCH_MAX_CHARS;
   const parsed =
     typeof requestMax === 'number' && Number.isFinite(requestMax)

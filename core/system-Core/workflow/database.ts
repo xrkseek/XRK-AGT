@@ -1,4 +1,3 @@
-// @ts-nocheck
 import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import path from 'path';
@@ -16,6 +15,7 @@ import os from 'os';
  * - delete_knowledge（删除知识）
  */
 export default class DatabaseStream extends AiWorkflow {
+  [key: string]: any;
   dbDir = path.join(os.homedir(), '.xrk', 'knowledge');
   databases = new Map();
 
@@ -88,7 +88,7 @@ export default class DatabaseStream extends AiWorkflow {
         },
         required: ['db', 'content']
       },
-      handler: async (args = {}, _context = {}) => {
+      handler: async (args: any = {}, _context: any = {}) => {
         const { db, content } = args;
         if (!db) return { success: false, error: '知识库名称不能为空' };
         if (!content) return { success: false, error: '知识内容不能为空' };
@@ -144,7 +144,7 @@ export default class DatabaseStream extends AiWorkflow {
         },
         required: ['db']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const { db, keyword } = args;
         if (!db) return { success: false, error: '知识库名称不能为空' };
 
@@ -197,7 +197,7 @@ export default class DatabaseStream extends AiWorkflow {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, _context = {}) => {
+      handler: async (_args = {}, _context: any = {}) => {
         const dbs = await this.listDatabases();
         return {
           success: true,
@@ -256,7 +256,7 @@ export default class DatabaseStream extends AiWorkflow {
         },
         required: ['db', 'condition']
       },
-      handler: async (args = {}, _context = {}) => {
+      handler: async (args: any = {}, _context: any = {}) => {
         const { db, condition, confirm } = args;
         if (!db) return { success: false, error: '知识库名称不能为空' };
         const cond = String(condition ?? '').trim();
@@ -284,10 +284,10 @@ export default class DatabaseStream extends AiWorkflow {
   /**
    * 保存知识（自动处理文本或 JSON）
    */
-  async saveKnowledge(db, content) {
+  async saveKnowledge(db: any, content: any) {
     const dbFile = path.join(this.dbDir, `${db}.json`);
     
-    let records = [];
+    let records: any[] = [];
     try {
       const data = await fs.readFile(dbFile, 'utf8');
       records = JSON.parse(data);
@@ -320,10 +320,10 @@ export default class DatabaseStream extends AiWorkflow {
   /**
    * 查询知识（关键词匹配）
    */
-  async queryKnowledge(db, keyword) {
+  async queryKnowledge(db: any, keyword: any) {
     const dbFile = path.join(this.dbDir, `${db}.json`);
 
-    let records = [];
+    let records: any[] = [];
     try {
       const data = await fs.readFile(dbFile, 'utf8');
       records = JSON.parse(data);
@@ -336,27 +336,27 @@ export default class DatabaseStream extends AiWorkflow {
     }
 
     const q = keyword.toLowerCase();
-    return records.filter(record => JSON.stringify(record).toLowerCase().includes(q));
+    return records.filter((record: any) => JSON.stringify(record).toLowerCase().includes(q));
   }
 
   /**
    * 自动检索相关知识库内容（用于 RAG）
    */
-  async retrieveKnowledgeContexts(query, maxResults = 5) {
+  async retrieveKnowledgeContexts(query: any, maxResults: any = 5) {
     if (!query || !this.embeddingConfig.enabled) {
       return [];
     }
 
     try {
-      const databases = await this.listDatabases({});
+      const databases = await this.listDatabases();
       if (databases.length === 0) return [];
 
-      const allResults = [];
+      const allResults: any[] = [];
       
       // 从所有知识库检索
       for (const db of databases) {
-        const results = await this.queryKnowledge(db, query, {});
-        results.forEach(record => {
+        const results = await this.queryKnowledge(db, query);
+        results.forEach((record: any) => {
           const content = typeof record.content === 'string' 
             ? record.content 
             : JSON.stringify(record);
@@ -369,7 +369,7 @@ export default class DatabaseStream extends AiWorkflow {
       }
 
       return allResults.slice(0, maxResults);
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('debug', `[${this.name}] 检索知识库失败: ${error.message}`, 'DatabaseStream');
       return [];
     }
@@ -382,8 +382,8 @@ export default class DatabaseStream extends AiWorkflow {
     try {
       const files = await fs.readdir(this.dbDir);
       return files
-        .filter(file => file.endsWith('.json'))
-        .map(file => file.replace('.json', ''));
+        .filter((file: any) => file.endsWith('.json'))
+        .map((file: any) => file.replace('.json', ''));
     } catch {
       return [];
     }
@@ -392,10 +392,10 @@ export default class DatabaseStream extends AiWorkflow {
   /**
    * 删除知识（简化版：支持ID或条件）
    */
-  async deleteKnowledge(db, condition) {
+  async deleteKnowledge(db: any, condition: any) {
     const dbFile = path.join(this.dbDir, `${db}.json`);
     
-    let records = [];
+    let records: any[] = [];
     try {
       const data = await fs.readFile(dbFile, 'utf8');
       records = JSON.parse(data);
@@ -411,7 +411,7 @@ export default class DatabaseStream extends AiWorkflow {
       if (!isNaN(id)) {
         // 按ID删除
         const beforeCount = records.length;
-        records = records.filter(record => record.id !== id);
+        records = records.filter((record: any) => record.id !== id);
         const deletedCount = beforeCount - records.length;
         
         await fs.writeFile(dbFile, JSON.stringify(records, null, 2), 'utf8');
@@ -419,9 +419,9 @@ export default class DatabaseStream extends AiWorkflow {
         return deletedCount;
       } else {
         // 按条件删除（支持 key=value 格式）
-        const [key, value] = condition.split('=').map(s => s.trim());
+        const [key, value] = condition.split('=').map((s: any) => s.trim());
         const beforeCount = records.length;
-        records = records.filter(record => record[key] !== value);
+        records = records.filter((record: any) => record[key] !== value);
         const deletedCount = beforeCount - records.length;
         
         await fs.writeFile(dbFile, JSON.stringify(records, null, 2), 'utf8');
@@ -453,8 +453,8 @@ export default class DatabaseStream extends AiWorkflow {
     try {
       const files = fsSync.readdirSync(this.dbDir);
       return files
-        .filter(file => file.endsWith('.json'))
-        .map(file => file.replace('.json', ''));
+        .filter((file: any) => file.endsWith('.json'))
+        .map((file: any) => file.replace('.json', ''));
     } catch {
       return [];
     }

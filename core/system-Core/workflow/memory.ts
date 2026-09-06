@@ -1,4 +1,3 @@
-// @ts-nocheck
 import AiWorkflow from '#infrastructure/ai-workflow/ai-workflow.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import MemoryManager from '#infrastructure/ai-workflow/memory-manager.js';
@@ -16,6 +15,7 @@ import os from 'os';
  * - delete_memory（删除记忆）
  */
 export default class MemoryStream extends AiWorkflow {
+  [key: string]: any;
   memoryDir = path.join(os.homedir(), '.xrk', 'memory');
   memories = new Map();
 
@@ -83,7 +83,7 @@ export default class MemoryStream extends AiWorkflow {
         },
         required: ['content']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const { content } = args;
         if (!content) return { success: false, error: '记忆内容不能为空' };
 
@@ -132,7 +132,7 @@ export default class MemoryStream extends AiWorkflow {
         },
         required: ['keyword']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const { keyword } = args;
         if (!keyword) return { success: false, error: '关键词不能为空' };
 
@@ -180,7 +180,7 @@ export default class MemoryStream extends AiWorkflow {
         },
         required: ['id']
       },
-      handler: async (args = {}, context = {}) => {
+      handler: async (args: any = {}, context: any = {}) => {
         const { id } = args;
         if (!id) return { success: false, error: '记忆ID不能为空' };
 
@@ -231,7 +231,7 @@ export default class MemoryStream extends AiWorkflow {
         properties: {},
         required: []
       },
-      handler: async (_args = {}, context = {}) => {
+      handler: async (_args = {}, context: any = {}) => {
         const memories = await this.listMemories(context);
         RuntimeUtil.makeLog('info', `[${this.name}] 列出记忆，共 ${memories.length} 条`, 'MemoryStream');
 
@@ -250,21 +250,21 @@ export default class MemoryStream extends AiWorkflow {
   /**
    * 获取用户ID（统一方法）
    */
-  getUserId(context) {
+  getUserId(context: any) {
     return context?.e?.user_id || context?.e?.user?.id || 'default';
   }
 
   /**
    * 获取场景（统一方法）
    */
-  getScene(context) {
+  getScene(context: any) {
     return context?.scene || 'default';
   }
 
   /**
    * 保存记忆
    */
-  async saveMemory(content, context) {
+  async saveMemory(content: any, context: any) {
     const userId = this.getUserId(context);
     
     const memoryId = await MemoryManager.addLongTermMemory(userId, {
@@ -295,15 +295,15 @@ export default class MemoryStream extends AiWorkflow {
   /**
    * 查询记忆
    */
-  async queryMemories(keyword, context) {
+  async queryMemories(keyword: any, context: any) {
     const userId = this.getUserId(context);
     
     const memories = await MemoryManager.searchLongTermMemories(userId, keyword, 10);
     
     const scene = this.getScene(context);
     const results = memories
-      .filter(m => m.metadata?.scene === scene || !scene)
-      .map(m => ({
+      .filter((m: any) => m.metadata?.scene === scene || !scene)
+      .map((m: any) => ({
         id: m.id,
         content: m.content,
         userId: m.userId,
@@ -318,7 +318,7 @@ export default class MemoryStream extends AiWorkflow {
   /**
    * 删除记忆
    */
-  async deleteMemory(id, context) {
+  async deleteMemory(id: any, context: any) {
     const userId = this.getUserId(context);
     const memory = this.memories.get(id);
     
@@ -336,7 +336,7 @@ export default class MemoryStream extends AiWorkflow {
   /**
    * 列出记忆
    */
-  async listMemories(context) {
+  async listMemories(context: any) {
     const userId = this.getUserId(context);
     const scene = this.getScene(context);
     
@@ -353,7 +353,7 @@ export default class MemoryStream extends AiWorkflow {
   /**
    * 保存记忆到文件
    */
-  async saveMemoryToFile(memory) {
+  async saveMemoryToFile(memory: any) {
     const userId = memory.userId;
     const scene = memory.scene;
     const memoryFile = path.join(this.memoryDir, `${userId}_${scene}.json`);
@@ -368,7 +368,7 @@ export default class MemoryStream extends AiWorkflow {
       }
       
       // 更新或添加记忆
-      const index = memories.findIndex(m => m.id === memory.id);
+      const index = memories.findIndex((m: any) => m.id === memory.id);
       if (index >= 0) {
         memories[index] = memory;
       } else {
@@ -376,7 +376,7 @@ export default class MemoryStream extends AiWorkflow {
       }
       
       await fs.writeFile(memoryFile, JSON.stringify(memories, null, 2), 'utf8');
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `[${this.name}] 保存记忆到文件失败: ${error.message}`, 'MemoryStream');
     }
   }
@@ -384,7 +384,7 @@ export default class MemoryStream extends AiWorkflow {
   /**
    * 从文件删除记忆
    */
-  async deleteMemoryFile(id) {
+  async deleteMemoryFile(id: any) {
     // 遍历所有记忆文件，找到并删除对应的记忆
     try {
       const files = await fs.readdir(this.memoryDir);
@@ -394,7 +394,7 @@ export default class MemoryStream extends AiWorkflow {
           try {
             const data = await fs.readFile(memoryFile, 'utf8');
             const memories = JSON.parse(data);
-            const filtered = memories.filter(m => m.id !== id);
+            const filtered = memories.filter((m: any) => m.id !== id);
             if (filtered.length !== memories.length) {
               await fs.writeFile(memoryFile, JSON.stringify(filtered, null, 2), 'utf8');
               break;
@@ -404,7 +404,7 @@ export default class MemoryStream extends AiWorkflow {
           }
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       RuntimeUtil.makeLog('error', `[${this.name}] 从文件删除记忆失败: ${error.message}`, 'MemoryStream');
     }
   }
@@ -437,15 +437,15 @@ export default class MemoryStream extends AiWorkflow {
   /**
    * 获取用户场景的记忆（用于构建prompt）
    */
-  async getMemoriesForContext(context) {
+  async getMemoriesForContext(context: any) {
     const userId = this.getUserId(context);
     const scene = this.getScene(context);
     
     const memories = await MemoryManager.searchLongTermMemories(userId, '', 10);
     
     return memories
-      .filter(m => m.metadata?.scene === scene || !scene)
-      .map(m => ({
+      .filter((m: any) => m.metadata?.scene === scene || !scene)
+      .map((m: any) => ({
         id: m.id,
         content: m.content,
         userId: m.userId,
@@ -466,7 +466,7 @@ export default class MemoryStream extends AiWorkflow {
    * 获取记忆用于prompt展示
    * 注意：此方法用于在主工作流中展示记忆信息，不用于MCP工具
    */
-  async getMemoriesForPrompt(context) {
+  async getMemoriesForPrompt(context: any) {
     const userId = this.getUserId(context);
     const scene = this.getScene(context);
     
@@ -474,14 +474,14 @@ export default class MemoryStream extends AiWorkflow {
     const longTerm = await MemoryManager.searchLongTermMemories(userId, '', 5);
     
     return [
-      ...shortTerm.map(m => ({
+      ...shortTerm.map((m: any) => ({
         id: m.id,
         content: m.content,
         timestamp: m.timestamp
       })),
       ...longTerm
-        .filter(m => m.metadata?.scene === scene || !scene)
-        .map(m => ({
+        .filter((m: any) => m.metadata?.scene === scene || !scene)
+        .map((m: any) => ({
           id: m.id,
           content: m.content,
           timestamp: m.timestamp
