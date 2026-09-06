@@ -42,4 +42,21 @@ async function walkCopy(srcRoot, destRoot, { skipWww = false } = {}) {
 
 await walkCopy(path.join(root, 'core'), path.join(root, 'dist', 'core'), { skipWww: true });
 await walkCopy(path.join(root, 'src', 'renderers'), path.join(root, 'dist', 'src', 'renderers'));
+
+// 清理误装进 dist/core 的 node_modules（依赖应在源码 core/<名>/）
+async function removeDistCoreNodeModules(distCore) {
+  let entries;
+  try {
+    entries = await fs.readdir(distCore, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const ent of entries) {
+    if (!ent.isDirectory() || ent.name.startsWith('.')) continue;
+    const nm = path.join(distCore, ent.name, 'node_modules');
+    await fs.rm(nm, { recursive: true, force: true }).catch(() => {});
+  }
+}
+await removeDistCoreNodeModules(path.join(root, 'dist', 'core'));
+
 console.log('copy-runtime-assets: core + renderers assets → dist');

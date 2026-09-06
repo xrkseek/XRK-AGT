@@ -235,7 +235,17 @@ export class DependencyManager {
   }
 
   async ensurePluginDependencies(rootDir: string = process.cwd()): Promise<void> {
-    const coreDirs = await paths.getCoreDirs();
+    // 依赖装在源码 `core/<名>/`；勿对 `dist/core` 做检查（构建会拷贝 package.json 但不拷 node_modules，
+    // 会导致每次启动都误判缺失并反复 pnpm install）。
+    let entries;
+    try {
+      entries = await fs.readdir(paths.coreSource, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    const coreDirs = entries
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+      .map((e) => path.join(paths.coreSource, e.name));
     await Promise.all(coreDirs.map(async (dir) => {
       const pkgPath = path.join(dir, 'package.json');
       if (!statFiles([pkgPath])[0]) return;

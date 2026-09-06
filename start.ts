@@ -24,7 +24,7 @@ process.setMaxListeners(30);
 
 const entry = process.argv[1];
 if (entry && path.basename(entry) === 'start.js') {
-  const appPath = path.resolve(process.cwd(), 'app.js');
+  const appPath = path.resolve(process.cwd(), 'dist', 'app.js');
   const result = spawnSync(process.argv[0], [appPath, ...process.argv.slice(2)], {
     stdio: 'inherit',
     cwd: process.cwd(),
@@ -148,7 +148,7 @@ class PM2Manager extends BaseManager {
     const nodeArgs = getNodeArgs();
     const pm2Config = {
       name: processName,
-      script: './app.js',
+      script: './dist/app.js',
       args: ['server', port.toString()],
       interpreter: 'node',
       node_args: nodeArgs.join(' '),
@@ -334,13 +334,13 @@ class ServerManager extends BaseManager {
 
   async runServerProcess(port, skipConfigCheck = false) {
     const nodeArgs = getNodeArgs();
-    const entryScript = path.join(process.cwd(), 'app.js');
+    const entryScript = path.join(process.cwd(), 'dist', 'app.js');
     const startArgs = [...nodeArgs, entryScript, 'server', port.toString()];
     const cleanEnv = {
       ...process.env,
       XRK_SERVER_PORT: port.toString(),
       XRK_SKIP_CONFIG_CHECK: skipConfigCheck ? '1' : '0',
-      // 热重启同样走 app.js initialize：根/插件/前端依赖 + stale www build
+      // 热重启同样走 dist/app.js initialize：根/插件/前端依赖 + stale www build
       XRK_SKIP_FRONTEND_START: process.env.XRK_SKIP_FRONTEND_START || '0',
       XRK_FAST_START: process.env.XRK_FAST_START || '0'
     };

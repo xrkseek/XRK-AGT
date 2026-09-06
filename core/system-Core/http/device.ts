@@ -2293,6 +2293,8 @@ export default {
         {
             method: 'GET',
             path: '/api/trash/*',
+            // 内嵌图片/文件 URL，浏览器无法带 X-API-Key；路径已限 trash 根下
+            systemAuth: false,
             handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
                 const filePath = req.params[0];
                 if (!filePath || filePath.includes('..')) {
@@ -2330,6 +2332,8 @@ export default {
         {
             method: 'GET',
             path: '/api/device/file/:fileId',
+            // 设备端/Web 直接拉媒体（img/pdf），无法带 Key；路径已限 data/trash/resources
+            systemAuth: false,
             handler: HttpResponse.asyncHandler(async (req: any, res: any) => {
                 const fileId = req.params.fileId;
                 if (!fileId) {
