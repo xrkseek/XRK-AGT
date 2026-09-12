@@ -15,8 +15,22 @@ import {
   getServerHost,
   isHttpsEnabled
 } from '#infrastructure/http/runtime-net.js'
+import type { AddressInfo } from 'node:net'
+import type { RequestListener, Server as HttpServer } from 'node:http'
+import type { ServerOptions as HttpsServerOptions } from 'node:https'
+import type { SecureVersion } from 'node:tls'
+import { getRuntimeGlobal } from '#utils/runtime-globals.js'
+import { normalizeError } from '#utils/normalize-error.js'
+import type { RuntimeListenHost } from '#infrastructure/http/runtime-host-types.js'
 
-type RuntimeLike = Record<string, any>
+function rec(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+}
+
+export type { RuntimeListenHost }
+
+type RuntimeLike = RuntimeListenHost
+type TlsListenOptions = HttpsServerOptions & { allowHTTP1?: boolean }
 
 export async function loadSSLCertificate(
   certConfig: { key?: string; cert?: string; ca?: string },
@@ -31,9 +45,9 @@ export async function loadSSLCertificate(
     if (!keyStat.isFile()) {
       throw new Error(`${context}：密钥路径不是文件：${certConfig.key}`)
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
-      `${context}：密钥文件不存在或无法访问：${certConfig.key} - ${error.message}`
+      `${context}：密钥文件不存在或无法访问：${certConfig.key} - ${normalizeError(error).message}`
     )
   }
 
@@ -42,13 +56,13 @@ export async function loadSSLCertificate(
     if (!certStat.isFile()) {
       throw new Error(`${context}：证书路径不是文件：${certConfig.cert}`)
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
-      `${context}：证书文件不存在或无法访问：${certConfig.cert} - ${error.message}`
+      `${context}：证书文件不存在或无法访问：${certConfig.cert} - ${normalizeError(error).message}`
     )
   }
 
-  const httpsOptions: Record<string, any> = {
+  const httpsOptions: TlsListenOptions = {
     key: await fs.readFile(certConfig.key),
     cert: await fs.readFile(certConfig.cert),
     allowHTTP1: true
@@ -96,7 +110,7 @@ export async function serverEADDRINUSE(runtime: RuntimeLike, _err: Error, isHttp
   const server = isHttps ? runtime.httpsServer : runtime.server
   const host = getServerHost()
 
-  if (server) {
+  if (server && typeof port === 'number') {
     server.listen(port, host)
   }
 }
@@ -106,13 +120,13 @@ export async function serverLoad(runtime: RuntimeLike, isHttps: boolean) {
   const port = isHttps ? runtime.httpsPort : runtime.httpPort
   const host = getServerHost()
 
-  if (!server) return
+  if (!server || typeof port !== 'number') return
 
   server.listen(port, host)
 
   await RuntimeUtil.promiseEvent(server, 'listening', isHttps && 'error').catch(() => {})
 
-  const serverInfo = server.address()
+  const serverInfo = server.address() as AddressInfo | null
   if (!serverInfo) {
     RuntimeUtil.makeLog('error', `${isHttps ? 'HTTPS' : 'HTTP'}服务器启动失败`, '服务器')
     return
@@ -132,26 +146,31 @@ export async function serverLoad(runtime: RuntimeLike, isHttps: boolean) {
 }
 
 export async function httpsLoad(runtime: RuntimeLike) {
-  const httpsConfig = (runtimeConfig as any).server.https
+  const httpsConfig = rec(rec(runtimeConfig.server).https)
 
   if (!httpsConfig.enabled) {
     return
   }
 
-  let httpsOptions: Record<string, any> = {}
+  let httpsOptions: TlsListenOptions = {}
 
   if (httpsConfig?.certificate) {
-    httpsOptions = await loadSSLCertificate(httpsConfig.certificate, 'HTTPS服务器')
+    httpsOptions = await loadSSLCertificate(
+      rec(httpsConfig.certificate) as { key?: string; cert?: string; ca?: string },
+      'HTTPS服务器'
+    )
   }
 
-  const tlsConfig = httpsConfig?.tls || {}
+  const tlsConfig = rec(httpsConfig.tls)
 
-  httpsOptions.minVersion = tlsConfig.minVersion || 'TLSv1.2'
-  if (tlsConfig.maxVersion) {
-    httpsOptions.maxVersion = tlsConfig.maxVersion
+  httpsOptions.minVersion = (
+    typeof tlsConfig.minVersion === 'string' ? tlsConfig.minVersion : 'TLSv1.2'
+  ) as SecureVersion
+  if (typeof tlsConfig.maxVersion === 'string' && tlsConfig.maxVersion) {
+    httpsOptions.maxVersion = tlsConfig.maxVersion as SecureVersion
   }
 
-  if (tlsConfig.ciphers) {
+  if (typeof tlsConfig.ciphers === 'string' && tlsConfig.ciphers) {
     httpsOptions.ciphers = tlsConfig.ciphers
   } else {
     httpsOptions.ciphers = [
@@ -166,9 +185,9 @@ export async function httpsLoad(runtime: RuntimeLike) {
 
   httpsOptions.honorCipherOrder = true
 
-  const keepAliveCfg = (runtimeConfig as any).server?.performance?.keepAlive || {}
-  const keepAliveEnabled = keepAliveCfg?.enabled !== false
-  const keepAliveInitialDelay = Number(keepAliveCfg?.initialDelay) || 1000
+  const keepAliveCfg = rec(rec(rec(runtimeConfig.server).performance).keepAlive)
+  const keepAliveEnabled = keepAliveCfg.enabled !== false
+  const keepAliveInitialDelay = Number(keepAliveCfg.initialDelay) || 1000
   httpsOptions.keepAlive = keepAliveEnabled
   httpsOptions.keepAliveInitialDelay = keepAliveInitialDelay
 
@@ -180,21 +199,29 @@ export async function httpsLoad(runtime: RuntimeLike) {
       const { createSecureServer } = http2
 
       httpsOptions.allowHTTP1 = true
-      runtime.httpsServer = createSecureServer(httpsOptions, runtime.express)
+      runtime.httpsServer = createSecureServer(
+        httpsOptions,
+        runtime.express as never
+      ) as unknown as HttpServer
+      runtime.httpsServer
         .on('error', (err: Error) => runtime._handleServerError(err, true))
         .on('upgrade', runtime.wsConnect.bind(runtime))
 
       RuntimeUtil.makeLog('info', '✓ HTTPS服务器已启动（HTTP/2支持）', '服务器')
-    } catch (err: any) {
-      RuntimeUtil.makeLog('warn', `HTTP/2不可用，回退到HTTP/1.1: ${err.message}`, '服务器')
+    } catch (err: unknown) {
+      RuntimeUtil.makeLog(
+        'warn',
+        `HTTP/2不可用，回退到HTTP/1.1: ${normalizeError(err).message}`,
+        '服务器'
+      )
       runtime.httpsServer = https
-        .createServer(httpsOptions, runtime.express)
+        .createServer(httpsOptions, runtime.express as RequestListener)
         .on('error', (e: Error) => runtime._handleServerError(e, true))
         .on('upgrade', runtime.wsConnect.bind(runtime))
     }
   } else {
     runtime.httpsServer = https
-      .createServer(httpsOptions, runtime.express)
+      .createServer(httpsOptions, runtime.express as RequestListener)
       .on('error', (err: Error) => runtime._handleServerError(err, true))
       .on('upgrade', runtime.wsConnect.bind(runtime))
   }
@@ -219,19 +246,19 @@ export async function closeServer(runtime: RuntimeLike, options: { fast?: boolea
 
   for (const [, conn] of runtime._wsConnections.entries()) {
     try {
-      conn.terminate()
+      conn.terminate?.()
     } catch {
       // 忽略已关闭的连接
     }
   }
   runtime._wsConnections.clear()
 
-  const servers = [
+  const servers: HttpServer[] = [
     runtime.server,
     runtime.httpsServer,
     runtime.proxyServer,
     runtime.proxyHttpsServer
-  ].filter(Boolean)
+  ].filter((s): s is HttpServer => s != null)
 
   if (runtime._trashTimer) {
     clearInterval(runtime._trashTimer)
@@ -244,7 +271,9 @@ export async function closeServer(runtime: RuntimeLike, options: { fast?: boolea
     /* ignore */
   }
 
-  await Promise.all(servers.map((server: any) => new Promise((resolve) => server.close(resolve))))
+  await Promise.all(
+    servers.map((server) => new Promise<void>((resolve) => server.close(() => resolve())))
+  )
 
   if (!options.fast) {
     await RuntimeUtil.sleep(2000)
@@ -252,7 +281,7 @@ export async function closeServer(runtime: RuntimeLike, options: { fast?: boolea
   await runtime.redisExit()
 
   try {
-    const logger = (globalThis as any).logger
+    const logger = getRuntimeGlobal<{ shutdown?: () => Promise<void> | void }>('logger')
     if (logger?.shutdown) {
       await logger.shutdown()
     }
@@ -266,8 +295,8 @@ export async function closeServer(runtime: RuntimeLike, options: { fast?: boolea
 export function getServerUrl(runtime: RuntimeLike) {
   const proxyConfig = getProxyConfig()
   if (runtime.proxyEnabled && Array.isArray(proxyConfig.domains) && proxyConfig.domains[0]) {
-    const domain = proxyConfig.domains[0]
-    const protocol = domain.ssl?.enabled ? 'https' : 'http'
+    const domain = rec(proxyConfig.domains[0])
+    const protocol = rec(domain.ssl).enabled ? 'https' : 'http'
     return `${protocol}://${domain.domain}`
   }
 

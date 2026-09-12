@@ -43,41 +43,53 @@ function applyDockerHostOverride(
   };
 }
 
+type SubserverRoot = {
+  default?: unknown
+  timeout?: unknown
+  runtimes?: Record<string, Record<string, unknown>>
+}
+
+function readSubserverRoot(): SubserverRoot {
+  const fromCfg = runtimeConfig.subserver
+  if (fromCfg && typeof fromCfg === 'object' && !Array.isArray(fromCfg)) {
+    return fromCfg as SubserverRoot
+  }
+  const fromYaml = getAiWorkflowConfigOptional()?.subserver
+  if (fromYaml && typeof fromYaml === 'object' && !Array.isArray(fromYaml)) {
+    return fromYaml as SubserverRoot
+  }
+  return {}
+}
+
 /**
  * @param subserverRoot ai-workflow.yaml → subserver
  */
 function resolveRuntimeEntry(
-  subserverRoot: Record<string, any> | null | undefined,
+  subserverRoot: SubserverRoot | null | undefined,
   id: string,
 ): Record<string, unknown> | null {
-  const runtimes = subserverRoot?.runtimes as Record<string, Record<string, unknown>> | undefined;
-  const entry = runtimes?.[id];
-  return entry && typeof entry === 'object' ? entry : null;
+  const runtimes = subserverRoot?.runtimes
+  const entry = runtimes?.[id]
+  return entry && typeof entry === 'object' ? entry : null
 }
 
 export function getSubserverDefaultRuntime(): string {
-  const root =
-    (runtimeConfig as { subserver?: Record<string, any> }).subserver ??
-    getAiWorkflowConfigOptional().subserver ??
-    {};
-  const id = root.default;
-  if (id && SUBSERVER_RUNTIME_CATALOG[id]) return id;
-  return 'pyserver';
+  const root = readSubserverRoot()
+  const id = root.default
+  if (typeof id === 'string' && SUBSERVER_RUNTIME_CATALOG[id]) return id
+  return 'pyserver'
 }
 
 export function getSubserverConfig(runtimeId?: string): SubserverConfig {
-  const root = ((runtimeConfig as { subserver?: Record<string, any> }).subserver ?? {}) as Record<
-    string,
-    any
-  >;
-  const id = runtimeId || getSubserverDefaultRuntime();
-  const catalog = SUBSERVER_RUNTIME_CATALOG[id] || SUBSERVER_RUNTIME_CATALOG.pyserver!;
+  const root = readSubserverRoot()
+  const id = runtimeId || getSubserverDefaultRuntime()
+  const catalog = SUBSERVER_RUNTIME_CATALOG[id] || SUBSERVER_RUNTIME_CATALOG.pyserver!
 
-  let host = DEFAULT_HOST;
-  let port = catalog.port;
-  let timeout = Number(root.timeout) || DEFAULT_TIMEOUT;
+  let host = DEFAULT_HOST
+  let port = catalog.port
+  let timeout = Number(root.timeout) || DEFAULT_TIMEOUT
 
-  const entry = resolveRuntimeEntry(root, id);
+  const entry = resolveRuntimeEntry(root, id)
   if (entry) {
     if (entry.enabled === false) {
       throw new Error(`子服务 runtime ${id} 已在配置中禁用`);

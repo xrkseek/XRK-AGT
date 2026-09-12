@@ -6,6 +6,96 @@ import { ensureAnthropicMaxTokens, normalizeAnthropicMessages } from '#utils/llm
 import { applyAnthropicThinking } from '#utils/llm/reasoning-budget.js';
 import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
 
+type LlmClientConfig = Record<string, unknown> & {
+  baseUrl?: string;
+  path?: string;
+  apiKey?: string;
+  authMode?: string;
+  authHeaderName?: string;
+  anthropicVersion?: string;
+  headers?: Record<string, string>;
+  model?: string;
+  chatModel?: string;
+  timeout?: number;
+  maxTokens?: number;
+  max_tokens?: number;
+  temperature?: number;
+  topP?: number;
+  top_p?: number;
+  topK?: number;
+  top_k?: number;
+  stop?: unknown;
+  anthropicServiceTier?: unknown;
+  serviceTier?: unknown;
+  service_tier?: unknown;
+  anthropic_prompt_cache?: boolean;
+  extraBody?: Record<string, unknown>;
+  proxy?: unknown;
+};
+
+type ChatMessage = {
+  role?: string;
+  content?: unknown;
+  [key: string]: unknown;
+};
+
+type LlmOverrides = Record<string, unknown> & {
+  headers?: Record<string, string>;
+  model?: string;
+  chatModel?: string;
+  maxTokens?: number;
+  max_tokens?: number;
+  temperature?: number;
+  topP?: number;
+  top_p?: number;
+  topK?: number;
+  top_k?: number;
+  stop?: unknown;
+  anthropicServiceTier?: unknown;
+  serviceTier?: unknown;
+  service_tier?: unknown;
+  anthropic_prompt_cache?: boolean;
+  extraBody?: Record<string, unknown>;
+};
+
+type OnDeltaCallback = (chunk: string, meta?: Record<string, unknown>) => void;
+
+type ContentBlock = Record<string, unknown> & {
+  type?: string;
+  text?: string;
+  url?: string;
+  id?: string;
+  name?: string;
+  input?: unknown;
+  tool_use_id?: string;
+  content?: unknown;
+  source?: unknown;
+  image_url?: { url?: string };
+};
+
+type AnthropicMessage = {
+  role: string;
+  content: ContentBlock[];
+};
+
+type AnthropicBody = Record<string, unknown> & {
+  model?: string;
+  messages?: AnthropicMessage[];
+  max_tokens?: number;
+  temperature?: number;
+  top_p?: number;
+  top_k?: number;
+  stop_sequences?: unknown;
+  service_tier?: unknown;
+  system?: string | Array<Record<string, unknown>>;
+  stream?: boolean;
+};
+
+type AnthropicResponse = {
+  usage?: unknown;
+  content?: Array<{ type?: string; text?: string }>;
+};
+
 /**
  * Anthropic 官方 Messages API 客户端
  * @see https://platform.claude.com/docs/en/api/overview
@@ -17,16 +107,17 @@ import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
  * - 思考：`thinkingType=adaptive` + `reasoningEffort`→`output_config.effort`（4.6+）；旧模型用 `enabled`+budget_tokens
  */
 export default class AnthropicLLMClient {
-  [key: string]: any;
+  config: LlmClientConfig;
+  endpoint: string;
   _timeout = 360000;
 
-  constructor(config: any = {}) {
+  constructor(config: LlmClientConfig = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
     this._timeout = config.timeout ?? 360000;
   }
 
-  normalizeEndpoint(config: any) {
+  normalizeEndpoint(config: LlmClientConfig) {
     const base = (config.baseUrl || 'https://api.anthropic.com/v1').replace(/\/+$/, '');
     const path = (config.path || '/messages').replace(/^\/?/, '/');
     return `${base}${path}`;
@@ -36,8 +127,8 @@ export default class AnthropicLLMClient {
     return this._timeout ?? 360000;
   }
 
-  buildHeaders(extra: any = {}) {
-    const headers = {
+  buildHeaders(extra: Record<string, string> = {}) {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...extra
     };
@@ -66,12 +157,12 @@ export default class AnthropicLLMClient {
     return headers;
   }
 
-  async transformMessages(messages: any) {
+  async transformMessages(messages: ChatMessage[]) {
     // 统一为 OpenAI 风格多模态 content（text + image_url），再转换为 Anthropic 的 content blocks
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
-  async _toAnthropicImageBlock(url: any) {
+  async _toAnthropicImageBlock(url: unknown) {
     const raw = String(url ?? '').trim();
     if (!raw) return null;
 
@@ -94,24 +185,28 @@ export default class AnthropicLLMClient {
    * - system: 单独提取为 system 字符串
    * - user/assistant: messages[{role, content}]
    */
-  buildBody(messages: any, overrides: any = {}) {
-    const systemTexts = [];
-    const anthMessages = [];
+  buildBody(messages: ChatMessage[], overrides: LlmOverrides = {}): AnthropicBody {
+    const systemTexts: string[] = [];
+    const anthMessages: AnthropicMessage[] = [];
 
     for (const m of messages ?? []) {
       const role = (m.role ?? '').toLowerCase();
       if (role === 'system') {
-        const text = (typeof m.content === 'string' ? m.content : (m.content?.text ?? m.content?.content ?? '')).toString();
+        const text = (typeof m.content === 'string'
+          ? m.content
+          : ((m.content as { text?: string; content?: unknown } | null | undefined)?.text
+            ?? (m.content as { content?: unknown } | null | undefined)?.content
+            ?? '')).toString();
         if (text) systemTexts.push(text);
         continue;
       }
 
-      const blocks = [];
+      const blocks: ContentBlock[] = [];
       if (typeof m.content === 'string') {
         const text = m.content.toString();
         if (text) blocks.push({ type: 'text', text });
       } else if (Array.isArray(m.content)) {
-        for (const p of m.content) {
+        for (const p of m.content as ContentBlock[]) {
           if (p?.type === 'text' && p.text) {
             blocks.push({ type: 'text', text: String(p.text) });
           } else if (p?.type === 'tool_use' && p.id && p.name) {
@@ -130,7 +225,8 @@ export default class AnthropicLLMClient {
           }
         }
       } else if (m.content && typeof m.content === 'object') {
-        const text = (m.content.text ?? m.content.content ?? '').toString();
+        const obj = m.content as { text?: string; content?: unknown };
+        const text = (obj.text ?? obj.content ?? '').toString();
         if (text) blocks.push({ type: 'text', text });
       }
 
@@ -142,7 +238,7 @@ export default class AnthropicLLMClient {
       });
     }
 
-    const body: any = {
+    const body: AnthropicBody = {
       model: overrides.model || overrides.chatModel || this.config.model || this.config.chatModel || 'claude-3-5-sonnet-latest',
       messages: anthMessages
     };
@@ -192,17 +288,17 @@ export default class AnthropicLLMClient {
     return body;
   }
 
-  extractText(json: any) {
+  extractText(json: AnthropicResponse | null | undefined) {
     // Anthropic: content: [{type:'text', text:'...'}]
     const parts = json?.content;
     if (!Array.isArray(parts)) return '';
-    return parts.map((p: any) => (p?.type === 'text' ? (p.text ?? '') : '')).join('');
+    return parts.map((p) => (p?.type === 'text' ? (p.text ?? '') : '')).join('');
   }
 
-  async _finalizeBodyImageBlocks(body: any) {
+  async _finalizeBodyImageBlocks(body: AnthropicBody) {
     for (const msg of body.messages ?? []) {
       if (!Array.isArray(msg.content)) continue;
-      const newBlocks = [];
+      const newBlocks: ContentBlock[] = [];
       for (const b of msg.content) {
         if (b?.type === '__image_url__' && b.url) {
           const imgBlock = await this._toAnthropicImageBlock(b.url);
@@ -220,16 +316,16 @@ export default class AnthropicLLMClient {
     }
   }
 
-  async _postNativeBody(body: any, overrides: any = {}) {
+  async _postNativeBody(body: AnthropicBody, overrides: LlmOverrides = {}) {
     await this._finalizeBodyImageBlocks(body);
     const resp = await fetch(
       this.endpoint,
-      (buildFetchOptionsWithProxy(this.config, {
+      buildFetchOptionsWithProxy(this.config as Parameters<typeof buildFetchOptionsWithProxy>[0], {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(this.timeout)
-      }) as any)
+      }) as RequestInit
     );
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
@@ -239,27 +335,27 @@ export default class AnthropicLLMClient {
   }
 
   /** 原生 Anthropic content blocks（含 image / tool_use），不经 OpenAI 多模态转换 */
-  async chatNative(messages: any, overrides: any = {}) {
-    const body = this.buildBody(normalizeAnthropicMessages(messages), overrides);
+  async chatNative(messages: ChatMessage[], overrides: LlmOverrides = {}) {
+    const body = this.buildBody(normalizeAnthropicMessages(messages) as ChatMessage[], overrides);
     ensureAnthropicMaxTokens(body, this.config, overrides);
     const resp = await this._postNativeBody(body, overrides);
-    const data: any = await resp.json();
+    const data = (await resp.json()) as AnthropicResponse;
     logPromptCacheUsage(data?.usage, 'Anthropic');
     return this.extractText(data);
   }
 
-  async chat(messages: any, overrides: any = {}) {
+  async chat(messages: ChatMessage[], overrides: LlmOverrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
-    const body = this.buildBody(transformedMessages, overrides);
+    const body = this.buildBody(transformedMessages as ChatMessage[], overrides);
     const resp = await this._postNativeBody(body, overrides);
-    const data: any = await resp.json();
+    const data = (await resp.json()) as AnthropicResponse;
     logPromptCacheUsage(data?.usage, 'Anthropic');
     return this.extractText(data);
   }
 
-  async chatStream(messages: any, onDelta: any, overrides: any = {}) {
+  async chatStream(messages: ChatMessage[], onDelta: OnDeltaCallback, overrides: LlmOverrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
-    const body = this.buildBody(transformedMessages, overrides);
+    const body = this.buildBody(transformedMessages as ChatMessage[], overrides);
     body.stream = true;
 
     const resp = await this._postNativeBody(body, overrides);
@@ -267,10 +363,14 @@ export default class AnthropicLLMClient {
       throw new Error('Anthropic 流式响应无 body');
     }
 
-    for await (const { data } of iterateSSE(resp as any, { stopOnDone: false })) {
+    for await (const { data } of iterateSSE(resp as Parameters<typeof iterateSSE>[0], { stopOnDone: false })) {
       if (!data) continue;
       try {
-        const json = JSON.parse(data);
+        const json = JSON.parse(data) as {
+          type?: string;
+          delta?: { type?: string; text?: string };
+          content_block?: { type?: string; text?: string };
+        };
         const type = json?.type;
 
         // Messages streaming：content_block_delta / content_block_start（text）
@@ -291,4 +391,3 @@ export default class AnthropicLLMClient {
     }
   }
 }
-

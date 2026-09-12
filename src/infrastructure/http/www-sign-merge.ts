@@ -4,6 +4,7 @@
  */
 import rateLimit from 'express-rate-limit'
 import { isPrivateOrLoopbackAddress } from '#infrastructure/http/auth.js'
+import type { WwwSign } from '#infrastructure/http/www-app-resolve.js'
 
 export type WwwRateLimitOverlay =
   | null
@@ -47,39 +48,48 @@ export function mergePreferDefined(base: unknown, overlay: unknown): unknown {
  * 解析本挂载点相对主服的覆盖项。
  */
 export function resolveWwwMountOverlays(
-  sign: Record<string, any> | null | undefined,
-  serverOrRoot: Record<string, any> = {}
-): { static: Record<string, any>; rateLimit: WwwRateLimitOverlay } {
+  sign: WwwSign | Record<string, unknown> | null | undefined,
+  serverOrRoot: Record<string, unknown> = {}
+): { static: Record<string, unknown>; rateLimit: WwwRateLimitOverlay } {
   const server =
-    serverOrRoot && typeof serverOrRoot === 'object' && serverOrRoot.server
-      ? serverOrRoot.server
+    serverOrRoot && typeof serverOrRoot === 'object' && serverOrRoot.server &&
+    typeof serverOrRoot.server === 'object' && !Array.isArray(serverOrRoot.server)
+      ? (serverOrRoot.server as Record<string, unknown>)
       : serverOrRoot || {}
-  const serverStatic = server.static && typeof server.static === 'object' ? server.static : {}
+  const serverStatic =
+    server.static && typeof server.static === 'object' && !Array.isArray(server.static)
+      ? (server.static as Record<string, unknown>)
+      : {}
   const signStatic =
-    sign?.static && typeof sign.static === 'object' && !Array.isArray(sign.static) ? sign.static : {}
+    sign?.static && typeof sign.static === 'object' && !Array.isArray(sign.static)
+      ? (sign.static as Record<string, unknown>)
+      : {}
   const topCache = sign && sign.cacheTime != null ? { cacheTime: sign.cacheTime } : {}
   const staticMerged = mergePreferDefined(serverStatic, { ...signStatic, ...topCache }) as Record<
     string,
-    any
+    unknown
   >
 
   let mountRateLimit: WwwRateLimitOverlay = null
   if (sign?.rateLimit && typeof sign.rateLimit === 'object' && !Array.isArray(sign.rateLimit)) {
-    const serverRl = server.rateLimit && typeof server.rateLimit === 'object' ? server.rateLimit : {}
-    const merged = mergePreferDefined(serverRl, sign.rateLimit) as Record<string, any>
+    const serverRl =
+      server.rateLimit && typeof server.rateLimit === 'object' && !Array.isArray(server.rateLimit)
+        ? (server.rateLimit as Record<string, unknown>)
+        : {}
+    const merged = mergePreferDefined(serverRl, sign.rateLimit) as Record<string, unknown>
     if (merged.enabled === false) {
       mountRateLimit = { enabled: false }
     } else {
       const fromMount =
         merged.mount && typeof merged.mount === 'object' && !Array.isArray(merged.mount)
-          ? merged.mount
+          ? (merged.mount as Record<string, unknown>)
           : null
       const fromGlobal =
         merged.global && typeof merged.global === 'object' && !Array.isArray(merged.global)
-          ? merged.global
+          ? (merged.global as Record<string, unknown>)
           : {}
       const leaf = fromMount
-        ? (mergePreferDefined(fromGlobal, fromMount) as Record<string, any>)
+        ? (mergePreferDefined(fromGlobal, fromMount) as Record<string, unknown>)
         : {
             windowMs: merged.windowMs ?? fromGlobal.windowMs,
             max: merged.max ?? fromGlobal.max,
@@ -87,9 +97,9 @@ export function resolveWwwMountOverlays(
           }
       mountRateLimit = {
         enabled: true,
-        windowMs: leaf.windowMs,
-        max: leaf.max,
-        message: leaf.message
+        windowMs: typeof leaf.windowMs === 'number' ? leaf.windowMs : Number(leaf.windowMs) || undefined,
+        max: typeof leaf.max === 'number' ? leaf.max : Number(leaf.max) || undefined,
+        message: typeof leaf.message === 'string' ? leaf.message : leaf.message != null ? String(leaf.message) : undefined
       }
     }
   }
@@ -101,8 +111,8 @@ export function resolveWwwMountOverlays(
  * 在全局 `createStaticOptions` 基础上套本挂载的 static 覆盖。
  */
 export function applyWwwStaticOverlay(
-  baseStaticOptions: Record<string, any>,
-  overlayStatic: Record<string, any> = {}
+  baseStaticOptions: Record<string, unknown>,
+  overlayStatic: Record<string, unknown> = {}
 ) {
   const o = overlayStatic && typeof overlayStatic === 'object' ? overlayStatic : {}
   return {
@@ -127,6 +137,6 @@ export function createWwwMountRateLimiter(
     message: rateLimitOverlay.message || '请求过于频繁，请稍后再试',
     standardHeaders: true,
     legacyHeaders: false,
-    skip: (req: any) => isPrivateOrLoopbackAddress(req.ip)
+    skip: (req: { ip?: string }) => isPrivateOrLoopbackAddress(req.ip)
   })
 }

@@ -193,3 +193,31 @@ describe('getAuthModePublicSnapshot', () => {
     assert.equal(snap.requiresKey, false);
   });
 });
+
+describe('HttpApi 默认 /api/* 鉴权（systemAuth）', () => {
+  it('/api/* 未写 systemAuth → 自动注入 truthy 上下文；false 才公开', async () => {
+    const { default: HttpApi } = await import('../../dist/src/infrastructure/http/http.js');
+    const api = new HttpApi('auth-loopback-probe');
+    const def = api._withDefaultSystemAuth({ path: '/api/system/overview', method: 'GET' });
+    assert.equal(typeof def.systemAuth, 'string');
+    assert.ok(def.systemAuth.length > 0);
+    assert.equal(def.systemAuth.includes('/'), false);
+
+    const open = api._withDefaultSystemAuth({
+      path: '/api/system/auth-mode',
+      method: 'GET',
+      systemAuth: false,
+    });
+    assert.equal(open.systemAuth, false);
+
+    const nonApi = api._withDefaultSystemAuth({ path: '/v1/chat/completions', method: 'POST' });
+    assert.equal(nonApi.systemAuth, undefined);
+
+    const explicit = api._withDefaultSystemAuth({
+      path: '/api/x',
+      method: 'GET',
+      systemAuth: 'custom.ctx',
+    });
+    assert.equal(explicit.systemAuth, 'custom.ctx');
+  });
+});

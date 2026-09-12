@@ -3,11 +3,24 @@ import { estimateTokensRough } from '#utils/token-estimate.js';
 import { normalizeStringArray } from '#utils/string-array-utils.js';
 import { pickFirstKey } from '#utils/coerce-pick.js';
 
-export function pickFirst(obj: any, keys: any) {
-  return pickFirstKey(obj, keys);
+type Dict = Record<string, unknown>;
+
+type ChatMessageLike = {
+  content?: unknown;
+  [key: string]: unknown;
+};
+
+type WorkflowBodyConfig = {
+  workflows?: unknown;
+  workflow?: unknown;
+  [key: string]: unknown;
+};
+
+export function pickFirst(obj: unknown, keys: string[]): unknown {
+  return pickFirstKey(obj as Dict | null | undefined, keys);
 }
 
-export function parseOptionalJson(raw: any) {
+export function parseOptionalJson(raw: unknown): unknown {
   if (raw == null) return null;
   if (typeof raw === 'object') return raw;
   try {
@@ -17,13 +30,13 @@ export function parseOptionalJson(raw: any) {
   }
 }
 
-export function toNum(v: any) {
+export function toNum(v: unknown): number | undefined {
   if (v == null || v === '') return;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
 }
 
-export function toBool(v: any) {
+export function toBool(v: unknown): boolean | undefined {
   if (v == null || v === '') return;
   if (typeof v === 'boolean') return v;
   const s = String(v).trim().toLowerCase();
@@ -32,35 +45,43 @@ export function toBool(v: any) {
   return;
 }
 
-export const trimLower = (v: any) => (v || '').toString().trim().toLowerCase();
+export const trimLower = (v: unknown): string => (v || '').toString().trim().toLowerCase();
 
-export function getDefaultProvider(): any {
-  return LLMFactory.resolveProvider({}) ?? '';
+export function getDefaultProvider(): string {
+  return String(LLMFactory.resolveProvider({}) ?? '');
 }
 
-export function resolveProviderFromRequest(body: any = {}) {
-  return LLMFactory.resolveProvider({
-    model: trimLower(pickFirst(body, ['model'])),
-    provider: trimLower(pickFirst(body, ['provider', 'llm', 'profile'])),
-    llm: trimLower(pickFirst(body, ['llm'])),
-    profile: trimLower(pickFirst(body, ['profile'])),
-    defaultProvider: getDefaultProvider()
-  });
+export function resolveProviderFromRequest(body: Dict = {}): string {
+  return String(
+    LLMFactory.resolveProvider({
+      model: trimLower(pickFirst(body, ['model'])),
+      provider: trimLower(pickFirst(body, ['provider', 'llm', 'profile'])),
+      llm: trimLower(pickFirst(body, ['llm'])),
+      profile: trimLower(pickFirst(body, ['profile'])),
+      defaultProvider: getDefaultProvider(),
+    }) ?? '',
+  );
 }
 
-export function extractMessageText(messages: any) {
-  return messages.map((m: any) => {
-    const content = m.content;
-    return typeof content === 'string' ? content : (content?.text || '');
-  }).join('');
+export function extractMessageText(messages: ChatMessageLike[]): string {
+  return messages
+    .map((m) => {
+      const content = m.content;
+      if (typeof content === 'string') return content;
+      if (content && typeof content === 'object' && 'text' in content) {
+        return String((content as { text?: unknown }).text || '');
+      }
+      return '';
+    })
+    .join('');
 }
 
 export const estimateTokens = estimateTokensRough;
 
-export function resolveWorkflowStreams(body: any = {}) {
-  const workflowConfig: any = pickFirst(body, ['workflow']);
+export function resolveWorkflowStreams(body: Dict = {}): string[] | null {
+  const workflowConfig = pickFirst(body, ['workflow']) as WorkflowBodyConfig | null | undefined;
   if (!workflowConfig || typeof workflowConfig !== 'object') return null;
-  const names: any[] = [];
+  const names: unknown[] = [];
   if (Array.isArray(workflowConfig.workflows)) names.push(...workflowConfig.workflows);
   if (typeof workflowConfig.workflow === 'string') names.push(workflowConfig.workflow);
   const normalized = normalizeStringArray(names);
@@ -72,38 +93,54 @@ export function resolveWorkflowStreams(body: any = {}) {
  * Client-supplied `tools` without workflows stay on factory passthrough
  * (return tool_calls to the client without server-side MCP execute).
  *
- * @param {object} body
- * @param {string[]|null|undefined} effectiveStreams
- * @returns {boolean}
+ * @see .cursor/skills/xrk-v3-api/SKILL.md — /v1 chat/completions 分流
  */
-export function shouldUseHarnessModuleLoop(body: any = {}, effectiveStreams: any = null) {
+export function shouldUseHarnessModuleLoop(
+  body: Dict = {},
+  effectiveStreams: string[] | null | undefined = null,
+): boolean {
   if (Array.isArray(effectiveStreams) && effectiveStreams.length > 0) return true;
   const tools = pickFirst(body, ['tools']);
   if (Array.isArray(tools) && tools.length > 0) return false;
   return true;
 }
 
-export function buildOverridesFromBody(body: any = {}) {
-  const overrides: any = {};
-  const addNum = (key: any, ...aliases: any[]) => {
+/**
+ * OpenAI Chat `stream=true` → harness live SSE（assistant/chunk · tool/call · tool/result）。
+ * Anthropic Messages / Responses 网关（`xrkGatewayFormat`）即使 stream 仍整段 JSON（非 OpenAI SSE）。
+ *
+ * @see docs/harness-module-loop.md — `/v1` + OpenAI stream live SSE
+ */
+export function shouldWantOpenAiLiveSse(
+  streamFlag: boolean,
+  gatewayFormat: string | null | undefined = null,
+): boolean {
+  return !!streamFlag
+    && gatewayFormat !== 'anthropic'
+    && gatewayFormat !== 'responses';
+}
+
+export function buildOverridesFromBody(body: Dict = {}): Dict {
+  const overrides: Dict = {};
+  const addNum = (key: string, ...aliases: string[]) => {
     const v = toNum(pickFirst(body, [key, ...aliases]));
     if (v !== undefined) {
       overrides[key] = v;
-      if (aliases.length) overrides[aliases[0]] = v;
+      if (aliases.length) overrides[aliases[0]!] = v;
     }
   };
-  const addVal = (key: any, ...aliases: any[]) => {
+  const addVal = (key: string, ...aliases: string[]) => {
     const v = pickFirst(body, [key, ...aliases]);
     if (v !== undefined) {
       overrides[key] = v;
-      if (aliases.length) overrides[aliases[0]] = v;
+      if (aliases.length) overrides[aliases[0]!] = v;
     }
   };
-  const addBool = (key: any, ...aliases: any[]) => {
+  const addBool = (key: string, ...aliases: string[]) => {
     const v = toBool(pickFirst(body, [key, ...aliases]));
     if (v !== undefined) {
       overrides[key] = v;
-      if (aliases.length) overrides[aliases[0]] = v;
+      if (aliases.length) overrides[aliases[0]!] = v;
     }
   };
 

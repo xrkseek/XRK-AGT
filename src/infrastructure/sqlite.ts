@@ -11,15 +11,30 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import runtimeConfig from './config/config.js'
 import paths from '#utils/paths.js'
-import { setRuntimeGlobal } from '#utils/runtime-globals.js'
+import { setRuntimeGlobal, getRuntimeGlobal } from '#utils/runtime-globals.js'
 
 type SqliteDb = InstanceType<typeof DatabaseSync>
+type SqliteYaml = {
+  enabled?: boolean
+  memory?: boolean
+  filePath?: string
+  busyTimeoutMs?: number
+  foreignKeys?: boolean
+  walMode?: boolean
+}
+type SqliteOpenOpts = NonNullable<ConstructorParameters<typeof DatabaseSync>[1]> & {
+  timeout?: number
+}
 
 let globalDb: SqliteDb | null = null
 let globalDbPath: string | null = null
 
+function sqliteYaml(): SqliteYaml {
+  return (runtimeConfig.sqlite ?? {}) as SqliteYaml
+}
+
 function resolveDb(): SqliteDb | null {
-  const fromGlobal = (globalThis as any).sqlite as SqliteDb | undefined
+  const fromGlobal = getRuntimeGlobal<SqliteDb>('sqlite')
   if (fromGlobal?.isOpen) {
     if (globalDb !== fromGlobal) globalDb = fromGlobal
     return fromGlobal
@@ -37,7 +52,7 @@ function requireDb(): SqliteDb {
  * 解析 SQLite 文件路径
  * @returns 绝对路径或 `':memory:'`
  */
-export function resolveSqliteFilePath(cfg: Record<string, any> = (runtimeConfig as any).sqlite || {}) {
+export function resolveSqliteFilePath(cfg: SqliteYaml = sqliteYaml()) {
   if (process.env.XRK_SQLITE_MEMORY === '1' || cfg.memory === true) {
     return ':memory:'
   }
@@ -52,7 +67,7 @@ export function resolveSqliteFilePath(cfg: Record<string, any> = (runtimeConfig 
 export default function sqliteInit() {
   if (globalDb?.isOpen) return globalDb
 
-  const cfg = (runtimeConfig as any).sqlite || {}
+  const cfg = sqliteYaml()
   if (cfg.enabled === false) {
     throw new Error('sqlite.enabled=false')
   }
@@ -63,12 +78,12 @@ export default function sqliteInit() {
   }
 
   const busy = Number(cfg.busyTimeoutMs)
-  const openOpts: ConstructorParameters<typeof DatabaseSync>[1] = {
+  const openOpts: SqliteOpenOpts = {
     open: true,
     enableForeignKeyConstraints: cfg.foreignKeys !== false
   }
   if (Number.isFinite(busy) && busy >= 0) {
-    ;(openOpts as any).timeout = Math.floor(busy)
+    openOpts.timeout = Math.floor(busy)
   }
 
   const db = new DatabaseSync(filePath, openOpts)
@@ -82,7 +97,7 @@ export default function sqliteInit() {
   return db
 }
 
-function applyPragmas(db: SqliteDb, cfg: Record<string, any>, filePath: string) {
+function applyPragmas(db: SqliteDb, cfg: SqliteYaml, filePath: string) {
   if (cfg.walMode !== false && filePath !== ':memory:') {
     try {
       db.exec('PRAGMA journal_mode = WAL;')

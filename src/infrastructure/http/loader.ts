@@ -1,4 +1,4 @@
-import HttpApi from './http.js'
+import HttpApi, { type AgentRuntimeBot, type WsHandlerFn } from './http.js'
 import RuntimeUtil from '#utils/runtime-util.js'
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js'
 import paths from '#utils/paths.js'
@@ -7,13 +7,30 @@ import { FileLoader } from '#utils/file-loader.js'
 import { resolveQualifiedCoreModuleKey } from '#utils/core-fs.js'
 import { API_REGISTER_BATCH_SIZE, LOADER_BATCH_SIZE } from '#utils/loader-constants.js'
 import { classifyModuleImportError } from '#utils/module-import-error.js'
+import { normalizeError } from '#utils/normalize-error.js'
+
+type ExpressLikeApp = {
+  use: (...args: unknown[]) => unknown
+} & Record<string, unknown>
+
+type ExpressReq = {
+  agentRuntime?: unknown
+  apiLoader?: HttpApiLoader
+  path?: string
+  originalUrl?: string
+}
+
+type ExpressRes = {
+  headersSent?: boolean
+  status: (code: number) => { json: (body: unknown) => unknown }
+}
 
 class HttpApiLoader {
-  apis = new Map<string, any>()
-  priority: any[] = []
+  apis = new Map<string, HttpApi>()
+  priority: HttpApi[] = []
   loaded = false
-  app: any = null
-  bot: any = null
+  app: ExpressLikeApp | null = null
+  bot: AgentRuntimeBot | null = null
   _httpDirsCache: string[] | null = null
 
   async load() {
@@ -59,11 +76,11 @@ class HttpApiLoader {
         return false
       }
 
-      let apiInstance: any
+      let apiInstance: HttpApi
       if (typeof module.default === 'function') {
-        apiInstance = new (module.default as new () => any)()
+        apiInstance = new (module.default as new () => HttpApi)()
       } else if (typeof module.default === 'object') {
-        apiInstance = new HttpApi(module.default)
+        apiInstance = new HttpApi(module.default as ConstructorParameters<typeof HttpApi>[0])
       } else {
         RuntimeUtil.makeLog('warn', `无效 API 模块: ${key}`, 'HttpApiLoader')
         return false
@@ -71,7 +88,7 @@ class HttpApiLoader {
 
       validateApiInstance(apiInstance, key)
       if (typeof apiInstance.getInfo !== 'function') {
-        apiInstance.getInfo = function (this: any) {
+        apiInstance.getInfo = function (this: HttpApi) {
           return {
             name: this.name,
             dsc: this.dsc,
@@ -87,9 +104,9 @@ class HttpApiLoader {
       apiInstance.filePath = filePath
       this.apis.set(key, apiInstance)
       return true
-    } catch (error: any) {
-      const classified = classifyModuleImportError(error) as any
-      let detail = error.message
+    } catch (error: unknown) {
+      const classified = classifyModuleImportError(error)
+      let detail = normalizeError(error).message
       if (classified.kind === 'missing_export') {
         detail = `模块未导出 ${classified.exportName}（Runtime database 仅 Redis；Mongo/PG/Vector 请用对应 Core）`
       } else if (classified.kind === 'missing_package') {
@@ -109,10 +126,10 @@ class HttpApiLoader {
     if (typeof api.stop === 'function') {
       try {
         await api.stop()
-      } catch (error: any) {
+      } catch (error: unknown) {
         RuntimeUtil.makeLog(
           'warn',
-          `卸载 API stop 失败: ${api.name} - ${error.message}`,
+          `卸载 API stop 失败: ${api.name} - ${normalizeError(error).message}`,
           'HttpApiLoader'
         )
       }
@@ -127,7 +144,7 @@ class HttpApiLoader {
     if (!this.bot?.wsf) return
     for (const [wsPath, handlers] of Object.entries(this.bot.wsf)) {
       if (!Array.isArray(handlers)) continue
-      const filtered = handlers.filter((fn: any) => fn.__ownerKey !== ownerKey)
+      const filtered = handlers.filter((fn: WsHandlerFn) => fn.__ownerKey !== ownerKey)
       if (filtered.length > 0) this.bot.wsf[wsPath] = filtered
       else delete this.bot.wsf[wsPath]
     }
@@ -139,7 +156,8 @@ class HttpApiLoader {
       .sort((a, b) => getApiPriority(b) - getApiPriority(a))
   }
 
-  async _initApi(api: any) {
+  async _initApi(api: HttpApi | undefined) {
+    if (!api) return
     if (this.app && this.bot && typeof api.init === 'function') {
       await api.init(this.app, this.bot)
     }
@@ -152,11 +170,11 @@ class HttpApiLoader {
     await this._initApi(this.apis.get(key))
   }
 
-  async register(app: any, bot: any) {
+  async register(app: ExpressLikeApp, bot: AgentRuntimeBot) {
     this.app = app
     this.bot = bot
 
-    app.use((req: any, res: any, next: any) => {
+    app.use((req: ExpressReq, _res: unknown, next: () => void) => {
       req.agentRuntime = bot
       req.apiLoader = this
       next()
@@ -166,14 +184,15 @@ class HttpApiLoader {
     let totalWS = 0
     let enabledCount = 0
 
-    const registerOne = async (api: any) => {
+    const registerOne = async (api: HttpApi) => {
       try {
         const routeCount = api.routes.length
         const wsCount = api.wsHandlers ? Object.keys(api.wsHandlers).length : 0
         await this._initApi(api)
 
         if (routeCount > 0 || wsCount > 0) {
-          if (getAiWorkflowConfigOptional().global?.debug) {
+          const globalCfg = getAiWorkflowConfigOptional().global as Record<string, unknown> | undefined
+          if (globalCfg?.debug) {
             RuntimeUtil.makeLog(
               'debug',
               `注册API: ${api.name} (路由: ${routeCount}, WS: ${wsCount})`,
@@ -183,10 +202,10 @@ class HttpApiLoader {
           return { routeCount, wsCount, enabled: true }
         }
         return { routeCount: 0, wsCount: 0, enabled: false }
-      } catch (error: any) {
+      } catch (error: unknown) {
         RuntimeUtil.makeLog(
           'error',
-          `注册API失败: ${api.name} - ${error.message}`,
+          `注册API失败: ${api.name} - ${normalizeError(error).message}`,
           'HttpApiLoader',
           true
         )
@@ -202,8 +221,8 @@ class HttpApiLoader {
       enabledCount++
     }
 
-    app.use('/api/*', (req: any, res: any, next: any) => {
-      if (req.path.startsWith('/api/god/')) return next()
+    app.use('/api/*', (req: ExpressReq, res: ExpressRes, next: () => void) => {
+      if (req.path?.startsWith('/api/god/')) return next()
       if (!res.headersSent) {
         res.status(404).json({
           success: false,

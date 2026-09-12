@@ -3,112 +3,204 @@ import { getAiWorkflowHost } from '../ai-workflow/workflow-host.js'
 const SymbolTimeout = Symbol('Timeout')
 const SymbolResolve = Symbol('Resolve')
 
-function resolveWorkflowHost() {
-  return getAiWorkflowHost()
+type WorkflowHost = {
+  getWorkflow?: (name: string) => unknown
 }
 
-const ensureArray = (value: unknown) => {
+function resolveWorkflowHost(): WorkflowHost | null {
+  const host = getAiWorkflowHost()
+  if (!host || typeof host !== 'object') return null
+  return host as WorkflowHost
+}
+
+export type PluginResultEntry = {
+  plugin: string
+  method: string
+  payload: unknown
+}
+
+export type PluginEvent = {
+  reply?: (...args: any[]) => any
+  bot?: any
+  tasker?: any
+  user_id?: string | number
+  group_id?: string | number
+  device_id?: string | number
+  self_id?: string | number
+  post_type?: string
+  logText?: string
+  isOnebot?: boolean
+  isOneBot?: boolean
+  runtime?: any
+  friend?: any
+  group?: any
+  member?: any
+  msg?: string
+  raw_message?: string
+  message?: any
+  message_id?: string | number
+  img?: any
+  sender?: any
+  isGroup?: boolean
+  isMaster?: boolean
+  recall?: (...args: any[]) => any
+  getForwardMsg?: (...args: any[]) => any
+  plainText?: string
+  _pluginResults?: PluginResultEntry[]
+  _currentRuleFnc?: string
+  _needReparse?: boolean
+  [SymbolTimeout]?: ReturnType<typeof setTimeout>
+  [SymbolResolve]?: (value: unknown) => void
+  [key: string]: any
+}
+
+export type PluginRule = Record<string, unknown> & { reg?: unknown }
+
+export type PluginTask = {
+  name: string
+  cron?: string
+  fnc: unknown
+  log: boolean
+  timezone?: unknown
+  immediate?: boolean
+}
+
+export type PluginHandler = {
+  key: string
+  fnc: unknown
+  ref?: (...args: unknown[]) => unknown
+  priority?: unknown
+  once?: boolean
+}
+
+export type PluginEventSubscribe = {
+  eventType: string
+  handler?: (...args: unknown[]) => unknown
+  fnc?: string
+}
+
+export type PluginOptions = {
+  name?: string
+  dsc?: string
+  event?: string
+  priority?: number
+  task?: unknown
+  rule?: unknown
+  handler?: unknown
+  eventSubscribe?: unknown
+  bypassThrottle?: boolean
+  namespace?: string
+  tasker?: string
+}
+
+const ensureArray = (value: unknown): unknown[] => {
   if (!value) return []
   return Array.isArray(value) ? value.filter(Boolean) : [value]
 }
 
-const normalizeRuleShape = (rule: any) => {
+const normalizeRuleShape = (rule: unknown): PluginRule | null => {
   if (!rule) return null
   if (typeof rule === 'string' || rule instanceof RegExp) {
     return { reg: rule }
   }
   if (typeof rule === 'object' && !Array.isArray(rule)) {
+    const obj = rule as Record<string, unknown>
     return {
-      ...rule,
-      reg: rule.reg ?? rule.pattern ?? rule.source ?? rule.match
+      ...obj,
+      reg: obj.reg ?? obj.pattern ?? obj.source ?? obj.match
     }
   }
   return null
 }
 
-const normalizeRules = (rules: unknown) =>
-  ensureArray(rules).map(normalizeRuleShape).filter(Boolean)
+const normalizeRules = (rules: unknown): PluginRule[] =>
+  ensureArray(rules).map(normalizeRuleShape).filter((r): r is PluginRule => r != null)
 
-const normalizeTaskShape = (task: any) => {
+const normalizeTaskShape = (task: unknown): PluginTask | null => {
   if (!task || typeof task !== 'object') return null
-  if (!task.cron || !task.fnc) return null
+  const t = task as Record<string, unknown>
+  if (!t.cron || !t.fnc) return null
   return {
-    name: task.name || '',
-    cron: String(task.cron).trim(),
-    fnc: task.fnc,
-    log: task.log !== false,
-    timezone: task.timezone,
-    immediate: task.immediate === true
+    name: (t.name as string) || '',
+    cron: String(t.cron).trim(),
+    fnc: t.fnc,
+    log: t.log !== false,
+    timezone: t.timezone,
+    immediate: t.immediate === true
   }
 }
 
-const normalizeTasks = (tasks: unknown) =>
-  ensureArray(tasks).map(normalizeTaskShape).filter(Boolean)
+const normalizeTasks = (tasks: unknown): PluginTask[] =>
+  ensureArray(tasks).map(normalizeTaskShape).filter((t): t is PluginTask => t != null)
 
-const normalizeHandlers = (handlers: unknown) => {
+const normalizeHandlers = (handlers: unknown): PluginHandler[] => {
   if (!handlers) return []
   const list = Array.isArray(handlers) ? handlers : Object.values(handlers as object)
 
   return list
-    .map((handler: any) => {
+    .map((handler: unknown): PluginHandler | null => {
       if (!handler) return null
       if (typeof handler === 'string') {
         return { key: handler, fnc: handler }
       }
       if (typeof handler === 'function') {
-        return { key: handler.name || 'handler', fnc: handler.name, ref: handler }
+        const fn = handler as (...args: unknown[]) => unknown
+        return { key: fn.name || 'handler', fnc: fn.name, ref: fn }
       }
       if (typeof handler === 'object') {
-        const fnc = handler.fnc || handler.fn
-        const key = handler.key || handler.event || fnc
+        const obj = handler as Record<string, unknown>
+        const fnc = obj.fnc || obj.fn
+        const key = obj.key || obj.event || fnc
         if (!fnc || !key) return null
         return {
-          key,
+          key: String(key),
           fnc,
-          priority: handler.priority,
-          once: handler.once === true
+          priority: obj.priority,
+          once: obj.once === true
         }
       }
       return null
     })
-    .filter(Boolean)
+    .filter((h): h is PluginHandler => h != null)
 }
 
-const normalizeEventSubscribe = (subs: unknown) => {
+const normalizeEventSubscribe = (subs: unknown): PluginEventSubscribe[] => {
   if (!subs) return []
   if (Array.isArray(subs)) {
     return subs
-      .map((item: any) => {
+      .map((item: unknown): PluginEventSubscribe | null => {
         if (!item) return null
         if (typeof item === 'function') return null
-        const eventType = item.eventType || item.event || item.type
+        if (typeof item !== 'object') return null
+        const obj = item as Record<string, unknown>
+        const eventType = obj.eventType || obj.event || obj.type
         if (!eventType) return null
-        if (typeof item.handler === 'function') {
-          return { eventType, handler: item.handler }
+        if (typeof obj.handler === 'function') {
+          return { eventType: String(eventType), handler: obj.handler as (...args: unknown[]) => unknown }
         }
-        if (typeof item.handler === 'string' || typeof item.fnc === 'string') {
-          return { eventType, fnc: item.handler || item.fnc }
+        if (typeof obj.handler === 'string' || typeof obj.fnc === 'string') {
+          return { eventType: String(eventType), fnc: String(obj.handler || obj.fnc) }
         }
         return null
       })
-      .filter(Boolean)
+      .filter((s): s is PluginEventSubscribe => s != null)
   }
 
-  return Object.entries(subs as Record<string, any>)
-    .map(([eventType, handler]) => {
+  return Object.entries(subs as Record<string, unknown>)
+    .map(([eventType, handler]): PluginEventSubscribe | null => {
       if (!eventType) return null
       if (typeof handler === 'function') {
-        return { eventType, handler }
+        return { eventType, handler: handler as (...args: unknown[]) => unknown }
       }
       if (typeof handler === 'string') {
         return { eventType, fnc: handler }
       }
       return null
     })
-    .filter(Boolean)
+    .filter((s): s is PluginEventSubscribe => s != null)
 }
 
-const contextStore = new Map<string, Map<string, any>>()
+const contextStore = new Map<string, Map<string, PluginEvent>>()
 
 const getContextBucket = (key: string, create = false) => {
   if (!key) return null
@@ -136,17 +228,17 @@ export default class PluginBase {
   dsc: string
   event: string
   priority: number
-  task: any[] | null
-  rule: any[]
+  task: PluginTask[] | null
+  rule: PluginRule[]
   bypassThrottle: boolean
-  handler: any[] | null
-  eventSubscribe: any[] | null
+  handler: PluginHandler[] | null
+  eventSubscribe: PluginEventSubscribe[] | null
   namespace?: string
-  e?: any
-  group_id?: string
-  user_id?: string
+  e!: any
+  group_id?: string | number
+  user_id?: string | number
 
-  constructor(options: Record<string, any> = {}) {
+  constructor(options: PluginOptions = {}) {
     this.name = options.name || 'your-plugin'
     this.dsc = options.dsc || '无'
     this.event = options.event || 'message'
@@ -156,11 +248,11 @@ export default class PluginBase {
     const normalizedEvents = normalizeEventSubscribe(options.eventSubscribe)
     const normalizedRules = normalizeRules(options.rule)
 
-    this.task = normalizedTasks.length ? (normalizedTasks as any[]) : null
-    this.rule = (normalizedRules as any[]) || []
+    this.task = normalizedTasks.length ? normalizedTasks : null
+    this.rule = normalizedRules || []
     this.bypassThrottle = options.bypassThrottle || false
-    this.handler = normalizedHandlers.length ? (normalizedHandlers as any[]) : null
-    this.eventSubscribe = normalizedEvents.length ? (normalizedEvents as any[]) : null
+    this.handler = normalizedHandlers.length ? normalizedHandlers : null
+    this.eventSubscribe = normalizedEvents.length ? normalizedEvents : null
 
     if (options.handler) {
       this.namespace = options.namespace || ''
@@ -168,7 +260,7 @@ export default class PluginBase {
   }
 
   getWorkflow(name: string) {
-    return (resolveWorkflowHost() as any)?.getWorkflow?.(name) ?? null
+    return resolveWorkflowHost()?.getWorkflow?.(name) ?? null
   }
 
   /**
@@ -183,7 +275,7 @@ export default class PluginBase {
       this.e._pluginResults = []
     }
 
-    const entry = {
+    const entry: PluginResultEntry = {
       plugin: this.name,
       method: this.e._currentRuleFnc || '',
       payload
@@ -201,7 +293,7 @@ export default class PluginBase {
     return this.e._pluginResults
   }
 
-  reply(msg: unknown = '', quote = false, data: Record<string, any> = {}) {
+  reply(msg: unknown = '', quote = false, data: Record<string, unknown> = {}) {
     if (!this.e || !msg) return false
 
     if (this.e.reply && typeof this.e.reply === 'function') {
@@ -289,9 +381,9 @@ export default class PluginBase {
     }
   }
 
-  awaitContext(...args: any[]) {
+  awaitContext(...args: [isGroup?: boolean, time?: number, timeout?: string]) {
     return new Promise((resolve) => {
-      const context = this.setContext('resolveContext', ...(args as [boolean?, number?, string?]))
+      const context = this.setContext('resolveContext', ...args)
       if (context) context[SymbolResolve] = resolve
     })
   }
@@ -310,7 +402,7 @@ export default class PluginBase {
    * 前置检查方法，可通过重写实现自定义检查逻辑
    * @returns true-通过 false-跳过 'return'-停止
    */
-  async accept() {
+  async accept(_e?: PluginEvent): Promise<boolean | string> {
     return true
   }
 

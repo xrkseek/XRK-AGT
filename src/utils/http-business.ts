@@ -134,7 +134,9 @@ type MapWithHelpers<K, V> = Map<K, V> & {
 type BufferWithToBase64 = Buffer & { toBase64(): string };
 
 function errMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err ?? '');
+  return (Error as ErrorConstructor & { isError?: (e: unknown) => e is Error }).isError?.(err)
+    ? (err as Error).message
+    : String(err ?? '');
 }
 
 /**
@@ -146,7 +148,6 @@ export class RedirectManager {
   config: RedirectManagerConfig;
 
   constructor(config: RedirectManagerConfig = {}) {
-    this.rules = [];
     this.config = config;
     this._compileRules();
   }
@@ -315,7 +316,7 @@ export class CDNManager {
    */
   _extractClientIP(req: ExpressLikeReq, cdnType: string): string {
     const headers = req.headers || {};
-    const lowerHeaders: Record<string, any> = {};
+    const lowerHeaders: Record<string, string | string[] | undefined> = {};
     Object.keys(headers).forEach((k) => {
       lowerHeaders[k.toLowerCase()] = headers[k];
     });
@@ -323,20 +324,20 @@ export class CDNManager {
     // 根据CDN类型提取IP
     switch (cdnType) {
       case 'cloudflare':
-        return lowerHeaders['cf-connecting-ip'] || req.ip || req.connection?.remoteAddress || 'unknown';
+        return String(lowerHeaders['cf-connecting-ip'] || req.ip || req.connection?.remoteAddress || 'unknown');
       case 'aliyun':
-        return lowerHeaders['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+        return String(lowerHeaders['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || 'unknown');
       case 'tencent':
-        return lowerHeaders['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+        return String(lowerHeaders['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || 'unknown');
       case 'aws':
-        return lowerHeaders['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+        return String(lowerHeaders['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || 'unknown');
       default: {
         // 通用提取：优先使用X-Forwarded-For，取第一个IP
         const forwardedFor = lowerHeaders['x-forwarded-for'];
         if (forwardedFor) {
-          return forwardedFor.split(',')[0].trim();
+          return String(forwardedFor).split(',')[0]!.trim();
         }
-        return lowerHeaders['x-real-ip'] || req.ip || req.connection?.remoteAddress || 'unknown';
+        return String(lowerHeaders['x-real-ip'] || req.ip || req.connection?.remoteAddress || 'unknown');
       }
     }
   }
@@ -647,17 +648,25 @@ export class ProxyManager {
       } else if (Array.isArray(domainConfig.target)) {
         this.upstreams.set(
           domainConfig.domain,
-          domainConfig.target.map((upstream: any) => ({
-            url: typeof upstream === 'string' ? upstream : upstream.url,
-            weight: upstream.weight || 1,
-            healthy: true,
-            failCount: 0,
-            connections: 0,
-            responseTime: 0,
-            lastCheck: Date.now(),
-            healthUrl: upstream.healthUrl || `${typeof upstream === 'string' ? upstream : upstream.url}/health`,
-            ...upstream,
-          })),
+          domainConfig.target.map((upstream: UpstreamTarget): UpstreamEntry => {
+            const url = typeof upstream === 'string' ? upstream : String(upstream.url || '');
+            const weight = (typeof upstream === 'object' ? Number(upstream.weight) : 1) || 1;
+            const healthUrl =
+              (typeof upstream === 'object' && typeof upstream.healthUrl === 'string'
+                ? upstream.healthUrl
+                : undefined) || `${url}/health`;
+            return {
+              ...(typeof upstream === 'object' ? upstream : {}),
+              url,
+              weight,
+              healthy: true,
+              failCount: 0,
+              connections: 0,
+              responseTime: 0,
+              lastCheck: Date.now(),
+              healthUrl,
+            };
+          }),
         );
       }
     }

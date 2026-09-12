@@ -19,11 +19,41 @@ const EXA_SEARCH_ENDPOINT = 'https://api.exa.ai/search'
 const EXA_SEARCH_TYPES = new Set(['auto', 'neural', 'fast', 'deep', 'deep-reasoning', 'instant'])
 const EXA_MAX_SEARCH_COUNT = 100
 
-function resolveExaApiKey(runtime: Record<string, any>) {
+type ExaRuntime = {
+  exa?: { apiKey?: string; baseUrl?: string }
+  maxResults?: number
+  timeoutSeconds?: number
+  cacheTtlMinutes?: number
+}
+
+type ExaSearchParams = {
+  query?: string
+  type?: string
+  count?: number
+  freshness?: string
+  date_after?: string
+  date_before?: string
+  contents?: unknown
+}
+
+type ExaResultEntry = {
+  title?: unknown
+  url?: unknown
+  highlights?: unknown
+  summary?: unknown
+  text?: unknown
+  publishedDate?: unknown
+}
+
+type ExaSearchResponse = {
+  results?: ExaResultEntry[]
+}
+
+function resolveExaApiKey(runtime: ExaRuntime) {
   return runtime?.exa?.apiKey?.trim?.() || ''
 }
 
-function resolveExaEndpoint(runtime: Record<string, any>) {
+function resolveExaEndpoint(runtime: ExaRuntime) {
   const configured = runtime?.exa?.baseUrl?.trim?.() || ''
   if (!configured) return EXA_SEARCH_ENDPOINT
   const candidate = /^https?:\/\//i.test(configured) ? configured : `https://${configured}`
@@ -35,9 +65,11 @@ function resolveExaEndpoint(runtime: Record<string, any>) {
   return parsed.toString()
 }
 
-function resolveExaDescription(result: any) {
+function resolveExaDescription(result: ExaResultEntry) {
   if (Array.isArray(result.highlights)) {
-    const text = result.highlights.filter((h: unknown) => typeof h === 'string' && (h as string).trim()).join('\n')
+    const text = result.highlights
+      .filter((h: unknown) => typeof h === 'string' && (h as string).trim())
+      .join('\n')
     if (text) return text
   }
   if (typeof result.summary === 'string' && result.summary.trim()) return result.summary
@@ -75,7 +107,7 @@ export function missingExaApiKeyPayload() {
   }
 }
 
-export async function runExaSearch(params: Record<string, any>, runtime: Record<string, any> = {}) {
+export async function runExaSearch(params: ExaSearchParams, runtime: ExaRuntime = {}) {
   const apiKey = resolveExaApiKey(runtime)
   if (!apiKey) return missingExaApiKeyPayload()
 
@@ -120,13 +152,13 @@ export async function runExaSearch(params: Record<string, any>, runtime: Record<
   const cached = readCachedSearchPayload(cacheKey)
   if (cached) return cached
 
-  const body: Record<string, any> = { query, numResults: count, type, contents }
+  const body: Record<string, unknown> = { query, numResults: count, type, contents }
   if (dateRange.dateAfter) body.startPublishedDate = dateRange.dateAfter
   else if (freshness) body.startPublishedDate = resolveFreshnessStartDate(freshness)
   if (dateRange.dateBefore) body.endPublishedDate = dateRange.dateBefore
 
   const start = Date.now()
-  const results = (await withTrustedWebSearchEndpoint(
+  const results = await withTrustedWebSearchEndpoint(
     {
       url: endpoint,
       timeoutSeconds,
@@ -146,10 +178,10 @@ export async function runExaSearch(params: Record<string, any>, runtime: Record<
         const detail = await res.text().catch(() => '')
         throw new Error(`Exa API error (${res.status}): ${detail || res.statusText}`)
       }
-      const data = (await res.json()) as any
+      const data = (await res.json()) as ExaSearchResponse
       return Array.isArray(data.results) ? data.results : []
     }
-  )) as any[]
+  )
 
   const payload = {
     query,

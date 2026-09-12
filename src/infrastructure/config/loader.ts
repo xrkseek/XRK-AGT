@@ -21,7 +21,23 @@ import {
 } from '#utils/runtime-globals.js'
 import { isUvInterfaceAddressesError } from '#utils/safe-os-network.js'
 
-const gLogger = (): any => (globalThis as any).logger
+type LoggerLike = {
+  mark?: (...args: unknown[]) => void
+  error?: (...args: unknown[]) => void
+  warn?: (...args: unknown[]) => void
+  shutdown?: () => Promise<unknown>
+}
+
+type ClosableRuntime = {
+  closeServer: (opts?: { fast?: boolean }) => Promise<unknown>
+}
+
+type MonitorConfigView = {
+  enabled?: unknown
+  optimize?: { autoRestart?: unknown }
+}
+
+const gLogger = (): LoggerLike | undefined => getRuntimeGlobal<LoggerLike>('logger')
 
 const CONFIG = {
   PROCESS_TITLE: 'XRK-AGT',
@@ -47,7 +63,7 @@ class ProcessManager {
 
   async updateTitle() {
     const currentQQ =
-      (globalThis as any).selectedQQ ?? process.argv.find((arg) => /^\d+$/.test(arg))
+      getRuntimeGlobal<string>('selectedQQ') ?? process.argv.find((arg) => /^\d+$/.test(arg))
     process.title =
       currentQQ === 'server' ? `${CONFIG.PROCESS_TITLE}@Server` : CONFIG.PROCESS_TITLE
   }
@@ -57,7 +73,7 @@ class ProcessManager {
     this._restarting = true
     gLogger()?.mark?.(chalk.yellow('重启中...'))
     await this.cleanup()
-    const bot = getRuntimeGlobal('AgentRuntime') as any
+    const bot = getRuntimeGlobal<ClosableRuntime>('AgentRuntime')
     if (bot) {
       await bot.closeServer({ fast: true }).catch(() => {})
     }
@@ -72,13 +88,13 @@ class ProcessManager {
     if (isShuttingDown()) return
     setShuttingDown(true)
     gLogger()?.mark?.(chalk.yellow('正在关闭...'))
-    const bot = getRuntimeGlobal('AgentRuntime') as any
+    const bot = getRuntimeGlobal<ClosableRuntime>('AgentRuntime')
     if (bot) {
       await bot
         .closeServer()
         .catch((err: Error) => gLogger()?.error?.(`关闭失败: ${err.message}`))
     } else {
-      await (getRuntimeGlobal('logger') as any)?.shutdown?.().catch(() => {})
+      await getRuntimeGlobal<LoggerLike>('logger')?.shutdown?.().catch(() => {})
     }
     await this.cleanup()
     process.exit(exitCode)
@@ -104,8 +120,8 @@ class ProcessManager {
           gLogger()?.mark?.(chalk.yellow(`接收到 ${sig}，正在重启`))
           try {
             await this.restart()
-          } catch (err: any) {
-            gLogger()?.error?.(`restart 异常: ${err?.message || err}`)
+          } catch (err) {
+            gLogger()?.error?.(`restart 异常: ${normalizeError(err).message}`)
             process.exit(EXIT_RESTART)
           }
         }
@@ -169,7 +185,7 @@ class InitManager {
    * 启动 SystemMonitor；`critical` 时仅当规范化后 `autoRestart === true` 才重启。
    */
   async startMonitoring() {
-    const monitorConfig = (runtimeConfig as any).monitor
+    const monitorConfig = runtimeConfig.monitor as MonitorConfigView
     if (!monitorConfig.enabled) return
 
     const monitor = this.systemMonitor
@@ -183,7 +199,7 @@ class InitManager {
 
     monitor.on('critical', ({ type }: { type: string }) => {
       gLogger()?.error?.(`系统资源严重不足: ${type}`)
-      if ((monitor as any).config?.optimize?.autoRestart === true) {
+      if ((monitor as { config?: MonitorConfigView }).config?.optimize?.autoRestart === true) {
         gLogger()?.error?.('将在5秒后重启...')
         setTimeout(() => this.processManager.restart(), 5000)
       }
@@ -192,7 +208,6 @@ class InitManager {
 
   async init() {
     await setLog()
-    ;(runtimeConfig as any).warmupConfigs()
     gLogger()?.mark?.(chalk.cyan('XRK-AGT 初始化中...'))
 
     this.setupEnvironment()

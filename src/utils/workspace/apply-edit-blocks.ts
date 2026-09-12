@@ -18,15 +18,44 @@ import path from 'node:path';
 const BLOCK_RE =
   /(?:^|\n)([^\n]+?)\n<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
 
-/**
- * @param {string} patchText
- * @returns {Array<{ filePath: string, oldText: string, newText: string }>}
- */
-export function parseSearchReplaceBlocks(patchText: any) {
+type SearchReplaceBlock = {
+  filePath: string;
+  oldText: string;
+  newText: string;
+};
+
+type ReplaceMode = 'whole' | 'miss' | 'ambiguous' | 'exact' | 'soft';
+
+type ReplaceResult = {
+  ok: boolean;
+  content: string;
+  mode: ReplaceMode;
+};
+
+type ApplyEditOpts = {
+  dryRun?: boolean;
+};
+
+type AppliedEntry = {
+  filePath: string;
+  mode: string;
+};
+
+type FailedEntry = SearchReplaceBlock & { error: string };
+
+type ApplyEditResult = {
+  success: boolean;
+  applied: AppliedEntry[];
+  failed: FailedEntry[];
+  dryRun?: boolean;
+  error?: string;
+};
+
+export function parseSearchReplaceBlocks(patchText: unknown): SearchReplaceBlock[] {
   const text = String(patchText || '');
-  const out = [];
+  const out: SearchReplaceBlock[] = [];
   BLOCK_RE.lastIndex = 0;
-  let m;
+  let m: RegExpExecArray | null;
   while ((m = BLOCK_RE.exec(text)) !== null) {
     const filePath = String(m[1] || '').trim();
     if (!filePath || filePath.startsWith('<<<<<<<')) continue;
@@ -39,12 +68,7 @@ export function parseSearchReplaceBlocks(patchText: any) {
   return out;
 }
 
-/**
- * @param {string} content
- * @param {string} oldText
- * @param {string} newText
- */
-function replaceOnce(content: any, oldText: any, newText: any) {
+function replaceOnce(content: string, oldText: string, newText: string): ReplaceResult {
   if (oldText === '') {
     // 空 SEARCH = 新建/整文件写入（调用方处理不存在文件）
     return { ok: true, content: newText, mode: 'whole' };
@@ -73,20 +97,19 @@ function replaceOnce(content: any, oldText: any, newText: any) {
   };
 }
 
-/**
- * @param {string} workspace
- * @param {string} patchText
- * @param {{ dryRun?: boolean }} [opts]
- */
-export async function applyEditBlocks(workspace: any, patchText: any, opts: any = {}) {
-  const root = path.resolve(workspace || process.cwd());
+export async function applyEditBlocks(
+  workspace: unknown,
+  patchText: unknown,
+  opts: ApplyEditOpts = {},
+): Promise<ApplyEditResult> {
+  const root = path.resolve(String(workspace || '') || process.cwd());
   const blocks = parseSearchReplaceBlocks(patchText);
   if (!blocks.length) {
     return { success: false, error: '未解析到 SEARCH/REPLACE 块（需 aider editblock 格式）', applied: [], failed: [] };
   }
 
-  const applied = [];
-  const failed = [];
+  const applied: AppliedEntry[] = [];
+  const failed: FailedEntry[] = [];
 
   for (const block of blocks) {
     const abs = path.isAbsolute(block.filePath)
@@ -97,7 +120,7 @@ export async function applyEditBlocks(workspace: any, patchText: any, opts: any 
       continue;
     }
 
-    let existing = null;
+    let existing: string | null = null;
     try {
       existing = await fs.readFile(abs, 'utf8');
     } catch {
@@ -106,7 +129,7 @@ export async function applyEditBlocks(workspace: any, patchText: any, opts: any 
 
     if (existing == null) {
       if (block.oldText.trim() !== '') {
-        failed.push({ filePath: block.filePath, error: '文件不存在且 SEARCH 非空' });
+        failed.push({ filePath: block.filePath, oldText: block.oldText, newText: block.newText, error: '文件不存在且 SEARCH 非空' });
         continue;
       }
       if (!opts.dryRun) {
@@ -121,6 +144,8 @@ export async function applyEditBlocks(workspace: any, patchText: any, opts: any 
     if (!replaced.ok) {
       failed.push({
         filePath: block.filePath,
+        oldText: block.oldText,
+        newText: block.newText,
         error: replaced.mode === 'ambiguous'
           ? 'SEARCH 匹配多处，请加长上下文'
           : 'SEARCH 未精确匹配，请 read 后重试'

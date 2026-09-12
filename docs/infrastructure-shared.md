@@ -32,8 +32,8 @@ www 挂载（`src/infrastructure/http/`；权威文档 [www-mount.md](www-mount.
 
 ## 全局引导
 
-- `src/bootstrap-globals.js`：在 `agent-runtime.js` 首行 import，`setRuntimeGlobal('PluginBase'|'msgSegment', …)`  
-- 集成测试：`tests/helpers/bootstrap.mjs` 同样 import 一次，供 PluginLoader / HttpApiLoader 加载 `extends PluginBase` 模块  
+- `src/bootstrap-globals.ts` → 编译为 `dist/src/bootstrap-globals.js`：在 `agent-runtime` 首行 import，`setRuntimeGlobal('PluginBase'|'msgSegment', …)`  
+- 集成测试：`tests/helpers/bootstrap.mjs` **import dist 同路径**（`XRK_TEST=1`），供 PluginLoader / HttpApiLoader 加载 `extends PluginBase` 模块  
 - 业务：裸名 `msgSegment` / import 基类；见 [runtime-surface.md](runtime-surface.md)
 
 ## Loader 标准模式
@@ -41,7 +41,7 @@ www 挂载（`src/infrastructure/http/`；权威文档 [www-mount.md](www-mount.
 1. 类字段存放缓存 Map（禁止在 constructor 里 new 可变容器）
 2. 扫描：`FileLoader.getCoreSubDirFiles(subDir)` 或 `paths.getCoreDirs()`（**全量** `core/*` 目录；勿用 loader 子目录反推，否则仅有 `www` 的 Core 会漏挂静态）
 3. 加载：`FileLoader.importFresh(absPath)` + `forEachBatch(..., LOADER_BATCH_SIZE, ...)`
-4. **启动时加载一次**；改代码 / YAML / 模板后 **重启进程**（无 chokidar / `HotReloadBase`）
+4. **启动时加载一次**；改代码 / YAML / 模板后 **重启进程**（无 chokidar / `HotReloadBase`；`hot-reload-base` 已删，由 `no-hot-reload` 测锁定，勿加回）
 5. 模块 key 优先 `resolveQualifiedCoreModuleKey(file, dirs, subDir)`（如 `mongodb-Core/admin`），禁止仅 basename（多 Core 会互相覆盖）
 
 **加载顺序**：`CommonConfigRegistry.load` → 挂载 `CommonConfigRegistry` → 再并行 Workflow / Plugins / Api（避免插件 init 读不到配置）。

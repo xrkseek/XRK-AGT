@@ -10,6 +10,59 @@ import { createToolNameMapper } from '#utils/llm/tool-name-utils.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
 
+type LlmClientConfig = Record<string, unknown> & {
+  baseUrl?: string;
+  path?: string;
+  authMode?: string;
+  timeout?: number;
+};
+
+type ChatMessage = {
+  role?: string;
+  content?: unknown;
+  [key: string]: unknown;
+};
+
+type LlmOverrides = Record<string, unknown> & {
+  headers?: Record<string, string>;
+};
+
+type OnDeltaCallback = (chunk: string, meta?: Record<string, unknown>) => void;
+
+type ToolUse = {
+  id?: string;
+  name?: string;
+  input?: unknown;
+};
+
+type ToolDraft = {
+  id?: string;
+  name?: string;
+  inputJson: string;
+};
+
+type StreamResult = {
+  text: string;
+  toolUses: ToolUse[];
+  stopReason: string | null;
+};
+
+type AnthropicMessageJson = {
+  usage?: unknown;
+  content?: Array<{
+    type?: string;
+    text?: string;
+    id?: string;
+    name?: string;
+    input?: unknown;
+  }>;
+};
+
+type CompleteOnceOptions = {
+  stream?: boolean;
+  onDelta?: OnDeltaCallback;
+};
+
 /**
  * Anthropic Messages 兼容网关（anthropic_compat_llm.providers）
  *
@@ -22,17 +75,16 @@ import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
  * 若反代要求官方头，配置 `authMode: x-api-key`。工具环 / SSE 事件形状按 Messages API。
  */
 export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
-  [key: string]: any;
   _toolNames = createToolNameMapper();
 
-  constructor(config: any = {}) {
+  constructor(config: LlmClientConfig = {}) {
     super({
       authMode: 'bearer',
       ...config,
     });
   }
 
-  normalizeEndpoint(config: any): string {
+  normalizeEndpoint(config: LlmClientConfig): string {
     let base = (config.baseUrl || 'https://api.anthropic.com/v1').replace(/\/+$/, '');
     let path = config.path || '/messages';
     if (!path.startsWith('/')) path = `/${path}`;
@@ -46,27 +98,27 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
     return `${base}${path}`;
   }
 
-  buildBody(messages: any, overrides: any = {}): any {
+  buildBody(messages: ChatMessage[], overrides: LlmOverrides = {}) {
     const normalized = normalizeAnthropicToolHistory(
       normalizeAnthropicMessages(messages),
       this._toolNames,
     );
-    const body = super.buildBody(normalized, overrides);
+    const body = super.buildBody(normalized as ChatMessage[], overrides);
     applyAnthropicTools(body, this.config, overrides, this._toolNames);
     ensureAnthropicMaxTokens(body, this.config, overrides);
     return body;
   }
 
-  async _finalizeImageBlocks(body: any): Promise<any> {
+  async _finalizeImageBlocks(body: Parameters<AnthropicLLMClient['_finalizeBodyImageBlocks']>[0]) {
     return this._finalizeBodyImageBlocks(body);
   }
 
-  async _postMessages(body: any, overrides: any = {}): Promise<any> {
+  async _postMessages(body: Parameters<AnthropicLLMClient['_postNativeBody']>[0], overrides: LlmOverrides = {}) {
     return this._postNativeBody(body, overrides);
   }
 
-  _parseMessageToolUses(message: any = {}): { text: string; toolUses: any[] } {
-    const toolUses: any[] = [];
+  _parseMessageToolUses(message: AnthropicMessageJson = {}): { text: string; toolUses: ToolUse[] } {
+    const toolUses: ToolUse[] = [];
     let text = '';
     for (const block of message.content ?? []) {
       if (block?.type === 'text') text += block.text ?? '';
@@ -81,13 +133,27 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
     return { text, toolUses };
   }
 
-  async _consumeAnthropicStream(resp: any, onDelta: any): Promise<any> {
-    const result: any = { text: '', toolUses: [], stopReason: null };
-    const toolDrafts = new Map<any, any>();
+  async _consumeAnthropicStream(resp: Response, onDelta?: OnDeltaCallback): Promise<StreamResult> {
+    const result: StreamResult = { text: '', toolUses: [], stopReason: null };
+    const toolDrafts = new Map<number, ToolDraft>();
 
-    for await (const { data } of iterateSSE(resp as any, { stopOnDone: false })) {
+    for await (const { data } of iterateSSE(resp as Parameters<typeof iterateSSE>[0], { stopOnDone: false })) {
       if (!data) continue;
-      let json: any;
+      let json: {
+        type?: string;
+        index?: number;
+        delta?: {
+          type?: string;
+          text?: string;
+          partial_json?: string;
+          stop_reason?: string;
+        };
+        content_block?: {
+          type?: string;
+          id?: string;
+          name?: string;
+        };
+      };
       try {
         json = JSON.parse(data);
       } catch {
@@ -122,7 +188,7 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
     }
 
     for (const draft of toolDrafts.values()) {
-      let input: any = {};
+      let input: unknown = {};
       if (draft.inputJson) {
         try {
           input = JSON.parse(draft.inputJson);
@@ -137,16 +203,16 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
   }
 
   async _completeOnce(
-    initialMessages: any,
-    overrides: any,
-    { stream = false, onDelta }: any = {},
-  ): Promise<any> {
+    initialMessages: ChatMessage[],
+    overrides: LlmOverrides,
+    { stream = false, onDelta }: CompleteOnceOptions = {},
+  ): Promise<string> {
     const currentMessages = normalizeAnthropicToolHistory(
       normalizeAnthropicMessages(await this.transformMessages(initialMessages)),
       this._toolNames,
     );
 
-    const body = this.buildBody(currentMessages, overrides);
+    const body = this.buildBody(currentMessages as ChatMessage[], overrides);
     body.stream = stream;
 
     const resp = await this._postMessages(body, overrides);
@@ -163,7 +229,7 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
       return streamed.text;
     }
 
-    const json: any = await resp.json();
+    const json = (await resp.json()) as AnthropicMessageJson;
     logPromptCacheUsage(json?.usage, 'AnthropicCompatible');
     const parsed = this._parseMessageToolUses(json);
     if (parsed.toolUses.length) {
@@ -177,11 +243,11 @@ export default class AnthropicCompatibleLLMClient extends AnthropicLLMClient {
     return parsed.text;
   }
 
-  async chat(messages: any, overrides: any = {}): Promise<any> {
+  async chat(messages: ChatMessage[], overrides: LlmOverrides = {}): Promise<string> {
     return this._completeOnce(messages, overrides, { stream: false });
   }
 
-  async chatStream(messages: any, onDelta: any, overrides: any = {}): Promise<void> {
+  async chatStream(messages: ChatMessage[], onDelta: OnDeltaCallback, overrides: LlmOverrides = {}): Promise<void> {
     await this._completeOnce(messages, overrides, { stream: true, onDelta });
   }
 }

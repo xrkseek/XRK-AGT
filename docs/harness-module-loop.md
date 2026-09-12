@@ -1,33 +1,44 @@
 # AGT ↔ `@xrkseek/harness` 模块 loop
 
-> **源码**：`src/infrastructure/ai-workflow/harness-module-loop.js` · `harness-resolve.js` · `ai-workflow.js` · `core/system-Core/http/ai.js`  
+> **源码**：`src/infrastructure/ai-workflow/harness-module-loop.ts` · `harness-resolve.ts` · `ai-workflow.ts` · `core/system-Core/http/ai.ts`  
 > **读者**：框架维护者 · Core  
-> **关联**：[status.md](status.md) · [agent-context.md](agent-context.md) · [adr/0002-harness-module-first.md](adr/0002-harness-module-first.md) · Harness 仓 `docs/integrators/agt-bridge.md`
+> **关联**：[status.md](status.md) · [agent-context.md](agent-context.md) · [adr/0002-harness-module-first.md](adr/0002-harness-module-first.md) · Harness 仓 `docs/integrators/agt-bridge.md`  
+> **测入口**：`tests/helpers/harness-ai.mjs`（`#infrastructure/*` / `#utils/*` → dist；仍 `.mjs`；类型面 `dist/.../*.d.ts`）
 
-办事助手与带 MCP 的 `/v1` 的 **agent loop** 嵌入 `@xrkseek/harness` SDK。通道业务（`chat.js`、MCPServer、Tasker）仍在 AGT；压缩、步内重试、厂商适配器、session safety 用 SDK 轮子。
+办事助手与带 MCP 的 `/v1` 的 **agent loop** 嵌入 `@xrkseek/harness` SDK。通道业务（`core/system-Core/workflow/chat.ts`、MCPServer、Tasker）仍在 AGT；压缩、步内重试、厂商适配器、session safety 用 SDK 轮子。
+
+## MCP 执行边界（防漂移）
+
+| 做 | 不做 |
+|----|------|
+| `MCPToolAdapter.convertMCPToolsToOpenAI` → harness `ToolRegistry` | **不**用 SDK `createMcpClient` / `registerMcpTools` 接管 AGT MCP 执行 |
+| 工具 `execute` → `MCPToolAdapter.handleToolCalls` → **`MCPServer.handleToolCall`** | **不**把 policies / toolScan / approval 迁到 harness Face MCP 客户端 |
+| 远程 MCP：`remote-mcp` 挂进本仓 `MCPServer` 后再进 loop | **不**在 `harness-module-loop` 直连 SDK MCP transport |
+
+理由：AGT 门禁、工作流白名单、审计钩子、远程插件生命周期都在 `MCPServer`；迁到 `createMcpClient` 会双轨执行、门禁漂移。SDK 仍可提供 `createMcpClient`（xrkh / Face），**AGT 嵌入路径禁用**。
 
 ## 依赖
 
 | 包 / 入口 | 角色 |
 |-----------|------|
-| `@xrkseek/harness` | npm 公共 SDK：`createAgent` · tools · session · compaction · 厂商 adapter |
+| `@xrkseek/harness` **0.3.3** | npm 公共 SDK：`createAgent` · tools · session · compaction · 厂商 adapter |
 | `xrkh`（`@xrkseek/harness-cli`） | 独立产品；AGT **不**作为库 import |
 
 ```bash
-pnpm add @xrkseek/harness@0.1.26
+pnpm add @xrkseek/harness@0.3.3
 
 # 或 Release tarball
-pnpm add https://github.com/xrkseek/XRK-harness/releases/download/v0.1.26/xrkseek-harness-0.1.26.tgz
+pnpm add https://github.com/xrkseek/XRK-harness/releases/download/v0.3.3/xrkseek-harness-0.3.3.tgz
 ```
 
-未发布构建可用环境变量 `XRK_HARNESS_SDK` 指向 **SDK 入口文件的绝对路径**（见 `harness-resolve.js`）。勿把本机目录布局写进文档或提交进仓。
+未发布构建可用环境变量 `XRK_HARNESS_SDK` 指向 **SDK 入口文件的绝对路径**（见 `harness-resolve.ts`）。勿把本机目录布局写进文档或提交进仓。
 
 > **注意**：只依赖 SDK 门面；勿把 `@xrkseek/core-*` / `llm-*` 叶包写进 `package.json`。
 
 ## 现行数据流
 
 ```
-chat.js / mergeWorkflows / MCP
+chat.ts / mergeWorkflows / MCP
   → AiWorkflow.callAI
   → runHarnessModuleLoop
        → 原生 adapter（DeepSeek / Anthropic / Responses / Gemini / 否则 OpenAI-compatible）
@@ -51,11 +62,11 @@ POST /v1/* 无 workflows 但有 body.tools
 | `/v1` 无 `workflows`、无 `tools`（Web 控制台） | harness |
 | `/v1` 无 `workflows`、有 client `tools` | `LLMFactory` 单次补全；`tool_calls` 透传客户端 |
 
-出站：`prepareOutboundMessages` 先按 `contextWindow` 裁剪；harness 再按 `CompactionOptions`（soft budget + 自动摘要）管理 session。群聊笔录：`context.chatHistory`。
+出站：`prepareOutboundMessages` 先按 `contextWindow` **硬裁**（`resolveInputTokenBudget` + `trimMessagesToTokenBudget`）；harness 再按同源 budget 的 `CompactionOptions`（`maxRequestTokens` / `keepTokens` / `auto`）做 session **软压**。两层叠加语义见 [agent-context.md](agent-context.md) §5.1。群聊笔录：`context.chatHistory`。
 
-跨 turn：`sessionKey`（`callAI` 用会话键；`/v1` 用 `xrk_session_id` / `conversation_id` / workspace）→ `createPersistentSessionStore`（`data/harness-sessions`）。同键复用 session，**不再**整段 seed 客户端 history；同 session + 同 workflows 复用 ToolRegistry/Pipeline（有 `registerTools` 钩子则每轮重建）。
+跨 turn：`sessionKey`（`callAI` 用会话键；`/v1` 用 `xrk_session_id` / `conversation_id` / workspace）→ `createPersistentSessionStore`（默认 `data/harness-sessions`；可用 `XRK_HARNESS_SESSIONS_DIR` 改目录）。同键复用 session，**不再**整段 seed 客户端 history；同 session + 同 workflows 复用 ToolRegistry/Pipeline（有 `registerTools` 钩子则每轮重建）。测：`tests/framework/harness-session-persist.test.mjs`（隔离临时目录落盘，测完清理）。
 
-`/v1` + OpenAI `stream=true`：订阅 `assistant/chunk` / `tool/call` / `tool/result` 写 live SSE（`mcp_tools` 含 arguments + result），turn 结束后 finish + `[DONE]`。Anthropic / Responses 仍整段 JSON。
+`/v1` + OpenAI `stream=true`：订阅 `assistant/chunk` / `tool/call` / `tool/result` 写 live SSE（`mcp_tools` 含 arguments + result），turn 结束后 finish + `[DONE]`。映射集中在 `createHarnessLiveSessionEventHandler`（`#utils/sse-openai`）；Anthropic / Responses 仍整段 JSON。
 
 ## harness 轮子（AGT 已接）
 
@@ -77,25 +88,30 @@ POST /v1/* 无 workflows 但有 body.tools
 | `toolResultMaxInlineBytes` | 默认 64KiB spill |
 | `isConcurrencySafe` | 只读名启发式（`read`/`list`/…）可并行 settle |
 | `concludesTurn` | `*.reply` / `reply` 成功后结束本 turn |
-| `ToolPipeline` 自动批准 | IM / bot 不阻塞交互式审批 |
-| `createPolicyToolCallGuard` | `denyTools` / `denyToolNames` 数组 → pipeline guard |
+| `ToolPipeline` 自动批准 | IM / bot：`setApprovalHandler(() => ({ approved: true }))`，不阻塞交互式审批 |
+| `createPolicyToolCallGuard` | `denyTools` / `denyToolNames` → Guard（硬拒绝）。**不用** `createPolicyToolPre` 替 denylist：Pre 面向 `ask`，叠自动批准会放行 |
+
+测：`tests/framework/harness-module-loop.test.mjs` · `harness replay multi-step tool turns`（replay：只读并行 settle + `denyTools` 拦 execute + `chat.reply` `concludesTurn`）。
 | `assertToolCallsSettled` | dangling settle 后再校验；失败仅 warn |
 | `listDanglingToolCalls` | settle 前 warn 悬挂工具名 |
 | `beforeUserMessage` / `prepareUserContent` / `assemble` | apiConfig 或 `stream.harnessBeforeUserMessage` 等 |
+| `jobs` | 可选透传 createAgent（Face `session/jobs`）；AGT 默认不设 |
 | `registerTools` | apiConfig 或 `stream.registerHarnessTools(registry, ctx)` 扩展注册 |
-| `MCPToolAdapter` → `ToolRegistry` | AGT MCP 仍进 `MCPServer` |
-| `createMemoryAttachmentStore` + `resolveImage` | OpenAI `image_url` data-URL → harness ContentBlock |
+| `MCPToolAdapter` → `ToolRegistry` | AGT MCP **仍**进 `MCPServer`（**禁止**改走 `createMcpClient`） |
+| `createMemoryAttachmentStore` + `resolveImage` | OpenAI `image_url` data-URL → harness ContentBlock；出口用 SDK `flattenText` / `contentHasImage` / `asContentBlocks`（不能替代 OpenAI→attachment 转换） |
 | history seed | OpenAI `tool_calls` / `role:tool` → `assistant/message` · `tool/call` · `tool/result` |
+
+`resolveCreateAgentMappedOptions` 集中映射 0.3.3 `CreateAgentOptions` 中除 `sessionId`/`store`/`llm`/`tools`/`pipeline`/`system` 外的字段；`runHarnessModuleLoop` 只在此之上补齐运行时句柄。
 
 ## 落点
 
 | 文件 | 职责 |
 |------|------|
-| `harness-module-loop.js` | 拆 messages · seed · adapter · compaction · `continueTurn` |
-| `harness-session-registry.js` | 持久 store · `sessionKey` 复用 · append 监听 |
-| `harness-resolve.js` | 加载 SDK |
-| `ai-workflow.js` → `callAI` | 办事助手入口 |
-| `http/ai.js` | `/v1` + live SSE / JSON |
+| `harness-module-loop.ts` | 拆 messages · seed · adapter · compaction · `continueTurn` |
+| `harness-session-registry.ts` | 持久 store · `sessionKey` 复用 · append 监听 |
+| `harness-resolve.ts` | 加载 SDK |
+| `ai-workflow.ts` → `callAI` | 办事助手入口 |
+| `http/ai.ts` | `/v1` + live SSE / JSON |
 | `MCPToolAdapter` | schema + 执行进 `MCPServer` |
 
 ## 配置
@@ -111,6 +127,7 @@ POST /v1/* 无 workflows 但有 body.tools
 | `denyTools` / `denyToolNames` | 工具名黑名单（SDK policy guard） |
 | `registerTools` / `onGuard` / `onPre` | 扩展注册与 pipeline 钩子 |
 | `beforeUserMessage` / `prepareUserContent` / `assemble` | 透传 createAgent / runTurn |
+| `jobs` | 可选 Face jobs 句柄透传 |
 | `context.chatHistory` | 群聊笔录 |
 | 请求体 `workflow.workflows` | `/v1` MCP 白名单 |
 | `sessionKey` / `xrk_session_id` | 跨 turn 复用 harness session |
@@ -124,7 +141,7 @@ beforeUserMessage(store, sessionId) { /* inject */ }
 onGuard(ctx) { /* allow | deny | abstain */ }
 ```
 
-`SessionSafetyLimitError` → 结果带 `safetyLimited: true`（不抛穿业务）；`SessionBusyError` → `code: session_busy`。
+`SessionSafetyLimitError` → 结果带 `safetyLimited: true`（不抛穿业务）；`SessionBusyError` → `code: session_busy`；`ContextOverflowError` / `UnsupportedContentError` → `code: context_overflow` / `unsupported_content`。映射集中在 `mapHarnessContinueTurnError`（callAI 按 code 吞并记日志）。
 
 ## 相关文档
 

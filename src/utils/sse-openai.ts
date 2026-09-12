@@ -156,6 +156,69 @@ export function createOpenAiWorkflowDeltaHandler(
   };
 }
 
+export type HarnessLiveSessionEvent = {
+  type?: string
+  kind?: string
+  text?: string
+  call?: { id?: string; name?: string; arguments?: unknown }
+  result?: {
+    toolCallId?: string
+    name?: string
+    content?: unknown
+    isError?: boolean
+  }
+}
+
+type LiveDeltaHandler = {
+  callback: (delta: unknown, metadata?: Record<string, unknown>) => void
+}
+
+/**
+ * /v1 OpenAI live SSE：harness session 事件 → delta handler。
+ * assistant/chunk → 文本/reasoning；tool/call 缓冲 args；tool/result → mcp_tools 完整卡。
+ */
+export function createHarnessLiveSessionEventHandler(liveHandler: LiveDeltaHandler | null | undefined) {
+  const pendingToolArgs = new Map<string, { name?: string; arguments?: unknown }>();
+
+  const onSessionEvent = (ev: HarnessLiveSessionEvent | null | undefined) => {
+    if (!liveHandler || typeof liveHandler.callback !== 'function' || !ev?.type) return;
+    if (ev.type === 'assistant/chunk') {
+      if (ev.kind === 'text' && ev.text) liveHandler.callback(ev.text);
+      else if (ev.kind === 'reasoning' && ev.text) {
+        liveHandler.callback('', { reasoning_content: ev.text });
+      }
+      return;
+    }
+    if (ev.type === 'tool/call' && ev.call?.id) {
+      pendingToolArgs.set(ev.call.id, {
+        name: ev.call.name,
+        arguments: ev.call.arguments ?? {},
+      });
+      return;
+    }
+    if (ev.type === 'tool/result' && ev.result) {
+      const id = ev.result.toolCallId;
+      const pending = id ? pendingToolArgs.get(id) : undefined;
+      if (id) pendingToolArgs.delete(id);
+      liveHandler.callback('', {
+        mcp_tools: [{
+          id,
+          name: ev.result.name || pending?.name,
+          arguments: pending?.arguments ?? {},
+          result: ev.result.content,
+          ...(ev.result.isError ? { isError: true } : {}),
+        }],
+      });
+    }
+  };
+
+  return {
+    onSessionEvent,
+    /** @internal tests */
+    _pendingSize: () => pendingToolArgs.size,
+  };
+}
+
 /** 发送 finish chunk + [DONE] */
 export function finishOpenAIChatStream(
   res: ExpressLikeRes,

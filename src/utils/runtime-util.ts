@@ -44,25 +44,13 @@ type BufferWithExtras = Buffer & { toBase64(): string; toHex(): string };
 type Uint8ArrayCtorWithBase64 = Uint8ArrayConstructor & {
   fromBase64(data: string): Uint8Array;
 };
-type ErrorCtorWithIsError = ErrorConstructor & {
-  isError?: (value: unknown) => value is Error;
-};
 
-const ErrorIsError = (Error as ErrorCtorWithIsError).isError?.bind(Error)
-  ?? ((v: unknown): v is Error => v instanceof Error);
-const bufToBase64 = (buf: Buffer): string =>
-  typeof (buf as BufferWithExtras).toBase64 === 'function'
-    ? (buf as BufferWithExtras).toBase64()
-    : buf.toString('base64');
-const bufToHex = (buf: Buffer): string =>
-  typeof (buf as BufferWithExtras).toHex === 'function'
-    ? (buf as BufferWithExtras).toHex()
-    : buf.toString('hex');
-const u8FromBase64 = (data: string): Uint8Array => {
-  const Ctor = Uint8Array as Uint8ArrayCtorWithBase64;
-  if (typeof Ctor.fromBase64 === 'function') return Ctor.fromBase64(data);
-  return new Uint8Array(Buffer.from(data, 'base64'));
-};
+/** Node ≥26：直接用 Error.isError / Buffer#toBase64 / Uint8Array.fromBase64（engines.node ≥26） */
+const ErrorIsError = Error.isError.bind(Error);
+const bufToBase64 = (buf: Buffer): string => (buf as BufferWithExtras).toBase64();
+const bufToHex = (buf: Buffer): string => (buf as BufferWithExtras).toHex();
+const u8FromBase64 = (data: string): Uint8Array =>
+  (Uint8Array as Uint8ArrayCtorWithBase64).fromBase64(data);
 const gLogger = (): any => (globalThis as any).logger;
 
 /**

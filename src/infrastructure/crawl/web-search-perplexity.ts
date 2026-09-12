@@ -23,6 +23,90 @@ export const PERPLEXITY_DIRECT_BASE_URL = 'https://api.perplexity.ai'
 const PERPLEXITY_SEARCH_ENDPOINT = 'https://api.perplexity.ai/search'
 const DEFAULT_PERPLEXITY_MODEL = 'perplexity/sonar-pro'
 
+type PerplexityConfig = {
+  apiKey?: string
+  openRouterApiKey?: string
+  baseUrl?: string
+  model?: string
+}
+
+type PerplexityRuntime = {
+  perplexity?: PerplexityConfig
+  maxResults?: number
+  timeoutSeconds?: number
+  cacheTtlMinutes?: number
+}
+
+type PerplexitySearchParams = {
+  query?: string
+  count?: number
+  freshness?: string
+  country?: string
+  language?: string
+  domain_filter?: unknown[]
+  date_after?: string
+  date_before?: string
+  max_tokens?: number
+  max_tokens_per_page?: number
+}
+
+type PerplexityAuth = { apiKey?: string; source: 'config' | 'openrouter_config' | 'none' }
+
+type PerplexitySearchApiParams = {
+  query: string
+  apiKey: string
+  count: number
+  timeoutSeconds: number
+  country?: string
+  searchDomainFilter?: string[]
+  searchRecencyFilter?: string
+  searchLanguageFilter?: string[]
+  searchAfterDate?: string
+  searchBeforeDate?: string
+  maxTokens?: number
+  maxTokensPerPage?: number
+}
+
+type PerplexityChatParams = {
+  query: string
+  apiKey: string
+  baseUrl: string
+  model: string
+  timeoutSeconds: number
+  freshness?: string
+}
+
+type PerplexitySearchResult = {
+  title: string
+  url: string
+  description: string
+  published?: string
+  siteName?: string
+}
+
+type PerplexitySearchApiResponse = {
+  results?: Array<{
+    title?: string
+    url?: string
+    snippet?: string
+    date?: string
+  }>
+}
+
+type PerplexityChatResponse = {
+  citations?: unknown[]
+  choices?: Array<{
+    message?: {
+      content?: string
+      annotations?: Array<{
+        type?: string
+        url?: string
+        url_citation?: { url?: string }
+      }>
+    }
+  }>
+}
+
 function inferPerplexityBaseUrlFromApiKey(apiKey: string) {
   if (!apiKey) return undefined
   const n = apiKey.toLowerCase()
@@ -39,18 +123,15 @@ export function isDirectPerplexityBaseUrl(baseUrl: string) {
   }
 }
 
-function resolvePerplexityApiKey(runtime: Record<string, any>) {
+function resolvePerplexityApiKey(runtime: PerplexityRuntime): PerplexityAuth {
   const apiKey = runtime?.perplexity?.apiKey?.trim?.() || ''
-  if (apiKey) return { apiKey, source: 'config' as const }
+  if (apiKey) return { apiKey, source: 'config' }
   const openRouterKey = runtime?.perplexity?.openRouterApiKey?.trim?.() || ''
-  if (openRouterKey) return { apiKey: openRouterKey, source: 'openrouter_config' as const }
-  return { apiKey: undefined as string | undefined, source: 'none' as const }
+  if (openRouterKey) return { apiKey: openRouterKey, source: 'openrouter_config' }
+  return { apiKey: undefined, source: 'none' }
 }
 
-function resolvePerplexityBaseUrl(
-  perplexity: Record<string, any>,
-  auth: { apiKey?: string; source: string }
-) {
+function resolvePerplexityBaseUrl(perplexity: PerplexityConfig, auth: PerplexityAuth) {
   const fromConfig = perplexity?.baseUrl?.trim?.() || ''
   if (fromConfig) return fromConfig
   if (auth.source === 'openrouter_config') return DEFAULT_PERPLEXITY_BASE_URL
@@ -62,10 +143,7 @@ function resolvePerplexityBaseUrl(
   return DEFAULT_PERPLEXITY_BASE_URL
 }
 
-function resolvePerplexityTransport(
-  perplexity: Record<string, any>,
-  auth: { apiKey?: string; source: string }
-) {
+function resolvePerplexityTransport(perplexity: PerplexityConfig, auth: PerplexityAuth) {
   const baseUrl = resolvePerplexityBaseUrl(perplexity, auth)
   const model = perplexity?.model?.trim?.() || DEFAULT_PERPLEXITY_MODEL
   const hasLegacyOverride = Boolean(perplexity?.baseUrl?.trim?.() || perplexity?.model?.trim?.())
@@ -89,9 +167,9 @@ function buildPerplexityHeaders(apiKey: string, acceptJson = false) {
   }
 }
 
-function extractPerplexityCitations(data: any) {
+function extractPerplexityCitations(data: PerplexityChatResponse) {
   const top = Array.isArray(data.citations) ? data.citations.filter(Boolean) : []
-  if (top.length) return [...new Set(top)]
+  if (top.length) return [...new Set(top.map(String))]
   const citations: string[] = []
   for (const choice of data.choices ?? []) {
     for (const ann of choice.message?.annotations ?? []) {
@@ -103,8 +181,8 @@ function extractPerplexityCitations(data: any) {
   return [...new Set(citations)]
 }
 
-async function runPerplexitySearchApi(params: Record<string, any>) {
-  const body: Record<string, any> = { query: params.query, max_results: params.count }
+async function runPerplexitySearchApi(params: PerplexitySearchApiParams) {
+  const body: Record<string, unknown> = { query: params.query, max_results: params.count }
   if (params.country) body.country = params.country
   if (params.searchDomainFilter?.length) body.search_domain_filter = params.searchDomainFilter
   if (params.searchRecencyFilter) body.search_recency_filter = params.searchRecencyFilter
@@ -124,10 +202,10 @@ async function runPerplexitySearchApi(params: Record<string, any>) {
         body: JSON.stringify(body)
       }
     },
-    async (res: Response) => {
+    async (res: Response): Promise<PerplexitySearchResult[]> => {
       if (!res.ok) await throwWebSearchApiError(res, 'Perplexity Search')
-      const data = (await res.json()) as any
-      return (data.results ?? []).map((entry: any) => ({
+      const data = (await res.json()) as PerplexitySearchApiResponse
+      return (data.results ?? []).map((entry) => ({
         title: entry.title ? wrapWebContent(entry.title, 'web_search') : '',
         url: entry.url ?? '',
         description: entry.snippet ? wrapWebContent(entry.snippet, 'web_search') : '',
@@ -138,9 +216,9 @@ async function runPerplexitySearchApi(params: Record<string, any>) {
   )
 }
 
-async function runPerplexityChat(params: Record<string, any>) {
+async function runPerplexityChat(params: PerplexityChatParams) {
   const endpoint = `${params.baseUrl.replace(/\/$/, '')}/chat/completions`
-  const body: Record<string, any> = {
+  const body: Record<string, unknown> = {
     model: resolvePerplexityRequestModel(params.baseUrl, params.model),
     messages: [{ role: 'user', content: params.query }]
   }
@@ -158,7 +236,7 @@ async function runPerplexityChat(params: Record<string, any>) {
     },
     async (res: Response) => {
       if (!res.ok) await throwWebSearchApiError(res, 'Perplexity')
-      const data = (await res.json()) as any
+      const data = (await res.json()) as PerplexityChatResponse
       return {
         content: data.choices?.[0]?.message?.content ?? 'No response',
         citations: extractPerplexityCitations(data)
@@ -177,8 +255,8 @@ export function missingPerplexityApiKeyPayload() {
 }
 
 export async function runPerplexitySearch(
-  params: Record<string, any>,
-  runtime: Record<string, any> = {}
+  params: PerplexitySearchParams,
+  runtime: PerplexityRuntime = {}
 ) {
   const perplexity = runtime.perplexity ?? {}
   const auth = resolvePerplexityApiKey(runtime)
@@ -245,16 +323,16 @@ export async function runPerplexitySearch(
   if (cached) return cached
 
   const start = Date.now()
-  let payload: Record<string, any>
+  let payload: Record<string, unknown>
   if (rt.transport === 'chat_completions') {
-    const result = (await runPerplexityChat({
+    const result = await runPerplexityChat({
       query,
       apiKey: rt.apiKey,
       baseUrl: rt.baseUrl,
       model: rt.model,
       timeoutSeconds,
       freshness
-    })) as { content: string; citations: string[] }
+    })
     payload = {
       query,
       provider: 'perplexity',
@@ -265,7 +343,7 @@ export async function runPerplexitySearch(
       citations: result.citations
     }
   } else {
-    const results = (await runPerplexitySearchApi({
+    const results = await runPerplexitySearchApi({
       query,
       apiKey: rt.apiKey,
       count: Math.min(count, MAX_SEARCH_COUNT),
@@ -278,7 +356,7 @@ export async function runPerplexitySearch(
       searchBeforeDate: dateBefore ? isoToPerplexityDate(dateBefore) : undefined,
       maxTokens: params.max_tokens,
       maxTokensPerPage: params.max_tokens_per_page
-    })) as any[]
+    })
     payload = {
       query,
       provider: 'perplexity',

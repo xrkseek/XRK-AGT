@@ -5,6 +5,7 @@
 import runtimeConfig from '#infrastructure/config/config.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { createRequire } from 'node:module';
+import type { WebSearchProviderConfig, WebSearchRuntime } from './web-search-shared.js';
 
 const { findSystemBrowser } = createRequire(import.meta.url)('#utils/system-browser.cjs');
 
@@ -104,16 +105,23 @@ function mergeAllProviderSections(section: any, overrides: any) {
 }
 
 /** YAML 段名（camelCase）与 provider id（可含连字符）对齐 */
-export function getWebSearchProviderScope(runtime: any, providerId: any) {
+export function getWebSearchProviderScope(
+  runtime: WebSearchRuntime | null | undefined,
+  providerId: unknown,
+): WebSearchProviderConfig | undefined {
   const id = String(providerId || '').toLowerCase();
   if (!runtime || typeof runtime !== 'object') return undefined;
   if (id === 'parallel-free') {
-    return runtime.parallelFree ?? runtime['parallel-free'];
+    const scoped = runtime.parallelFree ?? runtime['parallel-free'];
+    return scoped && typeof scoped === 'object'
+      ? (scoped as WebSearchProviderConfig)
+      : undefined;
   }
-  return runtime[id];
+  const scoped = runtime[id];
+  return scoped && typeof scoped === 'object' ? (scoped as WebSearchProviderConfig) : undefined;
 }
 
-function attachProviderScopeAliases(config: any) {
+function attachProviderScopeAliases(config: WebSearchRuntime): WebSearchRuntime {
   if (config.parallelFree && !config['parallel-free']) {
     config['parallel-free'] = config.parallelFree;
   }
@@ -216,8 +224,8 @@ export function resolveWebFetchRuntime(overrides: any = {}) {
 }
 
 /** @param {object} [overrides] */
-export function resolveWebSearchConfig(overrides: any = {}) {
-  const section = getCrawlConfigSection().webSearch ?? {};
+export function resolveWebSearchConfig(overrides: WebSearchRuntime = {}): WebSearchRuntime {
+  const section = (getCrawlConfigSection().webSearch ?? {}) as WebSearchRuntime;
   const providers = mergeAllProviderSections(section, overrides);
 
   return attachProviderScopeAliases({

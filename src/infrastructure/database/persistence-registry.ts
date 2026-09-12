@@ -6,6 +6,8 @@
  * 可选存储全挂不会单独打成 unhealthy。
  */
 
+import { normalizeError } from '#utils/normalize-error.js'
+
 export type PersistenceKind =
   | 'redis'
   | 'sqlite'
@@ -100,7 +102,7 @@ export async function probePersistenceProviders(): Promise<{
           kind: p.kind || 'other',
           required: !!p.required,
           ...(p.core ? { core: p.core } : {}),
-          error: err instanceof Error ? err.message : String(err)
+          error: normalizeError(err).message
         }
       }
     })

@@ -19,6 +19,7 @@ import RuntimeUtil from '#utils/runtime-util.js'
 import paths from '#utils/paths.js'
 import { statDirs } from '#utils/core-fs.js'
 import runtimeConfig from '#infrastructure/config/config.js'
+import { normalizeError } from '#utils/normalize-error.js'
 import {
   resolveWwwAppMount,
   resolveWwwStaticRoot,
@@ -58,13 +59,23 @@ export {
  */
 export const RESERVED_ROOT_SEGMENTS = ['api', 'core', 'media', 'uploads', 'File', 'shared']
 
+function rec(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+}
+
+type ExpressApp = { use: (...args: unknown[]) => unknown }
+
+type SpaReq = { method?: string; path?: string }
+type SpaRes = { sendFile: (filePath: string, cb?: (err: Error | null) => void) => unknown }
+type SpaNext = (err?: unknown) => void
+
 /**
  * @returns 已挂载路径（含 `/core/<名>` 与对外 `/…`）
  */
-export async function mountCoreWwwStatic(app: any, staticOptions: Record<string, any> = {}) {
+export async function mountCoreWwwStatic(app: ExpressApp, staticOptions: Record<string, unknown> = {}) {
   const coreDirs = await paths.getCoreDirs()
   const mountedPaths = new Set<string>()
-  const serverCfg = (runtimeConfig as any).server || {}
+  const serverCfg = rec(runtimeConfig.server)
 
   for (let ci = 0; ci < coreDirs.length; ci++) {
     const coreDir = coreDirs[ci]
@@ -87,10 +98,10 @@ export async function mountCoreWwwStatic(app: any, staticOptions: Record<string,
       dirEntries = fsSync
         .readdirSync(wwwDir, { withFileTypes: true })
         .filter((entry) => entry.isDirectory())
-    } catch (error: any) {
+    } catch (error: unknown) {
       RuntimeUtil.makeLog(
         'debug',
-        `扫描 www 子目录失败: ${wwwDir} - ${error.message}`,
+        `扫描 www 子目录失败: ${wwwDir} - ${normalizeError(error).message}`,
         'AgentRuntime'
       )
       continue
@@ -99,7 +110,7 @@ export async function mountCoreWwwStatic(app: any, staticOptions: Record<string,
     for (const entry of dirEntries) {
       const subDirName = entry.name
       const subDirPath = path.join(wwwDir, subDirName)
-      const decision = resolveWwwAppMount(subDirPath) as any
+      const decision = resolveWwwAppMount(subDirPath)
       const mountPath = decision.mountPath || `/${subDirName}`
       const rootSeg = wwwMountPathRootSegment(mountPath)
       const kindLabel = decision.kind === 'signed' ? '有 sign' : '零配置静态'
@@ -137,7 +148,7 @@ export async function mountCoreWwwStatic(app: any, staticOptions: Record<string,
       const sign = decision.sign
 
       if (decision.kind === 'signed' && sign) {
-        const resolved = resolveWwwStaticRoot(subDirPath, sign) as any
+        const resolved = resolveWwwStaticRoot(subDirPath, sign)
         if (!isWwwSignedStaticRootOk(subDirPath, sign, resolved)) {
           RuntimeUtil.makeLog(
             'error',
@@ -173,10 +184,10 @@ export async function mountCoreWwwStatic(app: any, staticOptions: Record<string,
       const spaEnabled = sign?.spa === true || sign?.historyApiFallback === true
       const spaIndex = path.join(staticRoot, 'index.html')
       if (spaEnabled && fsSync.existsSync(spaIndex)) {
-        app.use(mountPath, (req: any, res: any, next: any) => {
+        app.use(mountPath, (req: SpaReq, res: SpaRes, next: SpaNext) => {
           if (req.method !== 'GET' && req.method !== 'HEAD') return next()
           // 带扩展名的当作静态资源缺失，不吞掉 404
-          if (path.extname(req.path)) return next()
+          if (path.extname(req.path || '')) return next()
           res.sendFile(spaIndex, (err: Error | null) => (err ? next(err) : undefined))
         })
         reason = `${reason}; spa→index.html`

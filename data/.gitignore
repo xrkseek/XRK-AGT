@@ -1,9 +1,34 @@
-# data/ — 本地运行时为主；种子与端口配置可入库，库文件与会话缓存勿入库
+# data/ — 默认不入库；仅白名单框架种子与说明
+# 产品本地目录（JM、Roco、goserver、temp、本机端口配置等）勿加 ! 例外；见 .cursor/rules/xrk-third-party-plugins.mdc
 
-# Harness 持久 session（createPersistentSessionStore）
+*
+!.gitignore
+!instruct.txt
+
+# 少量示例 / 全局种子（非产品业务）
+!blues/
+!blues/**
+!cut/
+!cut/**
+
+# 全局 YAML + 示例端口 2537（本机其它端口目录保持忽略）
+!server_bots/
+!server_bots/*.yaml
+!server_bots/2537/
+!server_bots/2537/**
+
+# 办事助手工作区种子（技能运行时副本见下方再忽略）
+!ai-workspace/
+!ai-workspace/default/
+!ai-workspace/default/**
+
+# 运行时从 .xrk/skills 同步的技能副本勿入库（真源：.xrk/skills / agents）
+ai-workspace/**/skills/**
+!ai-workspace/**/skills/README.md
+!ai-workspace/**/skills/core/README.md
+
+# 即便被误加白名单也挡掉的运行时产物
 harness-sessions/
-
-# Runtime SQLite（node:sqlite）及 WAL 旁车
 runtime/
 *.db
 *.db-shm
@@ -11,13 +36,7 @@ runtime/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
-
-# 配置写盘备份
 *.backup.*
 *.backup
-
-# QQBot 等按 schema 生成的本机配置
 QQBot.json
-
-# 审计 / 控制台落盘
 ai-console/audit/

@@ -24,7 +24,7 @@ export function retainSafeHeadersForCrossOriginRedirect(
   if (!headers) return headers;
   const incoming = new Headers(headers);
   const safe: Record<string, string> = {};
-  for (const [key, value] of incoming.entries()) {
+  for (const [key, value] of (incoming as any).entries()) {
     if (CROSS_ORIGIN_REDIRECT_SAFE_HEADERS.has(key.toLowerCase())) {
       safe[key] = value;
     }

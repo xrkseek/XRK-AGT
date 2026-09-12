@@ -12,6 +12,7 @@ import {
   matchesHostnameAllowlist,
   normalizeHostnameAllowlist
 } from './ssrf-policy.js'
+import type { SsrFPolicy } from './ssrf-policy.js'
 import { normalizeHostname } from './ssrf-ip-policy.js'
 
 export { SsrFBlockedError }
@@ -57,7 +58,7 @@ function isIpLiteralHostname(hostname: string) {
   return isIP(normalizeHostname(hostname)) !== 0
 }
 
-function isExplicitlyAllowedBrowserHostname(hostname: string, ssrfPolicy: Record<string, any>) {
+function isExplicitlyAllowedBrowserHostname(hostname: string, ssrfPolicy: SsrFPolicy) {
   const normalized = normalizeHostname(hostname)
   const exact = (ssrfPolicy?.allowedHostnames ?? []).map(normalizeHostname)
   if (exact.includes(normalized)) return true
@@ -93,16 +94,47 @@ export function isHashOnlyNavigation(currentUrl: string, previousUrl: string) {
   }
 }
 
+type LookupFn = (
+  hostname: string,
+  options: { all: true }
+) => Promise<Array<{ address: string; family: number }>>
+
 type NavArg =
   | string
   | {
       url: string
-      ssrfPolicy?: Record<string, any>
+      ssrfPolicy?: SsrFPolicy
       browserProxyMode?: string
-      lookupFn?: (...args: any[]) => any
+      lookupFn?: LookupFn
     }
 
-export async function assertBrowserNavigationAllowed(arg: NavArg, legacyPolicy?: Record<string, any>) {
+type PlaywrightPageLike = {
+  url: () => string
+  mainFrame: () => unknown
+  route: (
+    pattern: string,
+    handler: (route: PlaywrightRouteLike, request: PlaywrightRequestLike) => Promise<void>
+  ) => Promise<unknown>
+  unroute: (pattern: string, handler?: unknown) => Promise<unknown>
+  goto: (
+    url: string,
+    opts: { timeout?: number; waitUntil?: PlaywrightWaitUntil }
+  ) => Promise<unknown>
+}
+
+type PlaywrightRouteLike = {
+  abort: () => Promise<void>
+  continue: () => Promise<void>
+}
+
+type PlaywrightRequestLike = {
+  frame: () => unknown
+  url: () => string
+  resourceType: () => string
+  isNavigationRequest?: () => boolean
+}
+
+export async function assertBrowserNavigationAllowed(arg: NavArg, legacyPolicy?: SsrFPolicy) {
   const opts = typeof arg === 'string' ? { url: arg, ssrfPolicy: legacyPolicy ?? {} } : arg
   const rawUrl = String(opts.url || '').trim()
   if (!rawUrl) throw new InvalidBrowserNavigationUrlError('url is required')
@@ -146,7 +178,7 @@ export async function assertBrowserNavigationAllowed(arg: NavArg, legacyPolicy?:
 
 export async function assertBrowserNavigationResultAllowed(
   arg: NavArg,
-  legacyPolicy?: Record<string, any>
+  legacyPolicy?: SsrFPolicy
 ) {
   const opts = typeof arg === 'string' ? { url: arg, ssrfPolicy: legacyPolicy ?? {} } : arg
   const rawUrl = String(opts.url ?? '').trim()
@@ -164,7 +196,7 @@ export async function assertBrowserNavigationResultAllowed(
 
 export async function assertBrowserNavigationResultAllowedForPage(
   page: { url: () => string },
-  ssrfPolicy: Record<string, any> = {}
+  ssrfPolicy: SsrFPolicy = {}
 ) {
   await assertBrowserNavigationResultAllowed({ url: page.url(), ssrfPolicy })
 }
@@ -173,12 +205,12 @@ export async function assertBrowserNavigationResultAllowedForPage(
  * Playwright route 拦截导航请求（gotoPageWithNavigationGuard 精简）
  */
 export async function gotoWithNavigationGuard(
-  page: any,
+  page: PlaywrightPageLike,
   url: string,
   opts: {
     timeoutMs?: number
-    ssrfPolicy?: Record<string, any>
-    onBlocked?: (err: unknown) => any
+    ssrfPolicy?: SsrFPolicy
+    onBlocked?: (err: unknown) => unknown
     waitUntil?: unknown
   } = {}
 ) {
@@ -186,7 +218,7 @@ export async function gotoWithNavigationGuard(
   const waitUntil = normalizePlaywrightWaitUntil(opts.waitUntil, 'load')
   let blockedError: unknown = null
 
-  const handler = async (route: any, request: any) => {
+  const handler = async (route: PlaywrightRouteLike, request: PlaywrightRequestLike) => {
     if (blockedError) {
       await route.abort().catch(() => {})
       return

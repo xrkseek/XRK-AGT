@@ -18,6 +18,42 @@ import { getWorkflowRequestContext } from '#infrastructure/ai-workflow/workflow-
  * 工具调用轨迹：用户可见靠 reply MCP；下一轮延续靠 `recordToolCallResult`，不往用户气泡贴「使用了」。
  */
 
+type ChatMessage = {
+  role?: string
+  content?: unknown
+  [key: string]: unknown
+}
+
+type QuestionObject = {
+  content?: unknown
+  text?: unknown
+  [key: string]: unknown
+}
+
+/** 方法签名用 bivariant，避免 AiWorkflow 具体参数与 unknown 逆变冲突 */
+type ChatPipelineStream = {
+  name?: string
+  buildChatContext(e: unknown, question: unknown): Promise<ChatMessage[]> | ChatMessage[]
+  mergeMessageHistory?(messages: ChatMessage[], e: unknown): Promise<ChatMessage[]> | ChatMessage[]
+  buildEnhancedContext?(
+    e: unknown,
+    question: unknown,
+    messages: ChatMessage[]
+  ): Promise<ChatMessage[]> | ChatMessage[]
+}
+
+type PipelineEvent = {
+  reply?: (msg?: unknown) => unknown | Promise<unknown>
+  [key: string]: unknown
+}
+
+type SlashResolved = {
+  handled?: boolean
+  replyOnly?: string
+  text?: string
+  systemExtra?: string
+}
+
 function applySlashToQuestion(question: unknown): {
   question: unknown
   systemExtra: string
@@ -26,18 +62,13 @@ function applySlashToQuestion(question: unknown): {
   let text = ''
   if (typeof question === 'string') text = question
   else if (question && typeof question === 'object' && !Array.isArray(question)) {
-    const q = question as Record<string, any>
+    const q = question as QuestionObject
     text = String(q.content ?? q.text ?? '')
   }
   if (!text.trim().startsWith('/')) {
     return { question, systemExtra: '', replyOnly: null }
   }
-  const resolved = resolveSlashCommand(text) as {
-    handled?: boolean
-    replyOnly?: string
-    text?: string
-    systemExtra?: string
-  }
+  const resolved = resolveSlashCommand(text) as SlashResolved
   if (!resolved.handled) return { question, systemExtra: '', replyOnly: null }
   if (resolved.replyOnly) {
     return { question, systemExtra: '', replyOnly: resolved.replyOnly }
@@ -50,7 +81,7 @@ function applySlashToQuestion(question: unknown): {
     }
   }
   if (question && typeof question === 'object' && !Array.isArray(question)) {
-    const next = { ...(question as Record<string, any>) }
+    const next: QuestionObject = { ...(question as QuestionObject) }
     if (next.content != null) next.content = resolved.text || next.content
     else next.text = resolved.text || next.text
     return { question: next, systemExtra: resolved.systemExtra || '', replyOnly: null }
@@ -58,7 +89,7 @@ function applySlashToQuestion(question: unknown): {
   return { question, systemExtra: resolved.systemExtra || '', replyOnly: null }
 }
 
-function injectSystemExtra(messages: any[], systemExtra: string) {
+function injectSystemExtra(messages: ChatMessage[], systemExtra: string): ChatMessage[] {
   if (!systemExtra || !Array.isArray(messages) || !messages.length) return messages
   const first = messages[0]
   if (first?.role === 'system' && typeof first.content === 'string') {
@@ -67,7 +98,11 @@ function injectSystemExtra(messages: any[], systemExtra: string) {
   return [{ role: 'system', content: systemExtra }, ...messages]
 }
 
-export async function assembleChatLlmMessages(stream: any, e: any, question: unknown) {
+export async function assembleChatLlmMessages(
+  stream: ChatPipelineStream,
+  e: PipelineEvent | null | undefined,
+  question: unknown
+): Promise<ChatMessage[]> {
   const slash = applySlashToQuestion(question)
   if (slash.replyOnly) {
     if (e?.reply) {
@@ -77,7 +112,7 @@ export async function assembleChatLlmMessages(stream: any, e: any, question: unk
         /* ignore */
       }
     }
-    const turn = getWorkflowRequestContext()?.turnState as Record<string, any> | undefined
+    const turn = getWorkflowRequestContext()?.turnState
     if (turn) {
       turn.replyFlushed = true
       turn.slashShortCircuit = true
@@ -87,10 +122,13 @@ export async function assembleChatLlmMessages(stream: any, e: any, question: unk
   }
 
   const q = slash.question
-  const questionObj = q != null && typeof q === 'object' && !Array.isArray(q) ? q : null
+  const questionObj =
+    q != null && typeof q === 'object' && !Array.isArray(q) ? (q as QuestionObject) : null
   const enhancedQuestion = questionObj ?? (Array.isArray(q) ? undefined : q)
 
-  let messages = Array.isArray(q) ? q : await stream.buildChatContext(e, questionObj ?? q)
+  let messages: ChatMessage[] = Array.isArray(q)
+    ? (q as ChatMessage[])
+    : await stream.buildChatContext(e, questionObj ?? q)
 
   messages = injectSystemExtra(messages, slash.systemExtra)
 
@@ -104,19 +142,21 @@ export async function assembleChatLlmMessages(stream: any, e: any, question: unk
 }
 
 /** 调试：LLM 消息预览（role + 文本摘要 + 多模态图数量） */
-export function previewLlmMessages(messages: any[]) {
+export function previewLlmMessages(messages: ChatMessage[] | null | undefined) {
   return (messages || []).map((m, idx) => {
     const role = m.role || `msg${idx}`
-    let text = m.content
+    let text: unknown = m.content
     let imageCount = 0
     if (typeof text === 'object' && text !== null && !Array.isArray(text)) {
       imageCount = countVisionInContent(text)
-      text = text?.text || text?.content || ''
+      const obj = text as { text?: string; content?: unknown }
+      text = obj.text || obj.content || ''
     } else if (Array.isArray(m.content)) {
       imageCount = countVisionInContent(m.content)
       text = m.content
-        .filter((p: any) => p?.type === 'text')
-        .map((p: any) => p.text || '')
+        .filter((p): p is { type?: string; text?: string } => !!p && typeof p === 'object')
+        .filter((p) => p.type === 'text')
+        .map((p) => p.text || '')
         .join('')
     }
     return {
@@ -130,7 +170,11 @@ export function previewLlmMessages(messages: any[]) {
 }
 
 /** 统一 debug 日志：最终送入 LLM 的消息结构 */
-export function logLlmMessagePreview(stream: any, messages: any[], tag = 'AiWorkflow') {
+export function logLlmMessagePreview(
+  stream: { name?: string } | null | undefined,
+  messages: ChatMessage[],
+  tag = 'AiWorkflow'
+) {
   try {
     RuntimeUtil.makeLog(
       'debug',

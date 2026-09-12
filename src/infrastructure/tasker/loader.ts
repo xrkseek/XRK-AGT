@@ -1,16 +1,33 @@
 import path from 'node:path'
 import RuntimeUtil from '#utils/runtime-util.js'
 import { FileLoader } from '#utils/file-loader.js'
-import { setRuntimeGlobal } from '#utils/runtime-globals.js'
+import { setRuntimeGlobal, getRuntimeGlobal } from '#utils/runtime-globals.js'
+import { normalizeError } from '#utils/normalize-error.js'
+
+type TaskerEntry = {
+  path?: unknown
+  id?: unknown
+  name?: unknown
+}
 
 type TaskerBot = {
-  tasker: any[]
+  tasker: TaskerEntry[]
+}
+
+function defaultTaskerBot(): TaskerBot {
+  const bot =
+    getRuntimeGlobal<TaskerBot>('AgentRuntime') ??
+    (globalThis as { AgentRuntime?: TaskerBot }).AgentRuntime
+  if (!bot || !Array.isArray(bot.tasker)) {
+    throw new Error('TaskerLoader.load: AgentRuntime.tasker 不可用')
+  }
+  return bot
 }
 
 class TaskerLoader {
   loggerNs = 'TaskerLoader'
 
-  async load(bot: TaskerBot = (globalThis as any).AgentRuntime) {
+  async load(bot: TaskerBot = defaultTaskerBot()) {
     setRuntimeGlobal('AgentRuntime', bot)
 
     const summary = {
@@ -36,10 +53,11 @@ class TaskerLoader {
           const mod = await FileLoader.importFresh(filePath)
           if (typeof mod.register === 'function') await mod.register(bot)
           summary.loaded += 1
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const message = normalizeError(err).message
           summary.failed += 1
-          summary.errors.push({ name, message: err.message })
-          RuntimeUtil.makeLog('error', `导入 tasker 失败: ${name} - ${err.message}`, this.loggerNs, err)
+          summary.errors.push({ name, message })
+          RuntimeUtil.makeLog('error', `导入 tasker 失败: ${name} - ${message}`, this.loggerNs)
         }
       })
     )
@@ -58,7 +76,7 @@ class TaskerLoader {
   /** 按 path（无则 id）去重；OPQ/OneBot 同 id=QQ 但 path 不同，均保留 */
   dedupeTaskers(bot: TaskerBot) {
     const seen = new Set<string>()
-    const next: any[] = []
+    const next: TaskerEntry[] = []
     for (const t of bot.tasker) {
       const key = String(t?.path || t?.id || '')
       if (!key) {

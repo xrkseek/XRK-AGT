@@ -33,7 +33,7 @@ XRK-AGT 是由向日葵开发、各大学志同道合的学生联合研制的 **
 - **🌐 多平台消息接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker
 - **🔌 插件与工作流**：指令插件 + AI 工作流 (AiWorkflow)
 - **🌐 Web 与 HTTP/API**：内置 Web 控制台 + REST API + WebSocket
-- **⭐ system-Core**：11 HTTP API、7 工作流（80 MCP 工具）、15 插件、4 Tasker、4 events、Web 控制台（`/xrk/`）
+- **⭐ system-Core**：11 HTTP API、7 工作流（95 MCP 工具）、18 插件、4 Tasker、4 events、Web 控制台（`/xrk/`）
 - **🎨 渲染**：默认 Playwright；Chromium 经启动菜单或 `pnpm run setup:browsers` 安装
 
 ---
@@ -79,7 +79,7 @@ XRK-AGT 是由向日葵开发、各大学志同道合的学生联合研制的 **
 - 想**配 Redis**：[`docs/database.md`](docs/database.md)
 - 想**看目录该放哪**：[`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md) · [`docs/README.md`](docs/README.md)
 - 想**写插件 / Core**：[`docs/runtime-surface.md`](docs/runtime-surface.md) → [`docs/coding-style.md`](docs/coding-style.md) → [`docs/base-classes.md`](docs/base-classes.md)
-- 想**跑测试 / 发布前审查**：[`docs/框架测试指南.md`](docs/框架测试指南.md) → [`docs/代码审查清单.md`](docs/代码审查清单.md)
+- 想**跑测试 / 发布前审查**：[`docs/框架测试指南.md`](docs/框架测试指南.md) → [`docs/代码审查清单.md`](docs/代码审查清单.md) → [`docs/文档审查清单.md`](docs/文档审查清单.md)
 - **文档中心**：[`docs/README.md`](docs/README.md)
 
 ---
@@ -210,8 +210,8 @@ node dist/start.js server 3000
 ### 🚀 零配置扩展
 
 只需将代码放置到对应目录即可自动加载，无需手动注册：
-- **插件**：`core/*/plugin/my-plugin.js` → 自动加载
-- **工作流**：`core/*/workflow/my-workflow.js` → 自动注册 MCP 工具
+- **插件**：`core/*/plugin/my-plugin.ts` → 自动加载
+- **工作流**：`core/*/workflow/my-workflow.ts` → 自动注册 MCP 工具
 - **HTTP API**：`core/*/http/my-api.js` → 自动注册路由
 
 ### 💡 现代技术栈
@@ -265,7 +265,7 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可在 Cursor 等 AI 编�
 | 质量与发布 | [框架测试指南](docs/框架测试指南.md)、[代码审查清单](docs/代码审查清单.md)、[文档审查清单](docs/文档审查清单.md) |
 | 概览与运行 | [运行时挂载面](docs/runtime-surface.md)、[底层写法规范](docs/coding-style.md)、[底层架构设计](docs/底层架构设计.md)、[启动与引导](docs/startup.md)、[database](docs/database.md)、[AgentRuntime](docs/agent-runtime.md)、[Server](docs/server.md) |
 | 开发契约 | [base-classes](docs/base-classes.md)、[infrastructure-shared](docs/infrastructure-shared.md)、[DOCSTYLE](docs/DOCSTYLE.md) |
-| system-Core | [system-core.md](docs/system-core.md)（11 HTTP / 7 workflow / 15 plugin / 4 tasker / 4 events） |
+| system-Core | [system-core.md](docs/system-core.md)（11 HTTP / 7 workflow / 18 plugin / 4 tasker / 4 events） |
 | 生态索引 | [AGT-Cores-Tools-Index](https://github.com/xrkseek/AGT-Cores-Tools-Index) |
 | 任务与事件 | [Tasker 底层规范](docs/tasker-base-spec.md)、[OneBotv11 Tasker 文档](docs/tasker-onebotv11.md)、[Tasker 加载器文档](docs/tasker-loader.md)、[事件系统标准化文档](docs/事件系统标准化文档.md)（包含事件监听器开发指南） |
 | 插件 | [插件基类文档](docs/plugin-base.md)、[插件加载器文档](docs/plugins-loader.md) |
@@ -279,11 +279,11 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可在 Cursor 等 AI 编�
 
 ## 测试与质量
 
-框架 CI **只统计 `core/system-Core/` 官方模块**（其他 core 不计入达标线；vendor = 未 git 入库的本地插件）。标准值源码：本地 `tests/helpers/system-core.mjs`（`tests/` **不入库**）。运行测试需 **Node ≥ 26**（见 `package.json` → `engines.node`）。
+框架 CI **只统计 `core/system-Core/` 官方模块**（其他 core 不计入达标线；vendor = 未 git 入库的本地 `.ts`/`.js` 插件）。标准值源码：`tests/helpers/system-core.mjs` → `SYSTEM_CORE_BASELINE`。运行测试需 **Node ≥ 26**（见 `package.json` → `engines.node`）。
 
 | 类型 | 标准值 | 验证命令 |
 |------|--------|----------|
-| HTTP / stream / plugin / tasker / events | 12 / 7 / 15 / 4 / 4 | `pnpm test` |
+| HTTP / stream / plugin / tasker / events | 11 / 7 / 18 / 4 / 4 | `pnpm test` |
 | 端到端探活 | 3 项 API + `/xrk/` | `pnpm test:e2e` |
 
 - **标准值与实测**：[docs/框架测试指南.md](docs/框架测试指南.md)
@@ -291,7 +291,7 @@ XRK-AGT 支持 MCP（Model Context Protocol）协议，可在 Cursor 等 AI 编�
 - **文档审查**：[docs/文档审查清单.md](docs/文档审查清单.md)
 - **全文档索引**：[docs/README.md](docs/README.md)
 
-> MCP 工具：system-Core 七个工作流内 `registerMCPTool` 合计 **80** 个（以 `core/system-Core/workflow/*.js` 实时计数为准）；全仓库启动日志可能更高（含扩展 core）。
+> MCP 工具：system-Core 七个工作流内 `registerMCPTool` 合计 **95** 个（以 `core/system-Core/workflow/*.ts` 实时计数为准）；全仓库启动日志可能更高（含扩展 core）。
 
 ---
 

@@ -11,6 +11,18 @@ function toFileUrl(absPath: string): string {
   return (p.startsWith('/') ? 'file://' : 'file:///') + p
 }
 
+export type RendererMeta = {
+  id?: string
+  type?: string
+  render?: string
+}
+
+export type DealTplData = Record<string, unknown> & {
+  tplFile: string
+  saveId?: string
+  resPath?: string
+}
+
 /**
  * 渲染器基类
  * 提供HTML模板渲染、图片生成等功能的统一接口。
@@ -21,18 +33,25 @@ export default class Renderer {
   id = 'renderer'
   type = 'image'
   dir = './trash/html'
+  /** 模板内容缓存（类字段） */
   html: Record<string, string> = {}
-  render: (...args: any[]) => any
+  render: (...args: unknown[]) => unknown
 
-  constructor(data: Record<string, any> = {}) {
+  constructor(data: RendererMeta = {}) {
     this.id = data.id || this.id
     this.type = data.type || this.type
-    this.render = (this as any)[data.render || 'render']
+    const methodName = data.render || 'render'
+    const method = Reflect.get(this, methodName)
+    this.render =
+      typeof method === 'function'
+        ? (method as (...args: unknown[]) => unknown).bind(this)
+        : (..._args: unknown[]) => {
+            throw new Error(`Renderer method not found: ${methodName}`)
+          }
     this.createDir(this.dir)
   }
 
   createDir(dirname: string): boolean {
-    // 使用 recursive: true 简化递归创建逻辑
     try {
       fs.mkdirSync(dirname, { recursive: true })
       return true
@@ -41,7 +60,7 @@ export default class Renderer {
     }
   }
 
-  dealTpl(name: string, data: Record<string, any>): string | false {
+  dealTpl(name: string, data: DealTplData): string | false {
     const { tplFile, saveId = name } = data
     const savePath = `./trash/html/${name}/${saveId}.html`
 
@@ -82,8 +101,9 @@ export default class Renderer {
           }
         }
       }
-    } catch (e: any) {
-      RuntimeUtil.makeLog('error', `获取MAC地址失败: ${e.message}`, 'Renderer')
+    } catch (e: unknown) {
+      const msg = Error.isError(e) ? e.message : String(e)
+      RuntimeUtil.makeLog('error', `获取MAC地址失败: ${msg}`, 'Renderer')
     }
     return macAddr
   }

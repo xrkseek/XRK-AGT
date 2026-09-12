@@ -15,6 +15,37 @@ import {
   DEFAULT_VISION_MAX_IMAGES
 } from '#utils/llm/vision-content.js';
 
+type ChatMessage = Record<string, unknown> & {
+  role?: string;
+  content?: unknown;
+};
+
+type VisionTransformConfig = Record<string, unknown> & {
+  visionMaxImages?: number;
+  visionImageMimeType?: string;
+};
+
+type VisionTransformOptions = {
+  mode?: 'openai' | 'text_only';
+  allowBase64?: boolean;
+  labelImages?: boolean;
+  maxImages?: number;
+};
+
+type OpenAIContentPart = Record<string, unknown> & {
+  type?: string;
+  text?: string;
+  image_url?: { url?: string };
+  url?: string;
+};
+
+type AgtContent = Record<string, unknown> & {
+  text?: string;
+  content?: string;
+  images?: unknown;
+  replyImages?: unknown;
+};
+
 /**
  * @param {Array} messages
  * @param {Object} config - LLM config（visionImageMimeType / visionMaxImages）
@@ -25,7 +56,11 @@ import {
  * @param {number} [options.maxImages]
  * @returns {Promise<Array>}
  */
-export async function transformMessagesWithVision(messages: any, config: any = {}, options: any = {}) {
+export async function transformMessagesWithVision(
+  messages: unknown,
+  config: VisionTransformConfig = {},
+  options: VisionTransformOptions = {},
+): Promise<any> {
   if (!Array.isArray(messages)) return messages;
 
   const mode = options.mode === 'openai' ? 'openai' : 'text_only';
@@ -36,28 +71,29 @@ export async function transformMessagesWithVision(messages: any, config: any = {
       DEFAULT_VISION_MAX_IMAGES
   );
 
-  const transformed = [];
-  for (const msg of messages) {
+  const transformed: ChatMessage[] = [];
+  for (const msg of messages as ChatMessage[]) {
     const newMsg = { ...msg };
 
     if (msg.role === 'user' && msg.content != null && typeof msg.content === 'object') {
       // 已是 OpenAI 风格 parts：openai 模式透传（仍可按上限截断 image_url）
       if (Array.isArray(msg.content) && mode === 'openai') {
-        newMsg.content = truncateOpenAIImageParts(msg.content, maxImages);
+        newMsg.content = truncateOpenAIImageParts(msg.content as OpenAIContentPart[], maxImages);
         transformed.push(newMsg);
         continue;
       }
 
       if (Array.isArray(msg.content) && mode === 'text_only') {
-        newMsg.content = openAIPartsToTextOnly(msg.content);
+        newMsg.content = openAIPartsToTextOnly(msg.content as OpenAIContentPart[]);
         transformed.push(newMsg);
         continue;
       }
 
-      const text = msg.content.text || msg.content.content || '';
-      const images = msg.content.images || [];
-      const replyImages = msg.content.replyImages || [];
-      const flags = { ...msg.content };
+      const agt = msg.content as AgtContent;
+      const text = agt.text || agt.content || '';
+      const images = agt.images || [];
+      const replyImages = agt.replyImages || [];
+      const flags = { ...agt };
       delete flags.text;
       delete flags.content;
       delete flags.images;
@@ -82,8 +118,9 @@ export async function transformMessagesWithVision(messages: any, config: any = {
 
       // 保留非视觉内部标记会污染 API；不回写 flags
       void flags;
-    } else if (newMsg.content && typeof newMsg.content === 'object') {
-      newMsg.content = newMsg.content.text || newMsg.content.content || '';
+    } else if (newMsg.content && typeof newMsg.content === 'object' && !Array.isArray(newMsg.content)) {
+      const agt = newMsg.content as AgtContent;
+      newMsg.content = agt.text || agt.content || '';
     } else if (newMsg.content == null) {
       newMsg.content = '';
     }
@@ -94,9 +131,9 @@ export async function transformMessagesWithVision(messages: any, config: any = {
   return transformed;
 }
 
-function truncateOpenAIImageParts(parts: any, maxImages: any) {
+function truncateOpenAIImageParts(parts: OpenAIContentPart[], maxImages: number): OpenAIContentPart[] {
   let imageCount = 0;
-  const out = [];
+  const out: OpenAIContentPart[] = [];
   let truncated = false;
   for (const p of parts) {
     const isImg =
@@ -119,8 +156,8 @@ function truncateOpenAIImageParts(parts: any, maxImages: any) {
   return out;
 }
 
-function openAIPartsToTextOnly(parts: any) {
-  const texts = [];
+function openAIPartsToTextOnly(parts: OpenAIContentPart[]): string {
+  const texts: string[] = [];
   let imgIdx = 0;
   for (const p of parts) {
     if (p?.type === 'text' && p.text) texts.push(String(p.text));
@@ -133,7 +170,12 @@ function openAIPartsToTextOnly(parts: any) {
   return texts.join(' ').trim();
 }
 
-function agtContentToTextOnly(text: any, images: any, replyImages: any, maxImages: any) {
+function agtContentToTextOnly(
+  text: string,
+  images: unknown,
+  replyImages: unknown,
+  maxImages: number,
+): string {
   let content = text || '';
   const replyList = coerceVisionRefList(replyImages, { role: 'reply' });
   const currentList = coerceVisionRefList(images, { role: 'current' });
@@ -153,6 +195,10 @@ function agtContentToTextOnly(text: any, images: any, replyImages: any, maxImage
 }
 
 /** OpenAI Chat Completions 多模态别名（HTTP v3 / 兼容工厂共用） */
-export function transformOpenAIStyleVisionMessages(messages: any, config: any = {}, options: any = {}) {
+export function transformOpenAIStyleVisionMessages(
+  messages: unknown,
+  config: VisionTransformConfig = {},
+  options: VisionTransformOptions = {},
+): Promise<ChatMessage[] | unknown> {
   return transformMessagesWithVision(messages, config, { mode: 'openai', ...options });
 }

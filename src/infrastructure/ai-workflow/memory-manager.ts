@@ -5,13 +5,30 @@
  * 主对话历史仍以 chatSessionHistory / ChatStream.messageHistory 为准。
  */
 
-type MemoryEntry = Record<string, any> & {
+export type MemoryEntry = {
   id?: string
+  userId?: string
   content?: string
+  type?: string
+  metadata?: Record<string, unknown>
   timestamp?: number
   importance?: number
   accessCount?: number
   lastAccessed?: number
+  score?: number
+}
+
+export type ShortTermMemoryInput = {
+  content?: string
+  metadata?: Record<string, unknown>
+  [key: string]: unknown
+}
+
+export type LongTermMemoryInput = {
+  content?: string
+  type?: string
+  metadata?: Record<string, unknown>
+  importance?: number
 }
 
 function tokenize(text: string) {
@@ -47,7 +64,7 @@ export class MemoryManager {
   maxShortTermSize = 50
   maxLongTermSize = 1000
 
-  addShortTermMemory(userId: string, memory: Record<string, any>) {
+  addShortTermMemory(userId: string, memory: ShortTermMemoryInput) {
     if (!this.shortTermMemories.has(userId)) {
       this.shortTermMemories.set(userId, [])
     }
@@ -72,7 +89,7 @@ export class MemoryManager {
   /**
    * 短期记忆关键词召回（空 query 返回最近若干条；有 query 按重合分排序）。
    */
-  async searchShortTermMemories(userId: string, query: string, limit = 5) {
+  async searchShortTermMemories(userId: string, query: string, limit = 5): Promise<MemoryEntry[]> {
     const memories = this.shortTermMemories.get(userId) || []
     const q = String(query || '').trim()
     if (!q) return memories.slice(-limit).reverse()
@@ -87,7 +104,7 @@ export class MemoryManager {
   /**
    * @returns 记忆 ID
    */
-  async addLongTermMemory(userId: string, memory: Record<string, any>) {
+  async addLongTermMemory(userId: string, memory: LongTermMemoryInput) {
     if (!this.longTermMemories.has(userId)) {
       this.longTermMemories.set(userId, [])
     }
@@ -119,7 +136,7 @@ export class MemoryManager {
   /**
    * 长期记忆关键词检索（空 query 按重要度；有 query 先关键词分再叠重要度）。
    */
-  async searchLongTermMemories(userId: string, query: string, limit = 5) {
+  async searchLongTermMemories(userId: string, query: string, limit = 5): Promise<MemoryEntry[]> {
     const memories = this.longTermMemories.get(userId) || []
     const q = String(query || '').trim()
     const scored = memories.map((m) => {

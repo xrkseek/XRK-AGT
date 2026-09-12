@@ -12,7 +12,25 @@ import { setRuntimeGlobal } from '#utils/runtime-globals.js'
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const ENSURE_REDIS_MJS = path.join(PROJECT_ROOT, 'scripts', 'ensure-redis.mjs')
 
-type RedisClient = any
+export type RedisHandle = {
+  isOpen?: boolean
+  connect: () => Promise<void>
+  ping: () => Promise<unknown>
+  quit: () => Promise<unknown>
+  disconnect: () => Promise<unknown>
+  on: (event: string, listener: (...args: unknown[]) => void) => unknown
+  removeAllListeners: (event?: string) => unknown
+}
+
+type RedisClient = RedisHandle
+type RedisYaml = {
+  host?: string
+  port?: number | string
+  username?: string
+  password?: string
+  db?: number | string
+  options?: { connectTimeout?: number }
+}
 
 let globalClient: RedisClient | null = null
 
@@ -27,24 +45,32 @@ const REDIS_CONFIG = {
   HEALTH_CHECK_INTERVAL: 30000
 }
 
+function redisYaml(): RedisYaml {
+  return (runtimeConfig.redis ?? {}) as RedisYaml
+}
+
+function isXrkTest() {
+  return process.env.XRK_TEST === '1'
+}
+
 export default async function redisInit() {
   if (globalClient?.isOpen) return globalClient
 
   const fastStart = process.env.XRK_FAST_START === '1'
   const maxRetries = fastStart ? 1 : REDIS_CONFIG.MAX_RETRIES
-  const redisUrl = buildRedisUrl((runtimeConfig as any).redis)
+  const redisUrl = buildRedisUrl(redisYaml())
   const clientConfig = buildClientConfig(redisUrl, fastStart)
 
-  const client = await connectWithRetry({
+  const client = (await connectWithRetry({
     label: 'Redis',
     maxRetries,
     fastStart,
     connectionUrl: redisUrl,
-    createClient: () => createClient(clientConfig as any) as any,
+    createClient: () => createClient(clientConfig) as unknown as RedisHandle,
     onBeforeRetry: attemptRedisStart,
     devHint:
       '本机拉起: node scripts/ensure-redis.mjs  |  Windows: net start Memurai / net start Redis  |  Unix: redis-server --daemonize yes'
-  })
+  })) as RedisHandle
 
   registerEventHandlers(client)
   startHealthCheck(client)
@@ -54,7 +80,7 @@ export default async function redisInit() {
   return client
 }
 
-function buildRedisUrl(redisConfig: Record<string, any> | undefined) {
+function buildRedisUrl(redisConfig: RedisYaml | undefined) {
   const username = redisConfig?.username || ''
   const password = redisConfig?.password || ''
   const host = normalizeHost(redisConfig?.host || '127.0.0.1', 'redis')
@@ -65,7 +91,7 @@ function buildRedisUrl(redisConfig: Record<string, any> | undefined) {
 }
 
 function buildClientConfig(redisUrl: string, fastStart = false) {
-  const options = (runtimeConfig as any).redis?.options || {}
+  const options = redisYaml().options || {}
   const connectTimeout = fastStart
     ? 2000
     : (options.connectTimeout ?? REDIS_CONFIG.CONNECT_TIMEOUT)
@@ -119,10 +145,11 @@ function isLoopbackHost(host: unknown) {
 }
 
 async function attemptRedisStart(retryCount: number) {
-  if (process.env.NODE_ENV === 'production') return
+  if (process.env.NODE_ENV === 'production' || isXrkTest()) return
 
-  const host = (runtimeConfig as any).redis?.host || '127.0.0.1'
-  const port = (runtimeConfig as any).redis?.port || 6379
+  const cfg = redisYaml()
+  const host = cfg.host || '127.0.0.1'
+  const port = cfg.port || 6379
   if (!isLoopbackHost(host)) {
     RuntimeUtil.makeLog('debug', `非本机 Redis（${host}），跳过本地拉起`, 'Redis')
     return
@@ -144,9 +171,9 @@ async function attemptRedisStart(retryCount: number) {
 
 let healthCheckTimer: ReturnType<typeof setInterval> | null = null
 
-function registerEventHandlers(client: any) {
+function registerEventHandlers(client: RedisClient) {
   // 勿在 error 里再手动 connect：与 socket reconnectStrategy 双重重连会打架刷 console
-  client.on('error', (err: any) => {
+  client.on('error', (err) => {
     RuntimeUtil.makeLog('warn', normalizeError(err).message, 'Redis')
   })
   client.on('ready', () => RuntimeUtil.makeLog('debug', '就绪', 'Redis'))
@@ -154,7 +181,8 @@ function registerEventHandlers(client: any) {
   client.on('end', () => RuntimeUtil.makeLog('warn', '连接已关闭', 'Redis'))
 }
 
-function startHealthCheck(client: any) {
+function startHealthCheck(client: RedisClient) {
+  if (isXrkTest()) return
   if (healthCheckTimer) {
     clearInterval(healthCheckTimer)
     healthCheckTimer = null

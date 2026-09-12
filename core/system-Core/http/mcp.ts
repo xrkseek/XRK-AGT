@@ -204,7 +204,7 @@ export default {
           return HttpResponse.notFound(res, `工具 "${name}" 不存在`);
         }
 
-        const tool = mcpServer.tools.get(name);
+        const tool: any = mcpServer.tools.get(name);
         HttpResponse.success(res, {
           tool: {
             name: tool.name,
@@ -395,7 +395,7 @@ export default {
               return;
             }
 
-            const tool = mcpServer.tools.get(name);
+            const tool: any = mcpServer.tools.get(name);
             ws.send(JSON.stringify({
               type: 'tool_info',
               requestId,

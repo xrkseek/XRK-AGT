@@ -1,19 +1,20 @@
 /**
  * 契约：工厂单次补全不执行工具；prepareOutbound 仅 trim；下列路径不得存在。
+ * 入口：tests/helpers/harness-ai.mjs
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { trimMessagesToTokenBudget } from '../../dist/src/utils/llm/message-token-budget.js';
+import { trimMessagesToTokenBudget } from '../helpers/harness-ai.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 describe('AGT loop cleanup contracts', () => {
   it('slimMessagesForExistingSession keeps system + latest user only', async () => {
     const { slimMessagesForExistingSession } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
+      '#infrastructure/ai-workflow/harness-module-loop.js'
     );
     const slim = slimMessagesForExistingSession([
       { role: 'system', content: 'sys' },
@@ -29,7 +30,7 @@ describe('AGT loop cleanup contracts', () => {
 
   it('resolveMaxSteps is 1 when no tools', async () => {
     const { __resolveMaxStepsForTests } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
+      '#infrastructure/ai-workflow/harness-module-loop.js'
     );
     assert.equal(__resolveMaxStepsForTests({ maxToolRounds: 7 }, {}, 0), 1);
     assert.equal(__resolveMaxStepsForTests({ maxToolRounds: 7 }, {}, 3), 7);
@@ -94,7 +95,7 @@ describe('AGT loop cleanup contracts', () => {
 
   it('resolveHarnessCompaction maps contextWindow to soft budget', async () => {
     const { resolveHarnessCompaction } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
+      '#infrastructure/ai-workflow/harness-module-loop.js'
     );
     const c = resolveHarnessCompaction({ contextWindow: 128000, maxTokens: 4096 });
     assert.ok(c);
@@ -105,7 +106,7 @@ describe('AGT loop cleanup contracts', () => {
 
   it('foldUsageFromEvents sums assistant usage', async () => {
     const { foldUsageFromEvents } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
+      '#infrastructure/ai-workflow/harness-module-loop.js'
     );
     const u = foldUsageFromEvents([
       { type: 'assistant/message', usage: { inputTokens: 10, outputTokens: 3 } },
@@ -116,7 +117,7 @@ describe('AGT loop cleanup contracts', () => {
 
   it('createLlmFromConfig prefers DeepSeek adapter when available', async () => {
     const { createLlmFromConfig } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
+      '#infrastructure/ai-workflow/harness-module-loop.js'
     );
     let used = '';
     let thinking;
@@ -146,7 +147,7 @@ describe('AGT loop cleanup contracts', () => {
 
   it('AiWorkflow.prepareOutboundMessages only trims', async () => {
     const { default: AiWorkflow } = await import(
-      '../../dist/src/infrastructure/ai-workflow/ai-workflow.js'
+      '#infrastructure/ai-workflow/ai-workflow.js'
     );
     globalThis.logger = globalThis.logger || {
       mark: () => {}, info: () => {}, warn: () => {}, error: () => {}, debug: () => {},

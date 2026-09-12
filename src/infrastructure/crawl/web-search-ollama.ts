@@ -17,11 +17,31 @@ const OLLAMA_LOCAL_PROXY_PATH = '/api/experimental/web_search'
 const DEFAULT_TIMEOUT_MS = 15_000
 const SNIPPET_MAX = 300
 
-function resolveOllamaBaseUrl(runtime: Record<string, any>) {
+type OllamaRuntime = {
+  ollama?: { baseUrl?: string; apiKey?: string; cloudApiKey?: string }
+  maxResults?: number
+}
+
+type OllamaSearchParams = {
+  query?: string
+  count?: number
+}
+
+type OllamaResultEntry = {
+  title?: unknown
+  url?: unknown
+  content?: unknown
+}
+
+type OllamaSearchResponse = {
+  results?: OllamaResultEntry[]
+}
+
+function resolveOllamaBaseUrl(runtime: OllamaRuntime) {
   return (runtime?.ollama?.baseUrl?.trim?.() || OLLAMA_DEFAULT_BASE_URL).replace(/\/+$/, '')
 }
 
-function resolveOllamaApiKey(runtime: Record<string, any>) {
+function resolveOllamaApiKey(runtime: OllamaRuntime) {
   return runtime?.ollama?.apiKey?.trim?.() || ''
 }
 
@@ -34,7 +54,7 @@ function isOllamaCloudBaseUrl(baseUrl: string) {
   }
 }
 
-function buildOllamaAttempts(baseUrl: string, runtime: Record<string, any>) {
+function buildOllamaAttempts(baseUrl: string, runtime: OllamaRuntime) {
   const apiKey = resolveOllamaApiKey(runtime)
   if (isOllamaCloudBaseUrl(baseUrl)) {
     return [{ baseUrl, path: OLLAMA_HOSTED_PATH, apiKey }]
@@ -55,9 +75,18 @@ function truncateSnippet(text: string) {
   return `${text.slice(0, SNIPPET_MAX)}…`
 }
 
+function isOllamaResultEntry(r: unknown): r is OllamaResultEntry & { url: string } {
+  return Boolean(
+    r &&
+      typeof r === 'object' &&
+      typeof (r as OllamaResultEntry).url === 'string' &&
+      ((r as OllamaResultEntry).url as string).trim()
+  )
+}
+
 export async function runOllamaSearch(
-  params: Record<string, any>,
-  runtime: Record<string, any> = {}
+  params: OllamaSearchParams,
+  runtime: OllamaRuntime = {}
 ) {
   const query = String(params.query || '').trim()
   if (!query) throw new Error('query is required')
@@ -68,7 +97,7 @@ export async function runOllamaSearch(
   const body = JSON.stringify({ query, max_results: count })
   const attempts = buildOllamaAttempts(baseUrl, runtime)
 
-  let payload: any
+  let payload: OllamaSearchResponse | undefined
   let lastError: Error | undefined
   for (const attempt of attempts) {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -106,7 +135,7 @@ export async function runOllamaSearch(
         }
         throw new Error(message)
       }
-      payload = await response.json()
+      payload = (await response.json()) as OllamaSearchResponse
       break
     } catch (err) {
       lastError = normalizeError(err)
@@ -117,9 +146,7 @@ export async function runOllamaSearch(
   if (!payload) throw lastError ?? new Error('Ollama web search failed')
 
   const results = Array.isArray(payload.results)
-    ? payload.results
-        .filter((r: any) => r && typeof r.url === 'string' && r.url.trim())
-        .slice(0, count)
+    ? payload.results.filter(isOllamaResultEntry).slice(0, count)
     : []
 
   return {
@@ -128,7 +155,7 @@ export async function runOllamaSearch(
     count: results.length,
     tookMs: Date.now() - startedAt,
     externalContent: buildExternalSearchMeta('ollama'),
-    results: results.map((result: any) => {
+    results: results.map((result) => {
       const snippet = truncateSnippet(typeof result.content === 'string' ? result.content : '')
       return {
         title: result.title ? wrapWebContent(String(result.title), 'web_search') : '',

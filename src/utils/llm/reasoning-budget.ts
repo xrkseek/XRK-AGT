@@ -74,10 +74,10 @@ function clearTemperatureUnlessExplicit(
  * thinkingType=`auto` 视为 adaptive（现行官方路径）；旧模型可显式设 `enabled`。
  */
 export function applyAnthropicThinking(
-  body: Record<string, any>,
-  config: Record<string, any> = {},
-  overrides: Record<string, any> = {},
-): Record<string, any> {
+  body: Record<string, unknown>,
+  config: Record<string, unknown> = {},
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   const thinkingType =
     overrides.thinkingType ??
     overrides.thinking_type ??

@@ -1,6 +1,8 @@
 /**
  * Playwright PageState — role refs、console、network、dialog
  */
+import type { ConsoleMessage, Dialog, Page, Request, Response } from 'playwright';
+
 export const BROWSER_REF_MARKER_ATTRIBUTE = 'data-xrk-browser-ref';
 export const AX_REF_PATTERN = /^ax\d+$/i;
 
@@ -10,47 +12,133 @@ const MAX_NETWORK = 500;
 const MAX_RECENT_DIALOGS = 20;
 const OBSERVED_DIALOG_TIMEOUT_MS = 120_000;
 
-/** @type {WeakMap<import('playwright').Page, object>} */
-const pageStates = new WeakMap();
-/** @type {WeakSet<import('playwright').Page>} */
-const observedPages = new WeakSet();
+export type RoleRefInfo = {
+  role: string;
+  name?: string;
+  nth?: number;
+  domMarker?: boolean;
+};
+
+export type ObservedDialogRecord = {
+  id: string;
+  type: string;
+  message: string;
+  defaultValue?: string;
+  openedAt: string;
+  closedAt?: string;
+  closedBy?: string;
+};
+
+export type PendingObservedDialog = {
+  id: string;
+  type: string;
+  message: string;
+  defaultValue?: string;
+  openedAt: string;
+  dialog: Dialog;
+};
+
+export type NetworkRequestRecord = {
+  id: string;
+  timestamp: string;
+  method: string;
+  url: string;
+  resourceType: string;
+  status?: number;
+  ok?: boolean;
+  failureText?: string;
+};
+
+export type ConsoleRecord = {
+  type: string;
+  text: string;
+  timestamp: string;
+  location: ReturnType<ConsoleMessage['location']>;
+};
+
+export type PageErrorRecord = {
+  message: string;
+  name?: string;
+  stack?: string;
+  timestamp: string;
+};
+
+export type ArmedDialogResponse = {
+  accept: boolean;
+  promptText?: string;
+  expiresAt: number;
+  timer?: ReturnType<typeof setTimeout>;
+};
+
+export type ObservedBrowserState = {
+  dialogs: {
+    pending: Array<{
+      id: string;
+      type: string;
+      message: string;
+      defaultValue?: string;
+      openedAt: string;
+    }>;
+    recent: ObservedDialogRecord[];
+  };
+};
+
+export type PageState = {
+  console: ConsoleRecord[];
+  errors: PageErrorRecord[];
+  requests: NetworkRequestRecord[];
+  requestIds: WeakMap<Request, string>;
+  nextRequestId: number;
+  nextObservedDialogId: number;
+  pendingDialogs: PendingObservedDialog[];
+  recentDialogs: ObservedDialogRecord[];
+  armedDialogResponse?: ArmedDialogResponse;
+  dialogAbortControllers: Set<AbortController>;
+  roleRefs?: Record<string, RoleRefInfo>;
+  roleRefsMode?: 'role' | 'aria' | string;
+  roleRefsFrameSelector?: string;
+};
+
+const pageStates = new WeakMap<Page, PageState>();
+const observedPages = new WeakSet<Page>();
 
 export class BrowserObservedDialogBlockedError extends Error {
-  browserState: any
+  browserState: ObservedBrowserState;
 
-  /** @param {object} browserState */
-  constructor(browserState: any) {
+  constructor(browserState: ObservedBrowserState) {
     super('Browser action blocked by a modal dialog.');
     this.name = 'BrowserObservedDialogBlockedError';
     this.browserState = browserState;
   }
 }
 
-export function isBrowserObservedDialogBlockedError(err: any) {
+export function isBrowserObservedDialogBlockedError(
+  err: unknown,
+): err is BrowserObservedDialogBlockedError {
   return err instanceof BrowserObservedDialogBlockedError;
 }
 
-function serializeObservedBrowserState(state: any) {
+function serializeObservedBrowserState(state: PageState): ObservedBrowserState {
   return {
     dialogs: {
-      pending: state.pendingDialogs.map((d: any) => ({
+      pending: state.pendingDialogs.map((d) => ({
         id: d.id,
         type: d.type,
         message: d.message,
         defaultValue: d.defaultValue,
-        openedAt: d.openedAt
+        openedAt: d.openedAt,
       })),
-      recent: state.recentDialogs
-    }
+      recent: state.recentDialogs,
+    },
   };
 }
 
-function appendRecentDialog(state: any, record: any) {
+function appendRecentDialog(state: PageState, record: ObservedDialogRecord) {
   state.recentDialogs.push(record);
   while (state.recentDialogs.length > MAX_RECENT_DIALOGS) state.recentDialogs.shift();
 }
 
-function abortActionsBlockedByDialog(state: any) {
+function abortActionsBlockedByDialog(state: PageState) {
   if (!state.dialogAbortControllers.size) return;
   const err = new BrowserObservedDialogBlockedError(serializeObservedBrowserState(state));
   for (const controller of state.dialogAbortControllers) {
@@ -59,43 +147,50 @@ function abortActionsBlockedByDialog(state: any) {
   state.dialogAbortControllers.clear();
 }
 
-async function settleObservedDialog({ state, pending, accept, promptText, closedBy }: any) {
-  state.pendingDialogs = state.pendingDialogs.filter((d: any) => d.id !== pending.id);
-  let finalClosedBy = closedBy;
+async function settleObservedDialog(params: {
+  state: PageState;
+  pending: PendingObservedDialog;
+  accept: boolean;
+  promptText?: string;
+  closedBy: string;
+}): Promise<ObservedDialogRecord> {
+  const { state, pending, accept, promptText } = params;
+  let closedBy = params.closedBy;
+  state.pendingDialogs = state.pendingDialogs.filter((d) => d.id !== pending.id);
   try {
     if (accept) await pending.dialog.accept(promptText);
     else await pending.dialog.dismiss();
-  } catch (err: any) {
-    const msg = err?.message || String(err);
+  } catch (err: unknown) {
+    const msg = Error.isError(err) ? err.message : String(err);
     if (!msg.toLowerCase().includes('no dialog is showing')) {
       if (closedBy === 'agent') state.pendingDialogs.push(pending);
       throw err;
     }
-    finalClosedBy = 'remote';
+    closedBy = 'remote';
   }
-  const record = {
+  const record: ObservedDialogRecord = {
     id: pending.id,
     type: pending.type,
     message: pending.message,
     defaultValue: pending.defaultValue,
     openedAt: pending.openedAt,
     closedAt: new Date().toISOString(),
-    closedBy: finalClosedBy
+    closedBy,
   };
   appendRecentDialog(state, record);
   return record;
 }
 
-function observeDialog(state: any, dialog: any) {
+function observeDialog(state: PageState, dialog: Dialog) {
   state.nextObservedDialogId += 1;
   const type = dialog.type();
-  const pending = {
+  const pending: PendingObservedDialog = {
     id: `d${state.nextObservedDialogId}`,
     type,
     message: dialog.message(),
     openedAt: new Date().toISOString(),
     dialog,
-    ...(type === 'prompt' ? { defaultValue: dialog.defaultValue() } : {})
+    ...(type === 'prompt' ? { defaultValue: dialog.defaultValue() } : {}),
   };
   state.pendingDialogs.push(pending);
 
@@ -108,7 +203,7 @@ function observeDialog(state: any, dialog: any) {
       pending,
       accept: armed.accept,
       promptText: armed.promptText,
-      closedBy: 'armed'
+      closedBy: 'armed',
     }).catch(() => {});
     return;
   }
@@ -119,49 +214,48 @@ function observeDialog(state: any, dialog: any) {
   abortActionsBlockedByDialog(state);
 }
 
-/** @param {import('playwright').Page} page */
-export function ensurePageState(page: any) {
+export function ensurePageState(page: Page): PageState {
   const existing = pageStates.get(page);
   if (existing) return existing;
 
-  const state: any = {
-    console: [] as any[],
-    errors: [] as any[],
-    requests: [] as any[],
+  const state: PageState = {
+    console: [],
+    errors: [],
+    requests: [],
     requestIds: new WeakMap(),
     nextRequestId: 0,
     nextObservedDialogId: 0,
-    pendingDialogs: [] as any[],
-    recentDialogs: [] as any[],
-    armedDialogResponse: undefined as any,
-    dialogAbortControllers: new Set<any>(),
+    pendingDialogs: [],
+    recentDialogs: [],
+    armedDialogResponse: undefined,
+    dialogAbortControllers: new Set(),
     roleRefs: undefined,
     roleRefsMode: undefined,
-    roleRefsFrameSelector: undefined
+    roleRefsFrameSelector: undefined,
   };
   pageStates.set(page, state);
 
   if (!observedPages.has(page)) {
     observedPages.add(page);
-    page.on('console', (msg: any) => {
+    page.on('console', (msg: ConsoleMessage) => {
       state.console.push({
         type: msg.type(),
         text: msg.text(),
         timestamp: new Date().toISOString(),
-        location: msg.location()
+        location: msg.location(),
       });
       if (state.console.length > MAX_CONSOLE) state.console.shift();
     });
-    page.on('pageerror', (err: any) => {
+    page.on('pageerror', (err: Error) => {
       state.errors.push({
         message: err.message || String(err),
         name: err.name,
         stack: err.stack,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
       if (state.errors.length > MAX_ERRORS) state.errors.shift();
     });
-    page.on('request', (req: any) => {
+    page.on('request', (req: Request) => {
       state.nextRequestId += 1;
       const id = `r${state.nextRequestId}`;
       state.requestIds.set(req, id);
@@ -170,29 +264,29 @@ export function ensurePageState(page: any) {
         timestamp: new Date().toISOString(),
         method: req.method(),
         url: req.url(),
-        resourceType: req.resourceType()
+        resourceType: req.resourceType(),
       });
       if (state.requests.length > MAX_NETWORK) state.requests.shift();
     });
-    page.on('response', (resp: any) => {
+    page.on('response', (resp: Response) => {
       const id = state.requestIds.get(resp.request());
       if (!id) return;
-      const rec = state.requests.find((r: any) => r.id === id);
+      const rec = state.requests.find((r) => r.id === id);
       if (rec) {
         rec.status = resp.status();
         rec.ok = resp.ok();
       }
     });
-    page.on('requestfailed', (req: any) => {
+    page.on('requestfailed', (req: Request) => {
       const id = state.requestIds.get(req);
       if (!id) return;
-      const rec = state.requests.find((r: any) => r.id === id);
+      const rec = state.requests.find((r) => r.id === id);
       if (rec) {
         rec.failureText = req.failure()?.errorText;
         rec.ok = false;
       }
     });
-    page.on('dialog', (dialog: any) => observeDialog(state, dialog));
+    page.on('dialog', (dialog: Dialog) => observeDialog(state, dialog));
     page.on('close', () => {
       if (state.armedDialogResponse?.timer) clearTimeout(state.armedDialogResponse.timer);
       state.armedDialogResponse = undefined;
@@ -208,22 +302,33 @@ export function ensurePageState(page: any) {
   return state;
 }
 
-export function getPageState(page: any) {
+export function getPageState(page: Page): PageState | null {
   return pageStates.get(page) ?? null;
 }
 
-export function storeRoleRefsOnPage(page: any, { refs, mode = 'role', frameSelector }: any) {
+export function storeRoleRefsOnPage(
+  page: Page,
+  params: {
+    refs: Record<string, RoleRefInfo>;
+    mode?: 'role' | 'aria' | string;
+    frameSelector?: string;
+  },
+): void {
+  const { refs, mode = 'role', frameSelector } = params;
   const state = ensurePageState(page);
   state.roleRefs = refs;
   state.roleRefsMode = mode;
   state.roleRefsFrameSelector = frameSelector;
 }
 
-export function getObservedBrowserStateForPage(page: any) {
+export function getObservedBrowserStateForPage(page: Page): ObservedBrowserState {
   return serializeObservedBrowserState(ensurePageState(page));
 }
 
-export function createObservedDialogAbortSignalForPage(page: any, parentSignal?: any) {
+export function createObservedDialogAbortSignalForPage(
+  page: Page,
+  parentSignal?: AbortSignal,
+): { signal: AbortSignal; cleanup: () => void } {
   const state = ensurePageState(page);
   const controller = new AbortController();
   const abortForDialog = () => {
@@ -247,27 +352,35 @@ export function createObservedDialogAbortSignalForPage(page: any, parentSignal?:
     cleanup: () => {
       state.dialogAbortControllers.delete(controller);
       parentSignal?.removeEventListener('abort', abortForParent);
-    }
+    },
   };
 }
 
-export function armObservedDialogResponseOnPage(page: any, { accept, promptText, timeoutMs }: any) {
+export function armObservedDialogResponseOnPage(
+  page: Page,
+  opts: { accept: boolean; promptText?: string; timeoutMs?: number },
+): void {
+  const { accept, promptText, timeoutMs } = opts;
   const state = ensurePageState(page);
   if (state.armedDialogResponse?.timer) clearTimeout(state.armedDialogResponse.timer);
   const ms = Math.max(1, Math.floor(Number(timeoutMs) || OBSERVED_DIALOG_TIMEOUT_MS));
   const expiresAt = Date.now() + ms;
-  const response: any = { accept, promptText, expiresAt };
+  const response: ArmedDialogResponse = { accept, promptText, expiresAt };
   response.timer = setTimeout(() => {
     if (state.armedDialogResponse === response) state.armedDialogResponse = undefined;
   }, ms);
   state.armedDialogResponse = response;
 }
 
-export async function respondToObservedDialogOnPage(page: any, { dialogId, accept, promptText }: any) {
+export async function respondToObservedDialogOnPage(
+  page: Page,
+  opts: { dialogId?: string; accept: boolean; promptText?: string },
+): Promise<ObservedDialogRecord> {
+  const { dialogId, accept, promptText } = opts;
   const state = ensurePageState(page);
-  let pending;
+  let pending: PendingObservedDialog | undefined;
   if (dialogId) {
-    pending = state.pendingDialogs.find((d: any) => d.id === dialogId);
+    pending = state.pendingDialogs.find((d) => d.id === dialogId);
     if (!pending) throw new Error(`Dialog "${dialogId}" is not pending.`);
   } else if (state.pendingDialogs.length === 1) {
     pending = state.pendingDialogs[0];
@@ -276,5 +389,5 @@ export async function respondToObservedDialogOnPage(page: any, { dialogId, accep
   } else {
     throw new Error('No dialog is pending.');
   }
-  return settleObservedDialog({ state, pending, accept, promptText, closedBy: 'agent' });
+  return settleObservedDialog({ state, pending: pending!, accept, promptText, closedBy: 'agent' });
 }

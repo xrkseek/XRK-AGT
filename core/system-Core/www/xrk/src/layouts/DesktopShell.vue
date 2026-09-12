@@ -29,12 +29,13 @@ function toggleCollapse() {
 
 <template>
   <a href="#main" class="skip-link">跳到主内容</a>
-  <div class="shell" :class="{ collapsed }">
-    <aside class="sidebar brutal-card">
+  <div class="shell shell-enter" :class="{ collapsed }">
+    <aside class="sidebar surface">
       <div class="brand">
-        <span class="logo" aria-hidden="true">★</span>
+        <span class="logo" aria-hidden="true">XRK</span>
         <div v-show="!collapsed" class="brand-text">
           <strong>XRK-AGT</strong>
+          <span class="brand-sub">Signal Board</span>
         </div>
       </div>
       <nav class="nav ink-scroll" aria-label="主菜单">
@@ -63,9 +64,12 @@ function toggleCollapse() {
     </aside>
 
     <div class="main-col">
-      <header class="topbar brutal-card">
-        <h1>{{ pageTitle }}</h1>
-        <NSpace size="small" align="center" :wrap="false">
+      <header class="topbar surface">
+        <div class="top-titles">
+          <span class="brand-mark">XRK-AGT</span>
+          <h1>{{ pageTitle }}</h1>
+        </div>
+        <NSpace size="small" align="center" :wrap="false" class="toolbar">
           <NInput
             v-model:value="keyDraft"
             size="small"
@@ -126,45 +130,57 @@ function toggleCollapse() {
   align-self: stretch;
   display: flex;
   flex-direction: column;
-  padding: 6px;
+  padding: 8px;
   overflow: hidden;
 }
 .shell.collapsed .sidebar {
-  flex-basis: 48px;
-  width: 48px;
+  flex-basis: 52px;
+  width: 52px;
 }
 
 .brand {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 4px 8px;
-  border-bottom: 2px solid var(--ink);
-  margin-bottom: 6px;
+  gap: 8px;
+  padding: 4px 4px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 22%, transparent);
+  margin-bottom: 8px;
 }
 .logo {
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
-  background: var(--yellow);
-  border: 2px solid var(--ink);
-  border-radius: 6px;
-  font-size: 12px;
-  box-shadow: var(--shadow);
+  background: var(--ink);
+  color: var(--accent);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
   flex-shrink: 0;
 }
 .brand-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
 }
 .brand-text strong {
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.brand-sub {
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
 }
 
 .nav {
@@ -172,55 +188,68 @@ function toggleCollapse() {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   overflow-x: hidden;
   overflow-y: auto;
 }
 .nav-link {
   flex-shrink: 0;
+  position: relative;
   display: grid;
   grid-template-columns: 22px 1fr auto;
   align-items: center;
   gap: 6px;
-  border: 1.5px solid transparent;
+  border: 0;
   background: transparent;
   color: var(--ink);
   text-align: left;
-  padding: 7px 6px;
-  border-radius: 6px;
+  padding: 8px 8px 8px 10px;
+  border-radius: 4px;
   font: inherit;
   font-size: var(--font-ui);
+  transition: background 160ms var(--ease-out), color 160ms var(--ease-out);
 }
 .shell.collapsed .nav-link {
   grid-template-columns: 1fr;
   justify-items: center;
-  padding: 8px 4px;
+  padding: 10px 4px;
+}
+.nav-link::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background 160ms var(--ease-out), top 160ms var(--ease-out), bottom 160ms var(--ease-out);
 }
 .nav-ico {
   width: 22px;
   height: 22px;
   display: grid;
   place-items: center;
-  border: 1.5px solid var(--ink);
-  border-radius: 6px;
-  background: var(--card);
-  color: var(--ink);
+  color: var(--muted);
 }
 .nav-link.active {
-  background: color-mix(in srgb, var(--accent) 55%, var(--card));
-  border-color: var(--ink);
-  box-shadow: var(--shadow);
+  background: var(--accent-dim);
   font-weight: 700;
 }
-.nav-link.active .nav-ico {
+.nav-link.active::before {
   background: var(--accent);
+  top: 12%;
+  bottom: 12%;
+}
+.nav-link.active .nav-ico {
+  color: var(--accent);
 }
 .nav-link:hover:not(.active) {
-  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  background: color-mix(in srgb, var(--line) 6%, transparent);
 }
 .hint {
   font-size: var(--font-xs);
-  opacity: 0.55;
+  opacity: 0.5;
   font-family: var(--mono);
 }
 .collapse-btn {
@@ -230,14 +259,18 @@ function toggleCollapse() {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  border: 1.5px solid var(--ink);
-  background: var(--paper-2);
-  border-radius: 6px;
-  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
+  background: transparent;
+  border-radius: 4px;
+  padding: 7px;
   font: inherit;
   font-size: var(--font-sm);
-  font-weight: 700;
-  box-shadow: var(--shadow);
+  font-weight: 600;
+  color: var(--muted);
+}
+.collapse-btn:hover {
+  color: var(--ink);
+  border-color: var(--accent);
 }
 .key-tag {
   display: inline-flex;
@@ -261,18 +294,41 @@ function toggleCollapse() {
 }
 .topbar {
   flex-shrink: 0;
-  height: var(--topbar-h);
+  min-height: var(--topbar-h);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px;
-  gap: 8px;
+  padding: 0 12px;
+  gap: 10px;
+}
+.top-titles {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.brand-mark {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  flex-shrink: 0;
 }
 .topbar h1 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.01em;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.toolbar {
+  flex-shrink: 0;
 }
 .content {
   flex: 1 1 0;

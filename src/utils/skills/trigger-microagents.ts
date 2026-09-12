@@ -11,28 +11,57 @@ import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
 
 const REL_ROOTS = [PROJECT_MICROAGENTS_DIR_REL, PROJECT_SKILLS_STANDARD_REL];
 
-/**
- * @param {string} raw
- * @returns {{ meta: object, body: string } | null}
- */
-export function parseMarkdownFrontmatter(raw: any) {
+type FrontmatterMeta = Record<string, unknown>;
+
+type ParsedFrontmatter = {
+  meta: FrontmatterMeta;
+  body: string;
+};
+
+type AgentDoc = {
+  name: string;
+  triggers: string[];
+  body: string;
+  path: string;
+};
+
+type BuildTriggeredMicroagentsOpts = {
+  userText?: string;
+  maxAgents?: number;
+  maxChars?: number;
+  extraRoots?: string[];
+};
+
+type BuildTriggeredMicroagentsResult = {
+  section: string;
+  activated: string[];
+};
+
+type MessageContentPart = {
+  text?: string;
+  [key: string]: unknown;
+};
+
+type ChatMessageLike = {
+  role?: string;
+  content?: unknown;
+  [key: string]: unknown;
+};
+
+export function parseMarkdownFrontmatter(raw: unknown): ParsedFrontmatter | null {
   if (typeof raw !== 'string') return null;
   const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!m) return null;
   try {
     const meta = YAML.parse(m[1]) || {};
     if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null;
-    return { meta, body: m[2] || '' };
+    return { meta: meta as FrontmatterMeta, body: m[2] || '' };
   } catch {
     return null;
   }
 }
 
-/**
- * @param {unknown} triggers
- * @returns {string[]}
- */
-function normalizeTriggers(triggers: any) {
+function normalizeTriggers(triggers: unknown): string[] {
   if (Array.isArray(triggers)) {
     return triggers.map((t) => String(t || '').trim()).filter(Boolean);
   }
@@ -40,11 +69,7 @@ function normalizeTriggers(triggers: any) {
   return [];
 }
 
-/**
- * @param {string} userText
- * @param {string} trigger
- */
-function triggerMatches(userText: any, trigger: any) {
+function triggerMatches(userText: unknown, trigger: unknown): boolean {
   const t = String(trigger || '').trim();
   if (!t) return false;
   const text = String(userText || '');
@@ -58,9 +83,9 @@ function triggerMatches(userText: any, trigger: any) {
   return text.toLowerCase().includes(t.toLowerCase());
 }
 
-function listMdFiles(dir: any, maxFiles = 80) {
-  const out: any[] = [];
-  const walk = (d: any, depth: any) => {
+function listMdFiles(dir: string, maxFiles = 80): string[] {
+  const out: string[] = [];
+  const walk = (d: string, depth: number): void => {
     if (out.length >= maxFiles || depth > 4) return;
     let entries;
     try {
@@ -86,12 +111,10 @@ function listMdFiles(dir: any, maxFiles = 80) {
 
 /**
  * 额外扫描 skills 树中带 triggers 的 SKILL.md（OpenHands 式）。
- * @param {string} root
- * @param {number} max
  */
-function listSkillMdWithTriggersHint(root: any, max = 120) {
-  const out: any[] = [];
-  const walk = (d: any, depth: any) => {
+function listSkillMdWithTriggersHint(root: string, max = 120): string[] {
+  const out: string[] = [];
+  const walk = (d: string, depth: number): void => {
     if (out.length >= max || depth > 5) return;
     let entries;
     try {
@@ -115,14 +138,10 @@ function listSkillMdWithTriggersHint(root: any, max = 120) {
   return out;
 }
 
-/**
- * @param {string} absFile
- * @param {string} rootReal
- */
-function loadAgentDoc(absFile: any, rootReal: any) {
+function loadAgentDoc(absFile: string, rootReal: string): AgentDoc | null {
   const real = realpathSyncOrResolve(absFile);
   if (!isPathInside(rootReal, real)) return null;
-  let raw;
+  let raw: string;
   try {
     const st = fs.statSync(real);
     if (st.size > 256_000) return null;
@@ -140,11 +159,9 @@ function loadAgentDoc(absFile: any, rootReal: any) {
   return { name, triggers, body, path: real };
 }
 
-/**
- * @param {{ userText?: string, maxAgents?: number, maxChars?: number, extraRoots?: string[] }} [opts]
- * @returns {{ section: string, activated: string[] }}
- */
-export function buildTriggeredMicroagentsSection(opts: any = {}) {
+export function buildTriggeredMicroagentsSection(
+  opts: BuildTriggeredMicroagentsOpts = {},
+): BuildTriggeredMicroagentsResult {
   const userText = String(opts.userText || '');
   if (!userText.trim()) return { section: '', activated: [] };
 
@@ -152,7 +169,7 @@ export function buildTriggeredMicroagentsSection(opts: any = {}) {
   const maxChars = Math.max(500, Number(opts.maxChars) || 12_000);
   const projectRoot = getProjectRoot();
   const workspaceRoot = resolveAgentWorkspaceAbs();
-  const roots = new Set();
+  const roots = new Set<string>();
 
   for (const base of [workspaceRoot, projectRoot]) {
     if (!base) continue;
@@ -166,11 +183,10 @@ export function buildTriggeredMicroagentsSection(opts: any = {}) {
     }
   }
 
-  /** @type {Map<string, { name: string, triggers: string[], body: string, path: string }>} */
-  const catalog = new Map();
-  for (const root of roots as Set<string>) {
+  const catalog = new Map<string, AgentDoc>();
+  for (const root of roots) {
     if (!fs.existsSync(root)) continue;
-    let rootReal;
+    let rootReal: string;
     try {
       rootReal = realpathSyncOrResolve(root);
       if (!fs.statSync(rootReal).isDirectory()) continue;
@@ -188,12 +204,12 @@ export function buildTriggeredMicroagentsSection(opts: any = {}) {
     }
   }
 
-  const activated = [];
-  const chunks = [];
+  const activated: string[] = [];
+  const chunks: string[] = [];
   let used = 0;
   for (const doc of catalog.values()) {
     if (activated.length >= maxAgents) break;
-    const hit = doc.triggers.some((t: any) => triggerMatches(userText, t));
+    const hit = doc.triggers.some((t) => triggerMatches(userText, t));
     if (!hit) continue;
     const block = `### ${doc.name}\n\n${doc.body}\n`;
     if (used + block.length > maxChars && activated.length > 0) break;
@@ -212,19 +228,20 @@ export function buildTriggeredMicroagentsSection(opts: any = {}) {
 
 /**
  * 从 messages 取最后一条用户文本。
- * @param {Array<object>} messages
  */
-export function extractLastUserText(messages: any) {
+export function extractLastUserText(messages: unknown): string {
   if (!Array.isArray(messages)) return '';
   for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i];
-    if ((m?.role || '').toLowerCase() !== 'user') continue;
+    const m = messages[i] as ChatMessageLike | undefined;
+    if (!m || (m.role || '').toLowerCase() !== 'user') continue;
     const c = m.content;
     if (typeof c === 'string') return c;
     if (Array.isArray(c)) {
-      return c.map((p) => (typeof p === 'string' ? p : p?.text || '')).join('\n');
+      return c.map((p) => (typeof p === 'string' ? p : (p as MessageContentPart)?.text || '')).join('\n');
     }
-    if (c && typeof c === 'object' && typeof c.text === 'string') return c.text;
+    if (c && typeof c === 'object' && typeof (c as MessageContentPart).text === 'string') {
+      return (c as MessageContentPart).text!;
+    }
   }
   return '';
 }

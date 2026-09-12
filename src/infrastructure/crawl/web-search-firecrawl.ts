@@ -20,11 +20,60 @@ import {
 const DEFAULT_FIRECRAWL_BASE_URL = 'https://api.firecrawl.dev'
 const ALLOWED_FIRECRAWL_HOSTS = new Set(['api.firecrawl.dev'])
 
-function resolveFirecrawlApiKey(runtime: Record<string, any>) {
+type FirecrawlRuntime = {
+  firecrawl?: { apiKey?: string; baseUrl?: string }
+  timeoutSeconds?: number
+  cacheTtlMinutes?: number
+}
+
+type FirecrawlSearchParams = {
+  query?: string
+  count?: number
+  scrape_results?: boolean
+  sources?: unknown[]
+  categories?: unknown[]
+}
+
+type FirecrawlSearchItem = {
+  title: string
+  url: string
+  description?: string
+  content?: string
+  published?: string
+  siteName?: string
+}
+
+type FirecrawlEntry = {
+  url?: string
+  sourceURL?: string
+  sourceUrl?: string
+  title?: string
+  description?: string
+  snippet?: string
+  summary?: string
+  markdown?: string
+  content?: string
+  text?: string
+  publishedDate?: string
+  published?: string
+  metadata?: {
+    sourceURL?: string
+    title?: string
+    publishedTime?: string
+  }
+}
+
+type FirecrawlSearchResponse = {
+  data?: unknown
+  results?: unknown
+  web?: { results?: unknown }
+}
+
+function resolveFirecrawlApiKey(runtime: FirecrawlRuntime) {
   return runtime?.firecrawl?.apiKey?.trim?.() || ''
 }
 
-function resolveFirecrawlBaseUrl(runtime: Record<string, any>) {
+function resolveFirecrawlBaseUrl(runtime: FirecrawlRuntime) {
   return (runtime?.firecrawl?.baseUrl?.trim?.() || DEFAULT_FIRECRAWL_BASE_URL).replace(/\/+$/, '')
 }
 
@@ -51,29 +100,33 @@ function resolveSiteName(urlRaw: string) {
   }
 }
 
-function resolveSearchItems(payload: any) {
+function asFirecrawlEntry(value: unknown): FirecrawlEntry | null {
+  if (!value || typeof value !== 'object') return null
+  return value as FirecrawlEntry
+}
+
+function resolveSearchItems(payload: FirecrawlSearchResponse): FirecrawlSearchItem[] {
+  const data =
+    payload.data && typeof payload.data === 'object'
+      ? (payload.data as Record<string, unknown>)
+      : undefined
   const candidates = [
     payload.data,
     payload.results,
-    payload.data?.results,
-    payload.data?.data,
-    payload.data?.web,
+    data?.results,
+    data?.data,
+    data?.web,
     payload.web?.results
   ]
   const rawItems = candidates.find((c) => Array.isArray(c))
   if (!Array.isArray(rawItems)) return []
 
-  const items: Array<{
-    title: string
-    url: string
-    description?: string
-    content?: string
-    published?: string
-    siteName?: string
-  }> = []
-  for (const entry of rawItems) {
-    if (!entry || typeof entry !== 'object') continue
-    const metadata = entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : {}
+  const items: FirecrawlSearchItem[] = []
+  for (const raw of rawItems) {
+    const entry = asFirecrawlEntry(raw)
+    if (!entry) continue
+    const metadata =
+      entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : {}
     const href =
       entry.url || entry.sourceURL || entry.sourceUrl || metadata.sourceURL || ''
     if (!href) continue
@@ -98,8 +151,8 @@ export function missingFirecrawlApiKeyPayload() {
 }
 
 export async function runFirecrawlSearch(
-  params: Record<string, any>,
-  runtime: Record<string, any> = {}
+  params: FirecrawlSearchParams,
+  runtime: FirecrawlRuntime = {}
 ) {
   const apiKey = resolveFirecrawlApiKey(runtime)
   if (!apiKey) return missingFirecrawlApiKeyPayload()
@@ -130,13 +183,13 @@ export async function runFirecrawlSearch(
     })
   )
   const cached = readSearchCache(SEARCH_CACHE, cacheKey) as
-    | { value: Record<string, any> }
+    | { value: Record<string, unknown> }
     | null
     | undefined
   if (cached) return { ...cached.value, cached: true }
 
   const { url: endpoint, mode } = await resolveFirecrawlEndpoint(baseUrl)
-  const body: Record<string, any> = { query, limit: count }
+  const body: Record<string, unknown> = { query, limit: count }
   if (sources.length) body.sources = sources
   if (categories.length) body.categories = categories
   if (scrapeResults) body.scrapeOptions = { formats: ['markdown'] }
@@ -144,7 +197,7 @@ export async function runFirecrawlSearch(
   const withEndpoint =
     mode === 'selfHosted' ? withSelfHostedWebSearchEndpoint : withTrustedWebSearchEndpoint
   const start = Date.now()
-  const data = (await withEndpoint(
+  const data = await withEndpoint(
     {
       url: endpoint,
       timeoutSeconds,
@@ -164,9 +217,9 @@ export async function runFirecrawlSearch(
           `Firecrawl Search API error (${res.status}): ${detail || res.statusText}`
         )
       }
-      return res.json()
+      return res.json() as Promise<FirecrawlSearchResponse>
     }
-  )) as any
+  )
 
   const items = resolveSearchItems(data)
   const payload = {

@@ -7,35 +7,111 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
 import { iterateSSE } from '#utils/llm/sse-utils.js';
 
+type LlmClientConfig = Record<string, unknown> & {
+  model?: string;
+  chatModel?: string;
+  baseUrl?: string;
+  path?: string;
+  apiKey?: string;
+  authMode?: string;
+  headers?: Record<string, string>;
+  timeout?: number;
+  deployment?: string;
+  azureDeployment?: string;
+  apiVersion?: string;
+  proxy?: unknown;
+};
+
+type ChatMessage = {
+  role?: string;
+  content?: unknown;
+  tool_calls?: unknown;
+  [key: string]: unknown;
+};
+
+type LlmOverrides = Record<string, unknown> & {
+  headers?: Record<string, string>;
+  stream?: boolean;
+  model?: string;
+  chatModel?: string;
+};
+
+type OnDeltaCallback = (chunk: string, meta?: Record<string, unknown>) => void;
+
+type ToolCallDelta = {
+  index?: number;
+  id?: string;
+  type?: string;
+  function?: { name?: string; arguments?: string };
+};
+
+type ToolCallAccumulator = {
+  id: string;
+  type: string;
+  function: { name: string; arguments: string };
+};
+
+type ChatCompletionBody = Record<string, unknown> & {
+  model?: string;
+  tools?: unknown[];
+};
+
+type ChatCompletionResponse = {
+  usage?: unknown;
+  choices?: Array<{
+    message?: {
+      content?: string;
+      tool_calls?: unknown[];
+    };
+    delta?: {
+      content?: string;
+      tool_calls?: ToolCallDelta[];
+    };
+    finish_reason?: string | null;
+  }>;
+};
+
+type StreamCollector = {
+  toolCalls: ToolCallAccumulator[];
+  content: string;
+  reasoningContent: string;
+  finishReason: string | null;
+};
+
 /**
- * Azure OpenAI / Foundry Chat Completions 客户端
+ * Azure OpenAI / Foundry Chat Completions ???
  * @see https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle
  * @see https://learn.microsoft.com/en-us/rest/api/aifoundry/azureopenai/chat
  *
- * - 经典部署：`/openai/deployments/{deployment}/chat/completions?api-version=YYYY-MM-DD`
- * - Foundry v1：`path=/openai/v1/chat/completions`（`api-version` 可选；body 带 `model`）
- * - 认证：默认 header `api-key`；Microsoft Entra：`authMode: bearer` → `Authorization: Bearer`
- * - deployment（真实部署名）在 yaml；对外 model=provider 约定不变
+ * - ?????`/openai/deployments/{deployment}/chat/completions?api-version=YYYY-MM-DD`
+ * - Foundry v1?`path=/openai/v1/chat/completions`?`api-version` ???body ? `model`?
+ * - ????? header `api-key`?Microsoft Entra?`authMode: bearer` ? `Authorization: Bearer`
+ * - deployment???????? yaml??? model=provider ????
+ *
+ * harness???? Azure adapter?? OpenAICompatible?Chat Completions????????????
  */
 export default class AzureOpenAILLMClient {
-  [key: string]: any;
+  config: LlmClientConfig;
+  endpoint: string;
   _timeout = 360000;
 
-  constructor(config: any = {}) {
+  constructor(config: LlmClientConfig = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
-    this._timeout = config.timeout ?? 360000;
+    this._timeout = Number(config.timeout ?? 360000);
   }
 
-  normalizeEndpoint(config: any) {
-    const base = (config.baseUrl ?? '').replace(/\/+$/, '');
-    if (!base) throw new Error('azure_openai: 未配置 baseUrl（Azure endpoint）');
+  normalizeEndpoint(config: LlmClientConfig) {
+    const base = String(config.baseUrl ?? '').replace(/\/+$/, '');
+    if (!base) throw new Error('azure_openai: ??? baseUrl?Azure endpoint?');
 
-    const deployment = encodeURIComponent(config.deployment ?? config.azureDeployment ?? config.model ?? config.chatModel ?? '');
-    if (!deployment && !config.path) throw new Error('azure_openai: 未配置 deployment（Azure 部署名）或 path');
+    const deployment = encodeURIComponent(
+      String(config.deployment ?? config.azureDeployment ?? config.model ?? config.chatModel ?? ''),
+    );
+    if (!deployment && !config.path) throw new Error('azure_openai: ??? deployment?Azure ????? path');
 
     const path = (config.path || `/openai/deployments/${deployment}/chat/completions`).replace(/^\/?/, '/');
-    const apiVersion = (config.apiVersion || '').toString().trim();
+    const apiVersion = String(config.apiVersion || '').trim();
     const url = new URL(`${base}${path}`);
     if (apiVersion) {
       url.searchParams.set('api-version', apiVersion);
@@ -47,10 +123,10 @@ export default class AzureOpenAILLMClient {
     return this._timeout ?? 360000;
   }
 
-  buildHeaders(extra: any = {}) {
-    const headers = {
+  buildHeaders(extra: Record<string, string> = {}) {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...extra
+      ...extra,
     };
 
     if (this.config.apiKey) {
@@ -70,12 +146,12 @@ export default class AzureOpenAILLMClient {
     return headers;
   }
 
-  async transformMessages(messages: any) {
+  async transformMessages(messages: ChatMessage[]) {
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
-  buildBody(messages: any, overrides: any = {}) {
-    const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, undefined);
+  buildBody(messages: ChatMessage[], overrides: LlmOverrides = {}): ChatCompletionBody {
+    const body = buildOpenAIChatCompletionsBody(messages, this.config, overrides, undefined) as ChatCompletionBody;
     const pathHint = String(this.config.path || this.endpoint || '');
     const isFoundryV1 = /\/openai\/v1\//i.test(pathHint);
 
@@ -90,7 +166,7 @@ export default class AzureOpenAILLMClient {
           this.config.azureDeployment;
       }
     } else {
-      // 经典 deployments/{name}/chat/completions：模型由路径决定，勿再传 model
+      // ?? deployments/{name}/chat/completions???????????? model
       delete body.model;
     }
 
@@ -98,35 +174,35 @@ export default class AzureOpenAILLMClient {
     return body;
   }
 
-  async chat(messages: any, overrides: any = {}) {
+  async chat(messages: ChatMessage[], overrides: LlmOverrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     const resp = await fetch(
       this.endpoint,
-      (buildFetchOptionsWithProxy(this.config, {
+      buildFetchOptionsWithProxy(this.config as Parameters<typeof buildFetchOptionsWithProxy>[0], {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
-        body: JSON.stringify(this.buildBody(transformedMessages, overrides)),
-        signal: AbortSignal.timeout(this.timeout)
-      }) as any)
+        body: JSON.stringify(this.buildBody(transformedMessages as ChatMessage[], overrides)),
+        signal: AbortSignal.timeout(this.timeout),
+      }) as RequestInit,
     );
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
-        `AzureOpenAILLMClient 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
-        { status: resp.status, headers: resp.headers as any }
+        `AzureOpenAILLMClient ????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        { status: resp.status, headers: resp.headers as { get?: (name: string) => string | null } },
       );
     }
 
-    const json: any = await resp.json();
+    const json = (await resp.json()) as ChatCompletionResponse;
     logPromptCacheUsage(json?.usage, 'AzureOpenAILLMClient');
     const message = json?.choices?.[0]?.message;
     const content = message?.content || '';
     if (message?.tool_calls?.length) {
       RuntimeUtil.makeLog(
         'info',
-        `[AzureOpenAILLMClient] 单次补全含 tool_calls×${message.tool_calls.length}（本客户端不执行工具）`,
+        `[AzureOpenAILLMClient] ????? tool_calls�${message.tool_calls.length}???????????`,
         'LLMFactory',
       );
       return { content, tool_calls: message.tool_calls };
@@ -134,57 +210,46 @@ export default class AzureOpenAILLMClient {
     return content;
   }
 
-  async chatStream(messages: any, onDelta: any, overrides: any = {}) {
+  async chatStream(messages: ChatMessage[], onDelta: OnDeltaCallback, overrides: LlmOverrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
     await ensureMessagesImagesDataUrl(transformedMessages, { timeoutMs: this.timeout });
     const resp = await fetch(
       this.endpoint,
-      (buildFetchOptionsWithProxy(this.config, {
+      buildFetchOptionsWithProxy(this.config as Parameters<typeof buildFetchOptionsWithProxy>[0], {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
-        body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
-        signal: AbortSignal.timeout(this.timeout)
-      }) as any)
+        body: JSON.stringify(this.buildBody(transformedMessages as ChatMessage[], { ...overrides, stream: true })),
+        signal: AbortSignal.timeout(this.timeout),
+      }) as RequestInit,
     );
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`AzureOpenAILLMClient 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw new Error(`AzureOpenAILLMClient ??????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
 
-    const collector = { toolCalls: [], content: '', reasoningContent: '', finishReason: null };
-    if (typeof this._consumeSSEWithToolCalls === 'function') {
-      await this._consumeSSEWithToolCalls(resp, onDelta, collector, overrides);
-    } else {
-      // fallback: text-only SSE
-      const { iterateSSE } = await import('#utils/llm/sse-utils.js');
-      for await (const { data } of iterateSSE(resp as any)) {
-        try {
-          const j = JSON.parse(data);
-          const delta = j?.choices?.[0]?.delta?.content;
-          if (delta) {
-            collector.content += delta;
-            if (typeof onDelta === 'function') onDelta(delta);
-          }
-        } catch { /* ignore */ }
-      }
-    }
+    const collector: StreamCollector = { toolCalls: [], content: '', reasoningContent: '', finishReason: null };
+    await this._consumeSSEWithToolCalls(resp, onDelta, collector);
     if (collector.toolCalls.length) {
       RuntimeUtil.makeLog(
         'info',
-        `[AzureOpenAILLMClient] 流式单次补全含 tool_calls×${collector.toolCalls.length}（本客户端不执行工具）`,
+        `[AzureOpenAILLMClient] ??????? tool_calls�${collector.toolCalls.length}???????????`,
         'LLMFactory',
       );
     }
     return collector.content;
   }
 
-  async _consumeSSEWithToolCalls(resp: any, onDelta: any, collector: any, options: any = {}) {
-    const toolCallsMap = new Map();
+  async _consumeSSEWithToolCalls(
+    resp: Response,
+    onDelta: OnDeltaCallback,
+    collector: StreamCollector,
+  ) {
+    const toolCallsMap = new Map<number, ToolCallAccumulator>();
 
-    for await (const { data } of iterateSSE(resp as any)) {
+    for await (const { data } of iterateSSE(resp as Parameters<typeof iterateSSE>[0])) {
       try {
-        const json = JSON.parse(data);
+        const json = JSON.parse(data) as ChatCompletionResponse;
         const delta = json?.choices?.[0]?.delta;
         const finishReason = json?.choices?.[0]?.finish_reason;
 
@@ -209,11 +274,11 @@ export default class AzureOpenAILLMClient {
               toolCallsMap.set(index, {
                 id: '',
                 type: 'function',
-                function: { name: '', arguments: '' }
+                function: { name: '', arguments: '' },
               });
             }
 
-            const toolCall = toolCallsMap.get(index);
+            const toolCall = toolCallsMap.get(index)!;
             if (tc.id) toolCall.id = tc.id;
             if (tc.function?.name) toolCall.function.name = tc.function.name;
             if (tc.function?.arguments) {
@@ -228,7 +293,7 @@ export default class AzureOpenAILLMClient {
 
     if (toolCallsMap.size > 0) {
       const sortedIndices = Array.from(toolCallsMap.keys()).sort((a, b) => a - b);
-      collector.toolCalls = sortedIndices.map(index => toolCallsMap.get(index));
+      collector.toolCalls = sortedIndices.map((index) => toolCallsMap.get(index)!);
     }
   }
 }

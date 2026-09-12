@@ -77,10 +77,18 @@ export function isPrivateOrLoopbackAddress(address: unknown): boolean {
   return /^fe80:/i.test(ip) || /^fc00:/i.test(ip) || /^fd00:/i.test(ip);
 }
 
+function serverAuthConfig(): Record<string, unknown> {
+  const server = runtimeConfig.server;
+  if (!server || typeof server !== 'object') return {};
+  const auth = (server as Record<string, unknown>).auth;
+  if (!auth || typeof auth !== 'object' || Array.isArray(auth)) return {};
+  return auth as Record<string, unknown>;
+}
+
 /** tools.file.runEnabled 时强制 loopback 也要 Key（默认 true） */
 export function shouldForceAuthOnLoopbackWhenToolsRun(): boolean {
   if (getAiWorkflowConfigOptional()?.tools?.file?.runEnabled !== true) return false;
-  return (runtimeConfig as any).server?.auth?.requireLoopbackAuthWhenToolsRun !== false;
+  return serverAuthConfig().requireLoopbackAuthWhenToolsRun !== false;
 }
 
 /** @returns 未通过时返回 401 响应 */
@@ -91,6 +99,6 @@ export function ensureSystemCoreAuth(
   _context = 'system-Core',
 ): unknown {
   if (!bot?.checkApiAuthorization?.(req)) {
-    return HttpResponse.unauthorized(res as any, '未授权');
+    return HttpResponse.unauthorized(res as Parameters<typeof HttpResponse.unauthorized>[0], '未授权');
   }
 }

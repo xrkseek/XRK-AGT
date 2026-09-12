@@ -1,3 +1,5 @@
+import { normalizeError } from '#utils/normalize-error.js';
+
 /**
  * 解析 LLM / MCP 工具 arguments。
  * 唯一解析入口：MCPServer.handleToolCall；历史转换等可复用本模块。
@@ -82,7 +84,7 @@ export function parseToolCallArguments(rawInput: unknown): ParseToolArgsOk | Par
         snippet: snippetOf(s),
       };
     } catch (err) {
-      lastErr = err instanceof Error && err.message != null ? String(err.message) : String(err);
+      lastErr = normalizeError(err).message;
       break;
     }
   }

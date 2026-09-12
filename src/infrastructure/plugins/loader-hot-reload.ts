@@ -1,23 +1,34 @@
 import paths from '#utils/paths.js'
 import Handler from './handler.js'
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
+import { normalizeError } from '#utils/normalize-error.js'
+import { getRuntimeGlobal } from '#utils/runtime-globals.js'
 import { findInCoreSubDirs } from '#utils/core-fs.js'
+import type { LoadedPlugin, PluginFileRef, PluginMeta } from './loader-discovery.js'
 
-const gLogger = (): any => (globalThis as any).logger
+type LoggerLike = {
+  warn?: (msg: unknown) => void
+  error?: (msg: unknown, err?: unknown) => void
+  mark?: (msg: unknown) => void
+}
+
+const gLogger = (): LoggerLike | undefined => getRuntimeGlobal<LoggerLike>('logger')
+
+type PluginSlot = Pick<PluginMeta, 'key'> & { plugin?: LoadedPlugin }
 
 type HotReloadHost = {
   task: Array<{ name: string; job?: { cancel: () => void } }>
-  priority: Array<{ key: string; plugin?: any }>
-  extended: Array<{ key: string; plugin?: any }>
-  eventSubscribers: Map<string, Array<((data: any) => void) & { _pluginKey?: string }>>
+  priority: PluginSlot[]
+  extended: PluginSlot[]
+  eventSubscribers: Map<string, Array<((data: unknown) => void) & { _pluginKey?: string }>>
   _pluginQualifiedKey: (key: string) => string
   _pluginFileKey: (key: string) => string
   identifyDefaultMsgHandlers: () => void
-  importPlugin: (file: { name: string; path: string }, acc: any[], flag: boolean) => Promise<any[]>
+  importPlugin: (file: PluginFileRef, acc: unknown[], flag: boolean) => Promise<PluginMeta[]>
   _rebuildPluginGraph: () => void
   unloadPlugin: (key: string) => void
   findPluginFilePath: (key: string) => Promise<string | null>
-  buildPluginFileObject: (filePath: string, key: string) => { name: string; path: string }
+  buildPluginFileObject: (filePath: string, key: string) => PluginFileRef
 }
 
 export const hotReloadMethods = {
@@ -47,7 +58,7 @@ export const hotReloadMethods = {
     })
 
     // 清理插件数组
-    const removedPlugins: Array<{ key: string; plugin?: any }> = []
+    const removedPlugins: PluginSlot[] = []
     this.priority = this.priority.filter((p) => {
       if (matchesKey(p.key)) {
         removedPlugins.push(p)
@@ -65,17 +76,19 @@ export const hotReloadMethods = {
 
     // 释放插件实例资源
     for (const pluginData of removedPlugins) {
-      const inst = pluginData.plugin
+      const inst = pluginData.plugin as LoadedPlugin & { destroy?: () => unknown }
       if (typeof inst?.destroy === 'function') {
-        Promise.resolve(inst.destroy()).catch((err: Error) => {
-          gLogger()?.warn?.(`插件 ${normalizedKey} destroy 失败: ${err.message}`)
+        Promise.resolve(inst.destroy()).catch((err: unknown) => {
+          gLogger()?.warn?.(`插件 ${normalizedKey} destroy 失败: ${normalizeError(err).message}`)
         })
       }
     }
 
     // 清理 Handler（使用插件的命名空间）
     for (const pluginData of removedPlugins) {
-      const namespace = pluginData.plugin?.namespace || normalizedKey
+      const namespace =
+        (typeof pluginData.plugin?.namespace === 'string' ? pluginData.plugin.namespace : '') ||
+        normalizedKey
       Handler.del(namespace)
     }
 
@@ -100,7 +113,7 @@ export const hotReloadMethods = {
     try {
       const pluginDirs = await paths.getCoreSubDirs('plugin')
       return findInCoreSubDirs(pluginDirs, key)
-    } catch (error) {
+    } catch (error: unknown) {
       gLogger()?.error?.(`查找插件文件失败: ${key}`, error)
       return null
     }
@@ -109,15 +122,17 @@ export const hotReloadMethods = {
   /**
    * 构建插件文件对象（用于导入）
    */
-  buildPluginFileObject(filePath: string, key: string) {
+  buildPluginFileObject(filePath: string, key: string): PluginFileRef {
     return {
       name: key,
-      path: filePath
+      path: filePath,
+      core: null
     }
   },
 
   /**
-   * 重新加载插件（手动/工具调用；无文件监视）
+   * 重新加载插件（仅手动/工具调用）。
+   * ADR-0004：TS dist 无文件监视热重载；改代码或 YAML 需重启。此处不提供 watch()。
    */
   async changePlugin(this: HotReloadHost, key: string, filePath: string | null = null) {
     if (!key) {
@@ -141,9 +156,9 @@ export const hotReloadMethods = {
         this._rebuildPluginGraph()
         gLogger()?.mark?.(`[重新加载插件][${key}] 更新了 ${loadedPlugins.length} 个插件实例`)
       }
-    } catch (error) {
+    } catch (error: unknown) {
       errorHandler.handle(
-        error as Error,
+        normalizeError(error),
         { context: 'changePlugin', pluginKey: key, code: ErrorCodes.PLUGIN_LOAD_FAILED },
         true
       )

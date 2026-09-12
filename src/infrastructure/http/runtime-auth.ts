@@ -13,10 +13,28 @@ import {
   isLoopbackAuthExempt,
   shouldForceAuthOnLoopbackWhenToolsRun
 } from '#infrastructure/http/auth.js'
+import type {
+  AuthWhitelistRule,
+  RuntimeAuthHost,
+  RuntimeHttpRequest
+} from '#infrastructure/http/runtime-host-types.js'
+import { normalizeError } from '#utils/normalize-error.js'
 
-type RuntimeLike = Record<string, any>
+export type { RuntimeAuthHost, AuthWhitelistRule }
 
-type WhitelistRule = { type: 'regex' | 'prefix' | 'exact'; value: RegExp | string }
+type WhitelistRule = AuthWhitelistRule
+
+function rec(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+}
+
+function serverAuth(): Record<string, unknown> {
+  return rec(rec(runtimeConfig.server).auth)
+}
+
+function apiKeyCfg(): Record<string, unknown> {
+  return rec(serverAuth().apiKey)
+}
 
 export function maskSensitive(value: string, keepStart = 6, keepEnd = 4) {
   if (typeof value !== 'string' || value.length === 0) return ''
@@ -24,8 +42,8 @@ export function maskSensitive(value: string, keepStart = 6, keepEnd = 4) {
   return `${value.slice(0, keepStart)}${'*'.repeat(value.length - keepStart - keepEnd)}${value.slice(-keepEnd)}`
 }
 
-export async function generateApiKey(runtime: RuntimeLike) {
-  const apiKeyConfig = (runtimeConfig as any).server.auth.apiKey || {}
+export async function generateApiKey(runtime: RuntimeAuthHost) {
+  const apiKeyConfig = apiKeyCfg()
 
   if (apiKeyConfig.enabled === false) {
     RuntimeUtil.makeLog('info', '⚠ API密钥认证已禁用', '服务器')
@@ -34,7 +52,9 @@ export async function generateApiKey(runtime: RuntimeLike) {
 
   const apiKeyPath = path.join(
     paths.root,
-    apiKeyConfig.file || 'config/server_config/api_key.json'
+    typeof apiKeyConfig.file === 'string' && apiKeyConfig.file
+      ? apiKeyConfig.file
+      : 'config/server_config/api_key.json'
   )
 
   try {
@@ -43,7 +63,7 @@ export async function generateApiKey(runtime: RuntimeLike) {
       const loaded = typeof keyData?.key === 'string' ? keyData.key.trim() : ''
       if (!loaded) throw new Error('empty key')
       runtime.apiKey = loaded
-      ;(RuntimeUtil as any).apiKey = runtime.apiKey
+      RuntimeUtil.apiKey = runtime.apiKey
       RuntimeUtil.makeLog('debug', '从文件加载API密钥', '服务器')
       return runtime.apiKey
     }
@@ -51,7 +71,7 @@ export async function generateApiKey(runtime: RuntimeLike) {
     // 文件不存在，生成新密钥
   }
 
-  const keyLength = apiKeyConfig.length || 64
+  const keyLength = Number(apiKeyConfig.length) || 64
   runtime.apiKey = RuntimeUtil.randomString(keyLength)
 
   await RuntimeUtil.mkdir(path.dirname(apiKeyPath))
@@ -73,7 +93,7 @@ export async function generateApiKey(runtime: RuntimeLike) {
     await fs.chmod(apiKeyPath, 0o600).catch(() => {})
   }
 
-  ;(RuntimeUtil as any).apiKey = runtime.apiKey
+  RuntimeUtil.apiKey = runtime.apiKey
   const maskedKey = maskSensitive(runtime.apiKey)
   RuntimeUtil.makeLog('success', `⚡ 生成新API密钥：${maskedKey}`, '服务器')
   return runtime.apiKey
@@ -82,9 +102,9 @@ export async function generateApiKey(runtime: RuntimeLike) {
 /**
  * 控制台读取：是否要求 API Key（公开，不泄露密钥）。
  */
-export function getAuthModePublicSnapshot(runtime?: RuntimeLike) {
-  const enabled = (runtimeConfig as any).server?.auth?.apiKey?.enabled !== false
-  const hasKey = Boolean(runtime?.apiKey || (RuntimeUtil as any).apiKey)
+export function getAuthModePublicSnapshot(runtime?: RuntimeAuthHost) {
+  const enabled = apiKeyCfg().enabled !== false
+  const hasKey = Boolean(runtime?.apiKey || RuntimeUtil.apiKey)
   return {
     apiKeyEnabled: enabled,
     requiresKey: enabled && hasKey
@@ -92,9 +112,9 @@ export function getAuthModePublicSnapshot(runtime?: RuntimeLike) {
 }
 
 export function checkApiAuthorization(
-  runtime: RuntimeLike,
-  req: any,
-  options: Record<string, any> = {}
+  runtime: RuntimeAuthHost,
+  req: RuntimeHttpRequest | null | undefined,
+  options: Record<string, unknown> = {}
 ) {
   if (!req) {
     RuntimeUtil.makeLog('debug', '[Auth] checkApiAuthorization: req 为空', '认证')
@@ -102,7 +122,7 @@ export function checkApiAuthorization(
   }
 
   // 关闭 API Key 时远程也应放行（原先 enabled=false 仍因无密钥一律拒绝）
-  if ((runtimeConfig as any).server?.auth?.apiKey?.enabled === false) {
+  if (apiKeyCfg().enabled === false) {
     return true
   }
 
@@ -112,7 +132,7 @@ export function checkApiAuthorization(
   const loopbackExempt =
     typeof options.loopbackExempt === 'boolean'
       ? options.loopbackExempt
-      : (runtimeConfig as any).server?.auth?.loopbackExempt === true
+      : serverAuth().loopbackExempt === true
   if (!forceAuth && loopbackExempt && isLoopbackAuthExempt(req)) {
     return true
   }
@@ -159,17 +179,17 @@ export function checkApiAuthorization(
         '认证'
       )
     return ok
-  } catch (error: any) {
+  } catch (error: unknown) {
     RuntimeUtil.makeLog(
       'error',
-      `[Auth] API 认证异常：${error.message} path=${requestPath}`,
+      `[Auth] API 认证异常：${normalizeError(error).message} path=${requestPath}`,
       '认证'
     )
     return false
   }
 }
 
-export function isApiWhitelistPath(runtime: RuntimeLike, requestPath: string) {
+export function isApiWhitelistPath(runtime: RuntimeAuthHost, requestPath: string) {
   const rules = getAuthWhitelistRules(runtime)
   if (rules.length === 0) return false
   const p = String(requestPath || '').split('?')[0].split('#')[0]
@@ -195,7 +215,7 @@ export function isDangerousAuthWhitelistPrefix(base: string) {
   return p === '/' || p === '/api'
 }
 
-export function compileAuthWhitelistRule(pattern: string): WhitelistRule | null {
+export function compileAuthWhitelistRule(pattern: unknown): WhitelistRule | null {
   const raw = String(pattern || '').trim()
   if (!raw) return null
 
@@ -224,8 +244,8 @@ export function compileAuthWhitelistRule(pattern: string): WhitelistRule | null 
   return { type: 'exact', value: base }
 }
 
-export function getAuthWhitelistRules(runtime: RuntimeLike) {
-  const list = (runtimeConfig as any)?.server?.auth?.whitelist
+export function getAuthWhitelistRules(runtime: RuntimeAuthHost) {
+  const list = serverAuth().whitelist
   if (runtime._authWhitelistCache?.ref === list) {
     return runtime._authWhitelistCache.rules as WhitelistRule[]
   }
@@ -271,7 +291,7 @@ export function extractApiKeyFromAuthHeader(headerValue: unknown) {
   return null
 }
 
-export function extractApiKeyFromRequest(req: any) {
+export function extractApiKeyFromRequest(req: RuntimeHttpRequest | null | undefined) {
   const headers = req?.headers || {}
   const query = req?.query || {}
 

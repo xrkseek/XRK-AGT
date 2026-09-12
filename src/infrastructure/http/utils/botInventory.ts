@@ -1,6 +1,7 @@
 const EXCLUDE_KEYS = new Set(['port', 'apiKey', 'stdin', 'logger', '_eventsCount', 'url']);
 
-type BotLike = {
+/** AgentRuntime.bots 条目：设备或协议 bot 的最小字段 */
+export type BotLike = {
   device_type?: string;
   getFriendMap?: () => Promise<unknown>;
   getGroupMap?: () => Promise<unknown>;
@@ -16,7 +17,8 @@ type BotLike = {
   _ready?: boolean;
 };
 
-type AgentRuntimeLike = {
+/** 仅依赖 bots 表；不绑完整 AgentRuntime */
+export type AgentRuntimeLike = {
   bots?: Record<string, BotLike | null | undefined>;
 };
 

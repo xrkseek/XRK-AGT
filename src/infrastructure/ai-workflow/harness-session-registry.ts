@@ -4,31 +4,35 @@
  */
 import path from 'node:path'
 import fs from 'node:fs'
+import type { SessionEvent, SessionStore as SdkSessionStore } from '@xrkseek/harness'
 import paths from '#utils/paths.js'
 
 const MAX_TRACKED_KEYS = 64
 const SESSIONS_DIR = path.join(paths.data, 'harness-sessions')
 
-type SessionStore = {
-  create: (id?: string) => { id: string }
-  has?: (id: string) => boolean
-  get: (id: string) => any
-  append?: (sessionId: string, event: unknown) => unknown
+/** SDK store + optional close for persistent / test cleanup */
+export type HarnessSessionStore = SdkSessionStore & {
   close?: () => void
 }
 
-type HarnessNs = {
-  createMemorySessionStore: () => SessionStore
-  createPersistentSessionStore: (dir: string, opts?: { maxResidentSessions?: number }) => SessionStore
+export type HarnessSessionNs = {
+  createMemorySessionStore: () => HarnessSessionStore
+  createPersistentSessionStore: (
+    dir: string,
+    opts?: { maxResidentSessions?: number }
+  ) => HarnessSessionStore
 }
 
-let store: SessionStore | null = null
+let store: HarnessSessionStore | null = null
 /** conversationKey → sessionId (LRU order in keyOrder) */
 const keyToId = new Map<string, string>()
 const keyOrder: string[] = []
 
 function preferMemoryStore() {
-  return process.env.XRK_HARNESS_SESSION_MEMORY === '1' || process.env.NODE_TEST_CONTEXT != null
+  // Explicit sessions dir → always persistent (isolated test dirs / overrides).
+  if (process.env.XRK_HARNESS_SESSIONS_DIR) return false;
+  if (process.env.XRK_HARNESS_SESSION_MEMORY === '0') return false;
+  return process.env.XRK_HARNESS_SESSION_MEMORY === '1' || process.env.NODE_TEST_CONTEXT != null;
 }
 
 export function sanitizeHarnessSessionId(raw: unknown): string {
@@ -49,7 +53,7 @@ function touchKey(key: string) {
   }
 }
 
-export function getHarnessSessionStore(harness: HarnessNs): SessionStore {
+export function getHarnessSessionStore(harness: HarnessSessionNs): HarnessSessionStore {
   if (store) return store
   if (preferMemoryStore()) {
     store = harness.createMemorySessionStore()
@@ -71,7 +75,7 @@ export function getHarnessSessionStore(harness: HarnessNs): SessionStore {
 }
 
 /** True if conversationKey already maps to a live harness session (no create). */
-export function hasHarnessSession(harness: HarnessNs, conversationKey: unknown): boolean {
+export function hasHarnessSession(harness: HarnessSessionNs, conversationKey: unknown): boolean {
   if (!conversationKey || !String(conversationKey).trim()) return false
   const s = getHarnessSessionStore(harness)
   const id = sanitizeHarnessSessionId(`agt_${conversationKey}`)
@@ -79,9 +83,9 @@ export function hasHarnessSession(harness: HarnessNs, conversationKey: unknown):
 }
 
 export function acquireHarnessSession(
-  harness: HarnessNs,
+  harness: HarnessSessionNs,
   conversationKey: string | null | undefined
-): { store: SessionStore; sessionId: string; reused: boolean } {
+): { store: HarnessSessionStore; sessionId: string; reused: boolean } {
   const s = getHarnessSessionStore(harness)
   if (!conversationKey || !String(conversationKey).trim()) {
     const session = s.create()
@@ -113,17 +117,19 @@ export function acquireHarnessSession(
 }
 
 /** Patch store.append to observe live session events (Face-style; multi-listener safe). */
+export type HarnessSessionEventListener = (out: SessionEvent | unknown, sessionId: string) => void
+
 const listenerBags = new WeakMap<
-  SessionStore,
+  HarnessSessionStore,
   {
-    original: (sessionId: string, event: unknown) => unknown
-    listeners: Set<(out: unknown, sessionId: string) => void>
+    original: (sessionId: string, event: SessionEvent) => SessionEvent
+    listeners: Set<HarnessSessionEventListener>
   }
 >()
 
 export function attachHarnessSessionListener(
-  storeArg: SessionStore,
-  onEvent: (out: unknown, sessionId: string) => void
+  storeArg: HarnessSessionStore,
+  onEvent: HarnessSessionEventListener | null | undefined
 ) {
   if (typeof onEvent !== 'function' || !storeArg || typeof storeArg.append !== 'function') {
     return () => {}
@@ -131,8 +137,8 @@ export function attachHarnessSessionListener(
   let bag = listenerBags.get(storeArg)
   if (!bag) {
     const original = storeArg.append.bind(storeArg)
-    const listeners = new Set<(out: unknown, sessionId: string) => void>()
-    storeArg.append = (sessionId: string, event: unknown) => {
+    const listeners = new Set<HarnessSessionEventListener>()
+    storeArg.append = (sessionId: string, event: SessionEvent) => {
       const out = original(sessionId, event)
       for (const fn of listeners) {
         try {

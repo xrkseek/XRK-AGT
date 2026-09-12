@@ -25,6 +25,18 @@ type ExecutionTrace = {
   responsePreview?: string
 }
 
+export type TraceStartContext = {
+  agentId?: unknown
+  workflow?: unknown
+  userId?: unknown
+}
+
+export type TraceEndResult = {
+  success?: boolean
+  error?: unknown
+  response?: unknown
+}
+
 export class MonitorService extends EventEmitter {
   executionTraces = new Map<string, ExecutionTrace>()
   _traceOrder: string[] = []
@@ -33,7 +45,7 @@ export class MonitorService extends EventEmitter {
   maxTraces = 10000
   maxErrors = 1000
 
-  startTrace(traceId: string, context: Record<string, any> = {}) {
+  startTrace(traceId: string, context: TraceStartContext = {}) {
     const trace: ExecutionTrace = {
       id: traceId,
       agentId: context.agentId,
@@ -94,7 +106,7 @@ export class MonitorService extends EventEmitter {
     this.emit('error:recorded', { traceId, error: entry })
   }
 
-  endTrace(traceId: string, result: Record<string, any> = {}) {
+  endTrace(traceId: string, result: TraceEndResult = {}) {
     const trace = this.executionTraces.get(traceId)
     if (!trace) return
     trace.endTime = Date.now()

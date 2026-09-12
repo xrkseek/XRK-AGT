@@ -776,7 +776,7 @@ class DeviceManager {
             const progressEnabled = aiWorkflowTtsConfig.progressSpeechEnabled !== false;
 
             // 调用工作流（工作流内部会自动选择LLM工厂）
-            let aiResult;
+            let aiResult: any;
             let waiting = true;
             let progressTimer = null;
             let progressPromise = null;
@@ -798,7 +798,7 @@ class DeviceManager {
             }
 
             try {
-                aiResult = await deviceStream.execute(
+                aiResult = await (deviceStream as any).execute(
                     deviceId,
                     question,
                     streamConfig,

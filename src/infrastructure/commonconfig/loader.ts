@@ -4,9 +4,11 @@ import paths from '#utils/paths.js'
 import { findInCoreSubDirs, resolveQualifiedCoreModuleKey } from '#utils/core-fs.js'
 import { FileLoader } from '#utils/file-loader.js'
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js'
+import { normalizeError } from '#utils/normalize-error.js'
+import ConfigBase from './commonconfig.js'
 
 class CommonConfigRegistry {
-  configs = new Map<string, any>()
+  configs = new Map<string, ConfigBase>()
   loaded = false
   _configDirsCache: string[] | null = null
 
@@ -41,15 +43,16 @@ class CommonConfigRegistry {
       const dirs = this._configDirsCache ?? (await paths.getCoreSubDirs('commonconfig'))
       const key = resolveQualifiedCoreModuleKey(filePath, dirs, 'commonconfig')
       const module = await FileLoader.importFresh(filePath)
-      if (!module.default) {
+      const exported = module.default
+      if (!exported) {
         RuntimeUtil.makeLog('warn', `无效的配置模块: ${key}`, 'CommonConfigRegistry')
         return false
       }
 
       const configInstance =
-        typeof module.default === 'function'
-          ? new (module.default as new () => any)()
-          : module.default
+        typeof exported === 'function'
+          ? new (exported as new () => ConfigBase)()
+          : (exported as ConfigBase)
 
       configInstance.key = key
       // 勿覆盖 ConfigBase 构造里的 filePath（数据文件路径）；模块路径单独挂
@@ -62,12 +65,12 @@ class CommonConfigRegistry {
         'CommonConfigRegistry'
       )
       return true
-    } catch (error: any) {
+    } catch (error) {
       RuntimeUtil.makeLog(
         'error',
-        `加载配置失败: ${filePath} - ${error.message}`,
+        `加载配置失败: ${filePath} - ${normalizeError(error).message}`,
         'CommonConfigRegistry',
-        error
+        true
       )
       return false
     }
@@ -78,7 +81,7 @@ class CommonConfigRegistry {
    */
   get(name: string | null | undefined) {
     if (!name) return null
-    if (this.configs.has(name)) return this.configs.get(name)
+    if (this.configs.has(name)) return this.configs.get(name) ?? null
     if (!String(name).includes('/')) {
       const sys = this.configs.get(`system-Core/${name}`)
       if (sys) return sys
@@ -94,7 +97,7 @@ class CommonConfigRegistry {
   }
 
   getList() {
-    const seen = new Set<any>()
+    const seen = new Set<ConfigBase>()
     return [...this.configs.entries()]
       .filter(([key, config]) => {
         if (!key.includes('/')) return false
@@ -133,7 +136,7 @@ class CommonConfigRegistry {
   }
 
   clearAllCache() {
-    const seen = new Set<any>()
+    const seen = new Set<ConfigBase>()
     for (const config of this.configs.values()) {
       if (seen.has(config)) continue
       seen.add(config)

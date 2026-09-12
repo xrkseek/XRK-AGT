@@ -1,4 +1,4 @@
-import PluginBase from './plugin-base.js';
+import PluginBase, { type PluginEvent, type PluginOptions } from './plugin-base.js';
 import { resolveTaskerId } from '#utils/event-keys.js';
 
 /**
@@ -17,13 +17,17 @@ function flagForTasker(tasker: string): string {
   return TASKER_FLAG[tasker] || `is${tasker.charAt(0).toUpperCase()}${tasker.slice(1)}`;
 }
 
+function asRecord(e: PluginEvent): PluginEvent & Record<string, unknown> {
+  return e as PluginEvent & Record<string, unknown>;
+}
+
 /**
  * Enhancer 基类：只增强「本 tasker」事件，禁止串台。
  */
-export default class EnhancerBase extends (PluginBase as any) {
+export default class EnhancerBase extends PluginBase {
   tasker: string;
 
-  constructor(config: Record<string, any> = {}) {
+  constructor(config: PluginOptions = {}) {
     super({
       ...config,
       priority: config.priority || 1,
@@ -35,44 +39,45 @@ export default class EnhancerBase extends (PluginBase as any) {
   /**
    * @param taskerName resolveTaskerId 结果
    */
-  isTargetEvent(_e: Record<string, any>, taskerName: string): boolean {
+  isTargetEvent(_e: PluginEvent, taskerName: string): boolean {
     if (!this.tasker) return false;
     // 仅按规范短名隔离；勿用旗标 OR，避免脏 flag 串台
     return taskerName === this.tasker;
   }
 
-  enhanceEvent(e: Record<string, any>): void {
+  enhanceEvent(e: PluginEvent): void {
     if (!this.tasker) return;
 
+    const rec = asRecord(e);
     const flag = flagForTasker(this.tasker);
-    if (flag && !e[flag]) e[flag] = true;
-    if (flag === 'isOneBot' && e.isOnebot != null && e.isOneBot) delete e.isOnebot;
+    if (flag && !rec[flag]) rec[flag] = true;
+    if (flag === 'isOneBot' && e.isOnebot != null && e.isOneBot) delete rec.isOnebot;
     e.tasker = this.tasker;
 
     this.ensureLogText(e, this.name || 'Enhancer', this.getEventScope(e), this.getEventType(e));
   }
 
-  getEventScope(e: Record<string, any>): string {
+  getEventScope(e: PluginEvent) {
     return e.group_id ? `group:${e.group_id}` : e.user_id || e.device_id || 'unknown';
   }
 
-  getEventType(e: Record<string, any>): string {
+  getEventType(e: PluginEvent): string {
     return e.post_type || 'event';
   }
 
-  setupReply(_e: Record<string, any>): void {}
+  setupReply(_e: PluginEvent): void {}
 
-  applyConfigPolicies(_e: Record<string, any>): boolean | string | Promise<boolean | string> {
+  applyConfigPolicies(_e: PluginEvent): boolean | string | Promise<boolean | string> {
     return true;
   }
 
-  applyAlias(_e: Record<string, any>): void {}
+  applyAlias(_e: PluginEvent): void {}
 
-  enforceReplyPolicy(_e: Record<string, any>): boolean | string {
+  enforceReplyPolicy(_e: PluginEvent): boolean | string {
     return true;
   }
 
-  async accept(e: Record<string, any>): Promise<boolean | string> {
+  async accept(e: PluginEvent = { reply() {} } as PluginEvent): Promise<boolean | string> {
     const taskerName = resolveTaskerId(e);
     if (!this.isTargetEvent(e, taskerName)) return true;
 
@@ -87,13 +92,14 @@ export default class EnhancerBase extends (PluginBase as any) {
     return this.enforceReplyPolicy(e) === 'return' ? 'return' : true;
   }
 
-  ensureLogText(e: Record<string, any>, prefix: string, scope: string, eventType: string): void {
+  ensureLogText(e: PluginEvent, prefix: string, scope: string | number, eventType: string): void {
     if (e.logText && !e.logText.includes('未知')) return;
     e.logText = `[${prefix}][${scope}][${eventType}]`;
   }
 
-  safeDefine(obj: Record<string, any>, key: string, getter: () => unknown): void {
-    if (obj[key] !== undefined) return;
+  safeDefine(obj: PluginEvent, key: string, getter: () => unknown): void {
+    const rec = asRecord(obj);
+    if (rec[key] !== undefined) return;
     try {
       Object.defineProperty(obj, key, {
         get: getter,
@@ -105,21 +111,21 @@ export default class EnhancerBase extends (PluginBase as any) {
     }
   }
 
-  processAtProperties(_e: Record<string, any>): void {}
+  processAtProperties(_e: PluginEvent): void {}
 
-  bindBotEntities(e: Record<string, any>): void {
+  bindBotEntities(e: PluginEvent): void {
     if (!e.bot) return;
 
     if (e.user_id && e.bot.pickFriend) {
-      this.safeDefine(e, 'friend', () => e.bot.pickFriend(e.user_id));
+      this.safeDefine(e, 'friend', () => e.bot?.pickFriend?.(e.user_id));
     }
 
     if (e.group_id && e.bot.pickGroup) {
-      this.safeDefine(e, 'group', () => e.bot.pickGroup(e.group_id));
+      this.safeDefine(e, 'group', () => e.bot?.pickGroup?.(e.group_id));
     }
 
     if (e.group_id && e.user_id && e.bot.pickMember) {
-      this.safeDefine(e, 'member', () => e.bot.pickMember(e.group_id, e.user_id));
+      this.safeDefine(e, 'member', () => e.bot?.pickMember?.(e.group_id, e.user_id));
     }
   }
 }

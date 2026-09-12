@@ -27,7 +27,7 @@
 ```markdown
 # 标题
 
-> **源码**：`path/to/file.js`（函数/类名）  
+> **源码**：`path/to/file.ts`（函数/类名；运行产物写 `dist/.../*.js`）  
 > **读者**：插件开发者 / 运维 / …  
 > **关联**：[runtime-surface.md](runtime-surface.md) · [其他](other.md)
 

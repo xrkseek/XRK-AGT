@@ -4,6 +4,7 @@
  * Mongo / Postgres / Qdrant 等可选存储不在此初始化，见 persistence-registry。
  */
 import redisInit, { closeRedis, getRedisClient } from '../redis.js';
+import type { RedisHandle } from '../redis.js';
 import sqliteInit, {
   closeSqlite,
   getSqliteClient,
@@ -15,6 +16,8 @@ import sqliteInit, {
   sqliteKvGet,
   sqliteKvDel,
 } from '../sqlite.js';
+
+type SqliteHandle = NonNullable<ReturnType<typeof sqliteInit>>;
 
 export {
   PERSISTENCE_POLICY,
@@ -36,8 +39,8 @@ export {
 };
 
 class DatabaseManager {
-  redis: any = null;
-  sqlite: any = null;
+  redis: RedisHandle | null = null;
+  sqlite: SqliteHandle | null = null;
   initialized = false;
 
   /**
@@ -47,17 +50,17 @@ class DatabaseManager {
     if (this.initialized) {
       return { redis: !!this.redis, sqlite: !!this.sqlite };
     }
-    this.redis = (await redisInit()) ?? getRedisClient();
+    this.redis = (await redisInit()) ?? getRedisClient() ?? null;
     this.sqlite = sqliteInit();
     this.initialized = true;
     return { redis: !!this.redis, sqlite: !!this.sqlite };
   }
 
-  getRedis(): any {
+  getRedis(): RedisHandle | null {
     return this.redis;
   }
 
-  getSqlite(): any {
+  getSqlite(): SqliteHandle | null {
     return this.sqlite;
   }
 
@@ -102,11 +105,11 @@ export async function closeDatabases(): Promise<void> {
   await getDatabaseManager().close();
 }
 
-export function getRedis(): any {
+export function getRedis(): RedisHandle | null {
   return getDatabaseManager().getRedis();
 }
 
-export function getSqlite(): any {
+export function getSqlite(): SqliteHandle | null {
   return getDatabaseManager().getSqlite() ?? getSqliteClient();
 }
 

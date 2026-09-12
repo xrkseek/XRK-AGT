@@ -9,6 +9,7 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
 import HttpApiLoader from '#infrastructure/http/loader.js';
+import type { AgentRuntimeBot } from '#infrastructure/http/http.js';
 import PluginLoader from '#infrastructure/plugins/loader.js';
 import ListenerLoader from '#infrastructure/listener/loader.js';
 import bootstrapRuntimePackages from '#infrastructure/config/loader.js';
@@ -17,6 +18,39 @@ import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import { setRuntimeGlobal } from '#utils/runtime-globals.js';
 import { maskSensitive } from '#infrastructure/http/runtime-auth.js';
 import { displayAccessUrls, getProxyConfig, isHttpsEnabled } from '#infrastructure/http/runtime-net.js';
+import { normalizeError } from '#utils/normalize-error.js';
+import type { Dirent } from 'node:fs';
+
+function rec(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
+type BootRuntime = {
+  actualPort: number | null;
+  actualHttpsPort: number | null;
+  httpPort: number | null;
+  httpsPort: number | null;
+  proxyEnabled: boolean;
+  domainConfigs: { size: number };
+  wsf: Record<string, unknown>;
+  apiKey: string;
+  express: { use: (...args: unknown[]) => unknown } & Record<string, unknown>;
+  tasker: unknown[];
+  _cache: { get: (key: string) => unknown; set: (key: string, value: unknown) => void };
+  wwwMountPaths?: string[];
+  checkApiAuthorization?: (req: unknown) => boolean;
+  _trashTimer?: ReturnType<typeof setInterval> | null;
+  getServerUrl: () => string;
+  emit: (event: string, payload: unknown) => unknown;
+  _reinitHttpBusiness: () => void;
+  _initProxyApp: () => Promise<unknown> | unknown;
+  _initializeMiddlewareAndRoutes: () => Promise<unknown> | unknown;
+  _setupFinalHandlers: () => void;
+  generateApiKey: () => Promise<unknown> | unknown;
+  serverLoad: (isHttps: boolean) => Promise<unknown>;
+  httpsLoad: () => Promise<unknown>;
+  startProxyServers: () => Promise<unknown> | unknown;
+};
 
 /**
  * @param {import('../../agent-runtime.js').default} runtime
@@ -24,9 +58,14 @@ import { displayAccessUrls, getProxyConfig, isHttpsEnabled } from '#infrastructu
  * @param {number} startTime
  * @param {Record<string, number>} [timings]
  */
-export async function displayStartupSummary(runtime: any, loadTime: any, startTime: any, timings: any = {}) {
+export async function displayStartupSummary(
+  runtime: BootRuntime,
+  loadTime: number,
+  startTime: number,
+  timings: Record<string, number> = {},
+) {
   const memUsage = process.memoryUsage();
-  const memMB = (size: any) => `${(size / 1024 / 1024).toFixed(2)}MB`;
+  const memMB = (size: number) => `${(size / 1024 / 1024).toFixed(2)}MB`;
 
   console.log(chalk.cyan(`\n${'═'.repeat(60)}`));
   console.log(`${chalk.cyan('║')}${chalk.bold('  XRK-AGT 启动完成')}${' '.repeat(40)}${chalk.cyan('║')}`);
@@ -50,8 +89,8 @@ export async function displayStartupSummary(runtime: any, loadTime: any, startTi
     listener: '事件/Tasker',
   };
   const phaseEntries = Object.entries(timings)
-    .filter(([, ms]: any) => Number.isFinite(ms))
-    .sort((a: any, b: any) => b[1] - a[1]);
+    .filter(([, ms]) => Number.isFinite(ms))
+    .sort((a, b) => b[1] - a[1]);
   if (phaseEntries.length > 0) {
     console.log(chalk.yellow('\n▶ 分阶段耗时：'));
     for (const [key, ms] of phaseEntries) {
@@ -87,35 +126,38 @@ export async function displayStartupSummary(runtime: any, loadTime: any, startTi
   console.log(`    ${chalk.cyan('•')} Node.js：${chalk.white(process.version)}`);
 
   console.log(chalk.yellow('\n▶ 服务器配置：'));
-  const compressionEnabled = runtimeConfig.server.compression?.enabled !== false;
-  console.log(`    ${chalk.cyan('•')} 压缩：${compressionEnabled ? chalk.green('已启用') : chalk.gray('已禁用')} ${compressionEnabled ? chalk.gray(`(级别: ${runtimeConfig.server.compression?.level || 6})`) : ''}`);
+  const serverYaml = rec(runtimeConfig.server);
+  const compression = rec(serverYaml.compression);
+  const compressionEnabled = compression.enabled !== false;
+  console.log(`    ${chalk.cyan('•')} 压缩：${compressionEnabled ? chalk.green('已启用') : chalk.gray('已禁用')} ${compressionEnabled ? chalk.gray(`(级别: ${compression.level || 6})`) : ''}`);
 
-  const helmetEnabled = runtimeConfig.server.security?.helmet?.enabled !== false;
+  const helmetEnabled = rec(rec(serverYaml.security).helmet).enabled !== false;
   console.log(`    ${chalk.cyan('•')} 安全头：${helmetEnabled ? chalk.green('已启用') : chalk.gray('已禁用')}`);
 
-  const corsEnabled = runtimeConfig.server.cors?.enabled !== false;
+  const corsEnabled = rec(serverYaml.cors).enabled !== false;
   console.log(`    ${chalk.cyan('•')} CORS：${corsEnabled ? chalk.green('已启用') : chalk.gray('已禁用')}`);
 
-  const rateLimitEnabled = runtimeConfig.server.rateLimit?.enabled !== false;
+  const rateLimitEnabled = rec(serverYaml.rateLimit).enabled !== false;
   console.log(`    ${chalk.cyan('•')} 速率限制：${rateLimitEnabled ? chalk.green('已启用') : chalk.gray('已禁用')}`);
 
-  const httpsEnabled = runtimeConfig.server.https?.enabled === true;
+  const httpsYaml = rec(serverYaml.https);
+  const httpsEnabled = httpsYaml.enabled === true;
   console.log(`    ${chalk.cyan('•')} HTTPS：${httpsEnabled ? chalk.green('已启用') : chalk.gray('已禁用')}`);
-  if (httpsEnabled && runtimeConfig.server.https?.tls?.http2 === true) {
+  if (httpsEnabled && rec(httpsYaml.tls).http2 === true) {
     console.log(`    ${chalk.cyan('•')} HTTP/2：${chalk.green('已启用')}`);
   }
 
   const apiList = HttpApiLoader.getApiList();
-  const totalRoutes = apiList.reduce((sum: any, api: any) => sum + (api.routes || 0), 0);
-  const totalWS = apiList.reduce((sum: any, api: any) => sum + (api.ws || 0), 0);
+  const totalRoutes = apiList.reduce((sum, api) => sum + (api.routes || 0), 0);
+  const totalWS = apiList.reduce((sum, api) => sum + (api.ws || 0), 0);
   const actualWSPaths = Object.keys(runtime.wsf || {}).length;
   console.log(chalk.yellow('\n▶ API统计：'));
   console.log(`    ${chalk.cyan('•')} API模块：${chalk.white(`${apiList.length}个`)}`);
   console.log(`    ${chalk.cyan('•')} HTTP路由：${chalk.white(`${totalRoutes}个`)}`);
   console.log(`    ${chalk.cyan('•')} WebSocket路由：${chalk.white(`${actualWSPaths}个`)} ${actualWSPaths !== totalWS ? chalk.gray(`(API统计: ${totalWS})`) : ''}`);
 
-  const authConfig = runtimeConfig.server.auth || {};
-  if (authConfig.apiKey?.enabled !== false) {
+  const authConfig = rec(serverYaml.auth);
+  if (rec(authConfig.apiKey).enabled !== false) {
     console.log(chalk.yellow('\n▶ 认证配置：'));
     console.log(`    ${chalk.cyan('•')} API密钥：${chalk.white(maskSensitive(runtime.apiKey))}`);
     console.log(chalk.gray('    使用 X-API-Key 请求头进行认证'));
@@ -125,12 +167,12 @@ export async function displayStartupSummary(runtime: any, loadTime: any, startTi
       console.log(chalk.gray('    loopbackExempt=false：所有客户端均须 API Key（推荐）'));
     }
     const wl = Array.isArray(authConfig.whitelist) ? authConfig.whitelist : [];
-    if (wl.some((x: any) => String(x || '').trim() === '/' || String(x || '').trim() === '/api' || String(x || '').trim() === '/api*')) {
+    if (wl.some((x) => String(x || '').trim() === '/' || String(x || '').trim() === '/api' || String(x || '').trim() === '/api*')) {
       console.log(chalk.red('    ⚠ 白名单含「/」或「/api」类危险项，启动时会忽略；请清空后保存'));
     }
   }
 
-  await displayAccessUrls(runtime, 'http', runtime.actualPort);
+  await displayAccessUrls(runtime, 'http', runtime.actualPort ?? 0);
 
   console.log(chalk.cyan(`\n${'═'.repeat(60)}\n`));
 
@@ -143,8 +185,8 @@ export async function displayStartupSummary(runtime: any, loadTime: any, startTi
 /**
  * @param {import('../../agent-runtime.js').default} runtime
  */
-export function startTrashCleaner(runtime: any) {
-  const miscCfg = runtimeConfig.server?.misc || {};
+export function startTrashCleaner(runtime: BootRuntime) {
+  const miscCfg = rec(rec(runtimeConfig.server).misc);
   const intervalMinutes = Number(miscCfg.trashCleanupIntervalMinutes) || 60;
   const maxAgeHours = Number(miscCfg.trashMaxAgeHours) || 24;
 
@@ -154,8 +196,8 @@ export function startTrashCleaner(runtime: any) {
   const runCleanup = async () => {
     try {
       await clearTrashOnce(maxAgeMs);
-    } catch (err: any) {
-      RuntimeUtil.makeLog('debug', `trash 清理失败: ${err.message}`, '服务器');
+    } catch (err: unknown) {
+      RuntimeUtil.makeLog('debug', `trash 清理失败: ${normalizeError(err).message}`, '服务器');
     }
   };
 
@@ -166,12 +208,13 @@ export function startTrashCleaner(runtime: any) {
 /**
  * @param {number} maxAgeMs
  */
-export async function clearTrashOnce(maxAgeMs: any) {
+export async function clearTrashOnce(maxAgeMs: number) {
   const trashRoot = paths.trash;
   if (!trashRoot) return;
 
-  const preserve = Array.isArray(runtimeConfig.server?.misc?.trashPreserve) && runtimeConfig.server.misc.trashPreserve.length
-    ? runtimeConfig.server.misc.trashPreserve
+  const trashPreserve = rec(rec(runtimeConfig.server).misc).trashPreserve;
+  const preserve = Array.isArray(trashPreserve) && trashPreserve.length
+    ? trashPreserve.map(String)
     : ['.gitignore', 'instruct.txt'];
   const preserveList = new Set(preserve);
 
@@ -184,8 +227,8 @@ export async function clearTrashOnce(maxAgeMs: any) {
 
   const now = Date.now();
   const tasks = entries
-    .filter((entry: any) => !preserveList.has(entry.name))
-    .map(async (entry: any) => {
+    .filter((entry: Dirent) => !preserveList.has(entry.name))
+    .map(async (entry: Dirent) => {
       const fullPath = path.join(trashRoot, entry.name);
       try {
         const stat = await fs.stat(fullPath);
@@ -207,11 +250,11 @@ export async function clearTrashOnce(maxAgeMs: any) {
  * @param {import('../../agent-runtime.js').default} runtime
  * @param {{ port?: number }} [options]
  */
-export async function runAgentRuntime(runtime: any, options: any = {}) {
+export async function runAgentRuntime(runtime: BootRuntime, options: { port?: number } = {}) {
   const { port } = options;
   const startTime = Date.now();
   const timings: Record<string, number> = {};
-  const phase = async (name: any, fn: any) => {
+  const phase = async <T>(name: string, fn: () => Promise<T> | T): Promise<T> => {
     const t0 = Date.now();
     const result = await fn();
     timings[name] = Date.now() - t0;
@@ -220,12 +263,12 @@ export async function runAgentRuntime(runtime: any, options: any = {}) {
 
   runtime._reinitHttpBusiness();
 
-  const proxyConfig = getProxyConfig();
-  runtime.proxyEnabled = proxyConfig?.enabled === true;
+  const proxyConfig = rec(getProxyConfig());
+  runtime.proxyEnabled = proxyConfig.enabled === true;
 
   runtime.actualPort = port || parseInt(process.env.XRK_SERVER_PORT || '', 10) || 8080;
 
-  const httpsCfg = runtimeConfig.server?.https || {};
+  const httpsCfg = rec(rec(runtimeConfig.server).https);
   const explicitHttpsPort = Number(httpsCfg.port);
   const httpsPortOffset = Number(httpsCfg.portOffset);
   runtime.actualHttpsPort = (Number.isFinite(explicitHttpsPort) && explicitHttpsPort > 0)
@@ -233,8 +276,8 @@ export async function runAgentRuntime(runtime: any, options: any = {}) {
     : (runtime.actualPort + (Number.isFinite(httpsPortOffset) ? httpsPortOffset : 1));
 
   if (runtime.proxyEnabled) {
-    runtime.httpPort = proxyConfig.httpPort || 80;
-    runtime.httpsPort = proxyConfig.httpsPort || 443;
+    runtime.httpPort = Number(proxyConfig.httpPort) || 80;
+    runtime.httpsPort = Number(proxyConfig.httpsPort) || 443;
   } else {
     runtime.httpPort = runtime.actualPort;
     runtime.httpsPort = runtime.actualHttpsPort;
@@ -252,27 +295,34 @@ export async function runAgentRuntime(runtime: any, options: any = {}) {
     await phase('commonConfig', () => CommonConfigRegistry.load());
     setRuntimeGlobal('CommonConfigRegistry', CommonConfigRegistry);
     setRuntimeGlobal('runtimeConfig', runtimeConfig);
-  } catch (err: any) {
-    RuntimeUtil.makeLog('error', `配置加载失败: ${err?.message}`, '服务器');
+    runtimeConfig.warmupConfigs();
+  } catch (err: unknown) {
+    RuntimeUtil.makeLog('error', `配置加载失败: ${normalizeError(err).message}`, '服务器');
     if (!softFail) throw err;
   }
 
   const [workflowResult, pluginsResult, apiResult] = await phase('loaders', () =>
     Promise.allSettled([
       AiWorkflowLoader.load(),
-      (PluginLoader as any).load(),
+      PluginLoader.load.call(PluginLoader as any),
       HttpApiLoader.load(),
     ])
   );
 
-  const loaderFailures = [
+  const loaderSettled = [
     ['工作流', workflowResult],
     ['插件', pluginsResult],
     ['API', apiResult],
-  ].filter(([, r]: any) => r.status === 'rejected');
+  ] as const;
+  const loaderFailures: Array<readonly [string, PromiseRejectedResult]> = [];
+  for (const [label, result] of loaderSettled) {
+    if (result.status === 'rejected') {
+      loaderFailures.push([label, result]);
+    }
+  }
 
   for (const [label, result] of loaderFailures) {
-    RuntimeUtil.makeLog('error', `${label}加载失败: ${result.reason?.message}`, '服务器');
+    RuntimeUtil.makeLog('error', `${label}加载失败: ${normalizeError(result.reason).message}`, '服务器');
   }
   if (loaderFailures.length && !softFail) {
     throw loaderFailures[0][1].reason;
@@ -280,7 +330,7 @@ export async function runAgentRuntime(runtime: any, options: any = {}) {
 
   await phase('middleware', () => runtime._initializeMiddlewareAndRoutes());
 
-  await phase('apiRegister', () => HttpApiLoader.register(runtime.express, runtime));
+  await phase('apiRegister', () => HttpApiLoader.register(runtime.express, runtime as AgentRuntimeBot));
   runtime._setupFinalHandlers();
 
   await phase('apiKey', () => runtime.generateApiKey());

@@ -3,7 +3,13 @@ import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 
 import { SCAN_IGNORE_PREFIXES } from './loader-constants.js';
-import { moduleFileKey, resolveModuleInDir, stripModuleExt } from './module-ext.js';
+import {
+  isDeclarationFile,
+  isModuleSourceFile,
+  moduleFileKey,
+  resolveModuleInDir,
+  stripModuleExt,
+} from './module-ext.js';
 
 export type ScanOptions = {
   ext?: string | string[] | null;
@@ -52,7 +58,12 @@ async function walkDir(dir: string, opts: NormalizedScanOptions, out: string[]):
       continue;
     }
     if (!entry.isFile()) continue;
-    if (exts && !exts.some((e) => entry.name.endsWith(e))) continue;
+    if (isDeclarationFile(entry.name)) continue;
+    if (exts) {
+      if (!exts.some((e) => entry.name.endsWith(e))) continue;
+    } else if (!isModuleSourceFile(entry.name)) {
+      continue;
+    }
     out.push(fullPath);
   }
 }

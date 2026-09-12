@@ -7,7 +7,7 @@ import { withTrustedWebSearchEndpoint } from './web-search-endpoint.js'
 
 const MCP_PROTOCOL_VERSION = '2025-06-18'
 
-function isRecord(value: unknown): value is Record<string, any> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
@@ -22,7 +22,7 @@ function mcpHeaders(params: { sessionId?: string; protocolVersion?: string }) {
 }
 
 export function iterMcpMessages(text: string) {
-  const out: Record<string, any>[] = []
+  const out: Record<string, unknown>[] = []
   const emit = (payload: unknown) => {
     if (Array.isArray(payload)) {
       for (const entry of payload) {
@@ -68,7 +68,7 @@ export function iterMcpMessages(text: string) {
 }
 
 export function selectMcpEnvelope(text: string, requestId: string) {
-  let fallback: Record<string, any> = {}
+  let fallback: Record<string, unknown> = {}
   for (const msg of iterMcpMessages(text)) {
     if (!('result' in msg || 'error' in msg)) continue
     if (msg.id === requestId) return msg
@@ -77,7 +77,7 @@ export function selectMcpEnvelope(text: string, requestId: string) {
   return fallback
 }
 
-export function extractMcpToolPayload(envelope: Record<string, any>) {
+export function extractMcpToolPayload(envelope: Record<string, unknown>) {
   if ('error' in envelope) {
     throw new Error(`MCP error: ${JSON.stringify(envelope.error).slice(0, 500)}`)
   }
@@ -107,7 +107,7 @@ async function postMcp(
     signal?: AbortSignal
     sessionId?: string
     protocolVersion?: string
-    body: Record<string, any>
+    body: Record<string, unknown>
   }
 ) {
   return withTrustedWebSearchEndpoint(
@@ -140,7 +140,7 @@ async function postMcp(
 export async function callMcpTool(params: {
   url: string
   toolName: string
-  toolArgs: Record<string, any>
+  toolArgs: Record<string, unknown>
   timeoutSeconds?: number
   signal?: AbortSignal
   clientName?: string

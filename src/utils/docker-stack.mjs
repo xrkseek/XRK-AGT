@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { subserverHealthEndpoints } from './subserver-runtimes.js';
+import { subserverHealthEndpoints } from '#utils/subserver-runtimes.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const envFile = path.join(root, 'config', 'docker.env');
@@ -29,8 +29,13 @@ function docker(args, { soft = false, timeout, env, stdio = 'inherit' } = {}) {
 }
 
 function ensureDocker() {
-  if (docker(['info'], { stdio: 'pipe' }).status === 0) return;
-  console.error('>>> Docker 未运行');
+  const r = docker(['info'], { soft: true, stdio: 'pipe' });
+  if (r.status === 0) return;
+  if (r.error?.code === 'ENOENT') {
+    console.error('>>> Docker 未安装或不在 PATH（请安装 Docker Desktop）');
+  } else {
+    console.error('>>> Docker 未运行（请启动 Docker Desktop）');
+  }
   process.exit(1);
 }
 

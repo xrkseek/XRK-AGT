@@ -1,9 +1,89 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { resolveCommandSpawn } from '#utils/command-spawn.js';
 import { fetchWithPolicy } from '#utils/fetch-with-retry.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { checkMcpConnectAllowed } from '#utils/runtime-policy.js';
+import { normalizeError } from '#utils/normalize-error.js';
+import type { MCPServer } from '#utils/mcp-server.js';
+
+type JsonRpcId = string | number;
+
+type Deferred<T = unknown> = {
+  promise: Promise<T>;
+  resolve: (v?: T) => void;
+  reject: (e?: unknown) => void;
+};
+
+type PendingCall = Deferred & { timeout: ReturnType<typeof setTimeout> };
+
+type StdioClient = {
+  buffer: string;
+  stderr: string;
+  pending: Map<JsonRpcId, PendingCall>;
+  onData: ((data: Buffer | string) => void) | null;
+  closed: boolean;
+};
+
+type RemoteRuntimeConfig = {
+  command?: string;
+  args?: unknown[];
+  cwd?: string;
+  shell?: boolean;
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+  transport?: string;
+  [key: string]: unknown;
+};
+
+type StdioServerEntry = {
+  type: 'stdio';
+  process: ChildProcessWithoutNullStreams;
+  config: RemoteRuntimeConfig;
+  _stdioClient?: StdioClient;
+};
+
+type HttpServerEntry = {
+  type: 'http';
+  url: string;
+  headers: Record<string, string>;
+  config: RemoteRuntimeConfig;
+};
+
+type WsServerEntry = {
+  type: 'ws';
+  url: string;
+  headers: Record<string, string>;
+  config: RemoteRuntimeConfig;
+};
+
+type RemoteServerEntry = StdioServerEntry | HttpServerEntry | WsServerEntry;
+
+type RemoteToolMeta = {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+};
+
+type RemoteToolDef = {
+  description: string;
+  inputSchema: Record<string, unknown>;
+  handler: (args: Record<string, unknown>) => unknown | Promise<unknown>;
+};
+
+type RemoteMcpDeps = {
+  getMcpServer?: () => MCPServer | null | undefined;
+  getMcpPluginServers?: () => Map<string, unknown>;
+  makeLog?: (level: string, message: string, error?: unknown) => void;
+  registerTool?: (name: string, def: RemoteToolDef) => void;
+};
+
+type JsonRpcResponse = {
+  id?: JsonRpcId;
+  result?: unknown;
+  error?: { message?: string; [key: string]: unknown };
+};
 
 /**
  * 远程 MCP 客户端宿主：stdio / HTTP / WebSocket transport，
@@ -12,29 +92,23 @@ import { checkMcpConnectAllowed } from '#utils/runtime-policy.js';
  * 通过依赖注入绑定 AiWorkflowLoader（mcpServer / mcpPluginServers / 日志）。
  */
 export class RemoteMcpController {
-  remoteMCPServers = new Map();
-  _loadedPluginServers = new Set();
+  remoteMCPServers = new Map<string, RemoteServerEntry>();
+  _loadedPluginServers = new Set<string>();
   _nextRemoteRequestId = 1;
-  _getMcpServer: any;
-  _getMcpPluginServers: any;
-  _makeLog: any;
-  _registerToolCallback: any;
+  _getMcpServer: () => MCPServer | null | undefined;
+  _getMcpPluginServers: () => Map<string, unknown>;
+  _makeLog: (level: string, message: string, error?: unknown) => void;
+  _registerToolCallback: ((name: string, def: RemoteToolDef) => void) | null;
 
-  /**
-   * @param {object} deps
-   * @param {() => import('#utils/mcp-server.js').MCPServer | null | undefined} deps.getMcpServer
-   * @param {() => Map<string, object>} [deps.getMcpPluginServers]
-   * @param {(level: string, message: string, error?: any) => void} [deps.makeLog]
-   * @param {(name: string, def: object) => void} [deps.registerTool] 可选；默认走 mcpServer.registerTool
-   */
-  constructor({ getMcpServer, getMcpPluginServers, makeLog, registerTool }: any = {}) {
+  constructor({ getMcpServer, getMcpPluginServers, makeLog, registerTool }: RemoteMcpDeps = {}) {
     this._getMcpServer = typeof getMcpServer === 'function' ? getMcpServer : () => null;
     this._getMcpPluginServers = typeof getMcpPluginServers === 'function'
       ? getMcpPluginServers
       : () => new Map();
     this._makeLog = typeof makeLog === 'function'
       ? makeLog
-      : (level: any, message: any, error: any) => RuntimeUtil.makeLog(level, message, 'RemoteMcp', error);
+      : (level, message, error) =>
+          RuntimeUtil.makeLog(level, message, 'RemoteMcp', Boolean(error));
     this._registerToolCallback = typeof registerTool === 'function' ? registerTool : null;
   }
 
@@ -53,14 +127,17 @@ export class RemoteMcpController {
     return id;
   }
 
-  _createDeferred(): { promise: Promise<any>; resolve: (v?: any) => void; reject: (e?: any) => void } {
-    let resolve!: (v?: any) => void;
-    let reject!: (e?: any) => void;
-    const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  _createDeferred<T = unknown>(): Deferred<T> {
+    let resolve!: (v?: T) => void;
+    let reject!: (e?: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res as (v?: T) => void;
+      reject = rej;
+    });
     return { promise, resolve, reject };
   }
 
-  _disposeRemoteMCPServer(serverName: any) {
+  _disposeRemoteMCPServer(serverName: string) {
     const server = this.remoteMCPServers.get(serverName);
     if (!server) return;
 
@@ -69,17 +146,17 @@ export class RemoteMcpController {
       if (client?.pending) {
         for (const [, pending] of client.pending.entries()) {
           if (pending.timeout) clearTimeout(pending.timeout);
-          try { pending.reject(new Error('远程MCP已卸载')); } catch {}
+          try { pending.reject(new Error('远程MCP已卸载')); } catch { /* ignore */ }
         }
         client.pending.clear();
       }
       if (client?.onData) {
-        try { server.process.stdout?.removeListener('data', client.onData); } catch {}
+        try { server.process.stdout?.removeListener('data', client.onData); } catch { /* ignore */ }
       }
       try {
         server.process.stdin?.end?.();
         server.process.kill('SIGTERM');
-      } catch {}
+      } catch { /* ignore */ }
     }
 
     this.remoteMCPServers.delete(serverName);
@@ -93,39 +170,39 @@ export class RemoteMcpController {
     this._loadedPluginServers.clear();
   }
 
-  _ensureStdioClient(_serverName: any, entry: any) {
+  _ensureStdioClient(_serverName: string, entry: StdioServerEntry) {
     if (!entry || entry.type !== 'stdio' || !entry.process) return null;
     if (entry._stdioClient) return entry._stdioClient;
 
     const child = entry.process;
-    const client: any = {
+    const client: StdioClient = {
       buffer: '',
       stderr: '',
       pending: new Map(),
-      onData: null as any,
+      onData: null,
       closed: false
     };
 
-    const flushPending = (errMsg: any) => {
-      for (const [_id, p] of client.pending.entries()) {
-        try { p.reject(new Error(errMsg)); } catch {}
+    const flushPending = (errMsg: string) => {
+      for (const [, p] of client.pending.entries()) {
+        try { p.reject(new Error(errMsg)); } catch { /* ignore */ }
       }
       client.pending.clear();
     };
 
-    client.onData = (data: any) => {
+    client.onData = (data: Buffer | string) => {
       if (client.closed) return;
-      client.buffer += data?.toString?.() || '';
+      client.buffer += typeof data === 'string' ? data : data.toString();
       const lines = client.buffer.split('\n');
       client.buffer = lines.pop() || '';
 
       for (const line of lines) {
         const s = String(line || '').trim();
         if (!s) continue;
-        let msg;
-        try { msg = JSON.parse(s); } catch { continue; }
+        let msg: JsonRpcResponse;
+        try { msg = JSON.parse(s) as JsonRpcResponse; } catch { continue; }
         const id = msg?.id;
-        if (!id) continue;
+        if (id == null) continue;
         const pending = client.pending.get(id);
         if (!pending) continue;
         client.pending.delete(id);
@@ -139,13 +216,13 @@ export class RemoteMcpController {
     };
 
     child.stdout?.on('data', client.onData);
-    child.stderr?.on('data', (chunk: any) => {
-      const text = chunk?.toString?.() || '';
+    child.stderr?.on('data', (chunk: Buffer | string) => {
+      const text = typeof chunk === 'string' ? chunk : chunk.toString();
       client.stderr = (client.stderr + text).slice(-2000);
     });
-    child.on('exit', (code: any, signal: any) => {
+    child.on('exit', (code, signal) => {
       client.closed = true;
-      try { child.stdout?.removeListener('data', client.onData); } catch {}
+      try { child.stdout?.removeListener('data', client.onData!); } catch { /* ignore */ }
       const detail = client.stderr.trim().replace(/\s+/g, ' ').slice(0, 400);
       const why = [
         '远程MCP进程已退出',
@@ -155,9 +232,9 @@ export class RemoteMcpController {
       ].filter(Boolean).join(' | ');
       flushPending(why);
     });
-    child.on('error', (err: any) => {
+    child.on('error', (err: Error) => {
       client.closed = true;
-      try { child.stdout?.removeListener('data', client.onData); } catch {}
+      try { child.stdout?.removeListener('data', client.onData!); } catch { /* ignore */ }
       flushPending(err?.message || '远程MCP进程错误');
     });
 
@@ -165,7 +242,13 @@ export class RemoteMcpController {
     return client;
   }
 
-  async _stdioRequest(serverName: any, entry: any, method: any, params: any, { timeoutMs = 15000 }: any = {}) {
+  async _stdioRequest(
+    serverName: string,
+    entry: StdioServerEntry,
+    method: string,
+    params: unknown,
+    { timeoutMs = 15000 }: { timeoutMs?: number } = {}
+  ) {
     const client = this._ensureStdioClient(serverName, entry);
     if (!client || client.closed) {
       throw new Error(`远程MCP服务器 ${serverName} 不可用`);
@@ -193,22 +276,23 @@ export class RemoteMcpController {
     const blocks = Array.isArray(remoteConfig.mcpServers) ? remoteConfig.mcpServers : [];
     if (!blocks.length) return null;
 
-    const merged: any = {};
-    const mergeServers = (obj: any) => {
+    const merged: Record<string, RemoteRuntimeConfig> = {};
+    const mergeServers = (obj: unknown) => {
       if (!obj || typeof obj !== 'object') return;
-      const map = obj.mcpServers && typeof obj.mcpServers === 'object' && !Array.isArray(obj.mcpServers)
-        ? obj.mcpServers
+      const rec = obj as { mcpServers?: unknown };
+      const map = rec.mcpServers && typeof rec.mcpServers === 'object' && !Array.isArray(rec.mcpServers)
+        ? (rec.mcpServers as Record<string, unknown>)
         : null;
       if (!map) return;
       for (const [name, runtimeConfig] of Object.entries(map)) {
         const n = String(name || '').trim();
         if (!n || !runtimeConfig || typeof runtimeConfig !== 'object') continue;
-        merged[n] = runtimeConfig;
+        merged[n] = runtimeConfig as RemoteRuntimeConfig;
       }
     };
 
     for (const block of blocks) {
-      let obj = block?.config ?? block;
+      let obj: unknown = (block as { config?: unknown })?.config ?? block;
       if (typeof obj === 'string') {
         try { obj = JSON.parse(obj); } catch { obj = null; }
       }
@@ -217,7 +301,7 @@ export class RemoteMcpController {
 
     const servers = Object.entries(merged)
       .map(([name, runtimeConfig]) => ({ name, runtimeConfig }))
-      .filter((item: any) => item.name && item.runtimeConfig && typeof item.runtimeConfig === 'object');
+      .filter((item) => item.name && item.runtimeConfig && typeof item.runtimeConfig === 'object');
 
     return servers.length ? { servers } : null;
   }
@@ -229,18 +313,23 @@ export class RemoteMcpController {
     if (!this.mcpServer) return [];
     if (process.env.XRK_TEST === '1') return [];
 
-    const loadedServers = [];
+    const loadedServers: string[] = [];
 
     // 1) 先加载由 stream 插件提供的 MCP 服务器（安装插件即自动注册）
     for (const [serverName, runtimeConfig] of this.mcpPluginServers.entries()) {
       if (this._loadedPluginServers.has(serverName)) continue;
       try {
-        await this._createRemoteMCPClient(serverName, runtimeConfig || {});
+        await this._createRemoteMCPClient(
+          serverName,
+          (runtimeConfig && typeof runtimeConfig === 'object'
+            ? runtimeConfig
+            : {}) as RemoteRuntimeConfig
+        );
         this._loadedPluginServers.add(serverName);
         this._makeLog('info', `插件 MCP 服务器已加载: ${serverName}`);
         loadedServers.push(serverName);
-      } catch (error: any) {
-        this._makeLog('warn', `加载插件 MCP 服务器 ${serverName} 失败: ${error.message}`);
+      } catch (error: unknown) {
+        this._makeLog('warn', `加载插件 MCP 服务器 ${serverName} 失败: ${normalizeError(error).message}`);
       }
     }
 
@@ -268,8 +357,8 @@ export class RemoteMcpController {
         // 串行逐个加载，避免同时启动大量 stdio 子进程导致 CPU 峰值
         await this._createRemoteMCPClient(serverName, serverConfig.runtimeConfig || {});
         loadedServers.push(serverName);
-      } catch (error: any) {
-        this._makeLog('error', `加载远程MCP服务器 ${serverName} 失败: ${error.message}`);
+      } catch (error: unknown) {
+        this._makeLog('error', `加载远程MCP服务器 ${serverName} 失败: ${normalizeError(error).message}`);
       }
     }
 
@@ -288,7 +377,7 @@ export class RemoteMcpController {
   /**
    * 创建远程MCP客户端并注册工具
    */
-  async _createRemoteMCPClient(serverName: any, config: any) {
+  async _createRemoteMCPClient(serverName: string, config: RemoteRuntimeConfig) {
     const connectGate = checkMcpConnectAllowed(serverName);
     if (!connectGate.ok) {
       this._makeLog('warn', connectGate.error);
@@ -305,7 +394,7 @@ export class RemoteMcpController {
       const cwd = typeof runtimeConfig.cwd === 'string' && runtimeConfig.cwd.trim()
         ? runtimeConfig.cwd.trim()
         : process.cwd();
-      const args = (Array.isArray(runtimeConfig.args) ? runtimeConfig.args : []).map((a: any) => String(a));
+      const args = (Array.isArray(runtimeConfig.args) ? runtimeConfig.args : []).map((a) => String(a));
       const spawnSpec = resolveCommandSpawn(String(runtimeConfig.command), args, cwd);
       const shell = typeof runtimeConfig.shell === 'boolean'
         ? runtimeConfig.shell
@@ -314,10 +403,13 @@ export class RemoteMcpController {
         stdio: ['pipe', 'pipe', 'pipe'],
         shell,
         windowsHide: true,
-        env: { ...process.env, ...(runtimeConfig.env && typeof runtimeConfig.env === 'object' ? runtimeConfig.env : {}) },
+        env: {
+          ...process.env,
+          ...(runtimeConfig.env && typeof runtimeConfig.env === 'object' ? runtimeConfig.env : {})
+        },
         cwd,
-      });
-      const entry = { type: 'stdio', process: child, config: runtimeConfig };
+      }) as ChildProcessWithoutNullStreams;
+      const entry: StdioServerEntry = { type: 'stdio', process: child, config: runtimeConfig };
       this.remoteMCPServers.set(serverName, entry);
 
       // 使用单一 stdout listener + pending map，避免超时/并发造成 listener 泄漏
@@ -336,24 +428,37 @@ export class RemoteMcpController {
           : 15000;
         await this._stdioRequest(serverName, entry, 'initialize', initParams, { timeoutMs: initTimeoutMs });
         const listResult = await this._stdioRequest(serverName, entry, 'tools/list', {}, { timeoutMs: 30000 });
-        if ((listResult as any)?.tools) {
-          this._registerRemoteTools(serverName, (listResult as any).tools);
+        const tools = (listResult as { tools?: RemoteToolMeta[] } | null)?.tools;
+        if (tools) {
+          this._registerRemoteTools(serverName, tools);
         }
-      } catch (error: any) {
-        this._makeLog('error', `远程MCP服务器 ${serverName} 初始化失败: ${error.message}`);
+      } catch (error: unknown) {
+        this._makeLog('error', `远程MCP服务器 ${serverName} 初始化失败: ${normalizeError(error).message}`);
         throw error;
       }
     } else if (runtimeConfig.url) {
       // URL 协议：支持 HTTP / WebSocket 等远程 MCP transport
-      const headers = runtimeConfig.headers && typeof runtimeConfig.headers === 'object' ? runtimeConfig.headers : {};
+      const headers = runtimeConfig.headers && typeof runtimeConfig.headers === 'object'
+        ? runtimeConfig.headers
+        : {};
       const transport = String(runtimeConfig.transport || 'http').toLowerCase();
 
       if (transport === 'websocket' || transport === 'ws') {
-        this.remoteMCPServers.set(serverName, { type: 'ws', url: runtimeConfig.url, headers, config: runtimeConfig });
+        this.remoteMCPServers.set(serverName, {
+          type: 'ws',
+          url: runtimeConfig.url,
+          headers,
+          config: runtimeConfig
+        });
         await this._fetchRemoteToolsViaWebSocket(serverName, { url: runtimeConfig.url, headers });
       } else {
         // 默认按 HTTP JSON-RPC 处理，包括 transport=http/sse/空
-        this.remoteMCPServers.set(serverName, { type: 'http', url: runtimeConfig.url, headers, config: runtimeConfig });
+        this.remoteMCPServers.set(serverName, {
+          type: 'http',
+          url: runtimeConfig.url,
+          headers,
+          config: runtimeConfig
+        });
         await this._fetchRemoteTools(serverName, { ...runtimeConfig, headers });
       }
     }
@@ -362,21 +467,22 @@ export class RemoteMcpController {
   /**
    * 注册远程MCP工具到主MCP服务器
    */
-  _registerRemoteTools(serverName: any, tools: any) {
+  _registerRemoteTools(serverName: string, tools: RemoteToolMeta[]) {
     const mcpServer = this.mcpServer;
     if (!mcpServer || !Array.isArray(tools)) return;
 
     const before = mcpServer.tools.size;
     for (const tool of tools) {
+      if (!tool?.name) continue;
       const toolName = `remote-mcp.${serverName}.${tool.name}`;
       // 如果工具已存在，先删除再注册（避免重复警告）
       if (mcpServer.tools.has(toolName)) {
         mcpServer.tools.delete(toolName);
       }
-      const def = {
+      const def: RemoteToolDef = {
         description: tool.description || '',
         inputSchema: tool.inputSchema || {},
-        handler: (args: any) => this._callRemoteTool(serverName, tool.name, args)
+        handler: (args) => this._callRemoteTool(serverName, tool.name, args)
       };
       if (this._registerToolCallback) {
         this._registerToolCallback(toolName, def);
@@ -394,9 +500,9 @@ export class RemoteMcpController {
    * 归一化远程 MCP 返回结果（stdio / HTTP 共用）
    * @private
    */
-  _normalizeRemoteMCPResult(rawResult: any) {
+  _normalizeRemoteMCPResult(rawResult: unknown) {
     try {
-      const text = rawResult?.content?.[0]?.text;
+      const text = (rawResult as { content?: Array<{ text?: string }> } | null)?.content?.[0]?.text;
 
       if (typeof text === 'string' && text.trim().length > 0) {
         // 优先尝试把 text 当作 JSON 解析；失败则当作原始字符串返回
@@ -412,15 +518,15 @@ export class RemoteMcpController {
       }
 
       return { success: false, error: '远程MCP返回空结果' };
-    } catch (e: any) {
-      return { success: false, error: `解析远程MCP响应失败: ${e.message || e}` };
+    } catch (e: unknown) {
+      return { success: false, error: `解析远程MCP响应失败: ${normalizeError(e).message}` };
     }
   }
 
   /**
    * 调用远程 MCP 工具（stdio / HTTP / WebSocket）
    */
-  async _callRemoteTool(serverName: any, toolName: any, args: any) {
+  async _callRemoteTool(serverName: string, toolName: string, args: Record<string, unknown>) {
     const server = this.remoteMCPServers.get(serverName);
     if (!server) {
       return { success: false, error: `远程MCP服务器 ${serverName} 未找到` };
@@ -436,23 +542,28 @@ export class RemoteMcpController {
           { timeoutMs: 30000 }
         );
         return this._normalizeRemoteMCPResult(result);
-      } catch (error: any) {
-        return { success: false, error: error.message || String(error) };
+      } catch (error: unknown) {
+        return { success: false, error: normalizeError(error).message };
       }
     } else if (server.type === 'http') {
       try {
         const requestId = this._makeRemoteRequestId();
-        const request = { jsonrpc: '2.0', id: requestId, method: 'tools/call', params: { name: toolName, arguments: args } };
+        const request = {
+          jsonrpc: '2.0',
+          id: requestId,
+          method: 'tools/call',
+          params: { name: toolName, arguments: args }
+        };
         const response = await fetchWithPolicy(server.url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...server.headers },
           body: JSON.stringify(request),
           timeoutMs: 30_000,
         });
-        const data: any = await response.json();
+        const data = (await response.json()) as JsonRpcResponse;
         return this._normalizeRemoteMCPResult(data.result);
-      } catch (error: any) {
-        return { success: false, error: error.message };
+      } catch (error: unknown) {
+        return { success: false, error: normalizeError(error).message };
       }
     } else if (server.type === 'ws') {
       // 简单 WebSocket JSON-RPC 客户端：每次调用按需建立连接
@@ -460,11 +571,16 @@ export class RemoteMcpController {
         // @ts-expect-error no @types/ws in this package
         const { default: WebSocket } = await import('ws');
         const requestId = this._makeRemoteRequestId();
-        const request = { jsonrpc: '2.0', id: requestId, method: 'tools/call', params: { name: toolName, arguments: args } };
-        return await new Promise<any>((resolve) => {
+        const request = {
+          jsonrpc: '2.0',
+          id: requestId,
+          method: 'tools/call',
+          params: { name: toolName, arguments: args }
+        };
+        return await new Promise<unknown>((resolve) => {
           const ws = new WebSocket(server.url, { headers: server.headers || {} });
           const timeout = setTimeout(() => {
-            try { ws.close(); } catch {}
+            try { ws.close(); } catch { /* ignore */ }
             resolve({ success: false, error: '调用超时' });
           }, 30000);
 
@@ -472,12 +588,12 @@ export class RemoteMcpController {
             ws.send(JSON.stringify(request));
           });
 
-          ws.on('message', (data: any) => {
+          ws.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
             try {
-              const msg = JSON.parse(data.toString());
+              const msg = JSON.parse(String(data)) as JsonRpcResponse;
               if (msg.id !== requestId) return;
               clearTimeout(timeout);
-              try { ws.close(); } catch {}
+              try { ws.close(); } catch { /* ignore */ }
               const finalResult = this._normalizeRemoteMCPResult(msg.result);
               resolve(finalResult);
             } catch {
@@ -485,7 +601,7 @@ export class RemoteMcpController {
             }
           });
 
-          ws.on('error', (err: any) => {
+          ws.on('error', (err: Error) => {
             clearTimeout(timeout);
             resolve({ success: false, error: err?.message || String(err) });
           });
@@ -495,19 +611,21 @@ export class RemoteMcpController {
             clearTimeout(timeout);
           });
         });
-      } catch (error: any) {
-        return { success: false, error: error.message || String(error) };
+      } catch (error: unknown) {
+        return { success: false, error: normalizeError(error).message };
       }
     }
+
+    return { success: false, error: `不支持的远程MCP类型` };
   }
 
   /**
    * 通过 HTTP 获取远程工具列表
    */
-  async _fetchRemoteTools(serverName: any, config: any) {
+  async _fetchRemoteTools(serverName: string, config: RemoteRuntimeConfig & { url?: string; headers?: Record<string, string> }) {
     try {
       const request = { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} };
-      const response = await fetchWithPolicy(config.url, {
+      const response = await fetchWithPolicy(String(config.url), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(config.headers || {}) },
         body: JSON.stringify(request),
@@ -516,21 +634,26 @@ export class RemoteMcpController {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} ${response.statusText || ''}`.trim());
       }
-      const data: any = await response.json();
+      const data = (await response.json()) as JsonRpcResponse & {
+        result?: { tools?: RemoteToolMeta[] };
+      };
       if (data.result?.tools) {
         this._registerRemoteTools(serverName, data.result.tools);
       } else if (data.error) {
         throw new Error(data.error?.message || JSON.stringify(data.error));
       }
-    } catch (error: any) {
-      this._makeLog('error', `获取远程MCP工具失败 ${serverName}: ${error.message}`);
+    } catch (error: unknown) {
+      this._makeLog('error', `获取远程MCP工具失败 ${serverName}: ${normalizeError(error).message}`);
     }
   }
 
   /**
    * 通过 WebSocket 获取远程工具列表（MCP JSON-RPC over WS）
    */
-  async _fetchRemoteToolsViaWebSocket(serverName: any, config: any) {
+  async _fetchRemoteToolsViaWebSocket(
+    serverName: string,
+    config: { url: string; headers?: Record<string, string> }
+  ) {
     try {
       // @ts-expect-error no @types/ws in this package
       const { default: WebSocket } = await import('ws');
@@ -539,7 +662,7 @@ export class RemoteMcpController {
       await new Promise<void>((resolve) => {
         const ws = new WebSocket(config.url, { headers: config.headers || {} });
         const timeout = setTimeout(() => {
-          try { ws.close(); } catch {}
+          try { ws.close(); } catch { /* ignore */ }
           resolve();
         }, 15000);
 
@@ -547,9 +670,11 @@ export class RemoteMcpController {
           ws.send(JSON.stringify(request));
         });
 
-        ws.on('message', (data: any) => {
+        ws.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
           try {
-            const msg = JSON.parse(data.toString());
+            const msg = JSON.parse(String(data)) as JsonRpcResponse & {
+              result?: { tools?: RemoteToolMeta[] };
+            };
             if (msg.id !== 1) return;
             if (msg.result?.tools) {
               this._registerRemoteTools(serverName, msg.result.tools);
@@ -558,7 +683,7 @@ export class RemoteMcpController {
             // 忽略解析失败
           } finally {
             clearTimeout(timeout);
-            try { ws.close(); } catch {}
+            try { ws.close(); } catch { /* ignore */ }
             resolve();
           }
         });
@@ -573,8 +698,8 @@ export class RemoteMcpController {
           resolve();
         });
       });
-    } catch (error: any) {
-      this._makeLog('error', `通过 WebSocket 获取远程MCP工具失败 ${serverName}: ${error.message}`);
+    } catch (error: unknown) {
+      this._makeLog('error', `通过 WebSocket 获取远程MCP工具失败 ${serverName}: ${normalizeError(error).message}`);
     }
   }
 }

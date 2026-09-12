@@ -19,30 +19,70 @@ const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
 
 const GEMINI_FRESHNESS_DAYS: Record<string, number> = { day: 1, week: 7, month: 30, year: 365 }
 
+type GeminiRuntime = {
+  gemini?: { apiKey?: string; baseUrl?: string; model?: string }
+  maxResults?: number
+  timeoutSeconds?: number
+  cacheTtlMinutes?: number
+}
+
+type GeminiSearchParams = {
+  query?: string
+  count?: number
+  country?: string
+  language?: string
+  freshness?: string
+  date_after?: string
+  date_before?: string
+}
+
+type GeminiTimeRangeFilter = {
+  startTime: string
+  endTime: string
+}
+
+type GeminiTimeRangeResult =
+  | { error: string; message: string }
+  | { timeRangeFilter?: GeminiTimeRangeFilter }
+
+type GeminiCitation = { url: string; title?: string }
+
+type GeminiGenerateResponse = {
+  error?: { message?: string; status?: string }
+  candidates?: Array<{
+    content?: { parts?: Array<{ text?: unknown }> }
+    groundingMetadata?: {
+      groundingChunks?: Array<{ web?: { uri?: unknown; title?: unknown } }>
+    }
+  }>
+}
+
 function toGeminiTimeRangeTimestamp(date: Date) {
   return date.toISOString().replace(/\.\d+Z$/, 'Z')
 }
 
-function resolveGeminiApiKey(runtime: Record<string, any>) {
+function resolveGeminiApiKey(runtime: GeminiRuntime) {
   return runtime?.gemini?.apiKey?.trim?.() || ''
 }
 
-function resolveGeminiBaseUrl(runtime: Record<string, any>) {
+function resolveGeminiBaseUrl(runtime: GeminiRuntime) {
   return (runtime?.gemini?.baseUrl?.trim?.() || DEFAULT_GEMINI_BASE_URL).replace(/\/+$/, '')
 }
 
-function resolveGeminiModel(runtime: Record<string, any>) {
+function resolveGeminiModel(runtime: GeminiRuntime) {
   return runtime?.gemini?.model?.trim?.() || DEFAULT_GEMINI_MODEL
 }
 
-function resolveGeminiTimeRangeFilter(args: Record<string, any>) {
+function resolveGeminiTimeRangeFilter(args: GeminiSearchParams): GeminiTimeRangeResult {
   const parsed = parseWebSearchTimeFilters({
     rawFreshness: args.freshness,
     rawDateAfter: args.date_after,
     rawDateBefore: args.date_before,
     freshnessProvider: 'perplexity'
   })
-  if ('error' in parsed && parsed.error) return parsed
+  if ('error' in parsed && parsed.error) {
+    return { error: parsed.error, message: parsed.message ?? '' }
+  }
 
   const now = new Date()
   if (parsed.freshness) {
@@ -80,8 +120,8 @@ export function missingGeminiApiKeyPayload() {
 }
 
 export async function runGeminiSearch(
-  params: Record<string, any>,
-  runtime: Record<string, any> = {}
+  params: GeminiSearchParams,
+  runtime: GeminiRuntime = {}
 ) {
   if (params.country || params.language) {
     return {
@@ -97,8 +137,10 @@ export async function runGeminiSearch(
   const query = String(params.query || '').trim()
   if (!query) throw new Error('query is required')
 
-  const timeRange = resolveGeminiTimeRangeFilter(params) as any
-  if (timeRange.error) return { error: timeRange.error, message: timeRange.message }
+  const timeRange = resolveGeminiTimeRangeFilter(params)
+  if ('error' in timeRange) {
+    return { error: timeRange.error, message: timeRange.message }
+  }
 
   const model = resolveGeminiModel(runtime)
   const baseUrl = resolveGeminiBaseUrl(runtime)
@@ -123,7 +165,7 @@ export async function runGeminiSearch(
     timeRange.timeRangeFilter === undefined ? {} : { timeRangeFilter: timeRange.timeRangeFilter }
 
   const start = Date.now()
-  const result = (await withTrustedWebSearchEndpoint(
+  const result = await withTrustedWebSearchEndpoint(
     {
       url: endpoint,
       timeoutSeconds,
@@ -139,9 +181,9 @@ export async function runGeminiSearch(
         })
       }
     },
-    async (res: Response) => {
+    async (res: Response): Promise<{ content: string; citations: GeminiCitation[] }> => {
       if (!res.ok) await throwWebSearchApiError(res, 'Gemini API')
-      const data = (await res.json()) as any
+      const data = (await res.json()) as GeminiGenerateResponse
       if (data.error) {
         throw new Error(data.error.message || data.error.status || 'Gemini API error')
       }
@@ -149,7 +191,7 @@ export async function runGeminiSearch(
       const parts = candidate?.content?.parts
       const content = Array.isArray(parts)
         ? parts
-            .map((p: any) => (typeof p.text === 'string' ? p.text : ''))
+            .map((p) => (typeof p.text === 'string' ? p.text : ''))
             .filter(Boolean)
             .join('\n')
         : ''
@@ -157,16 +199,16 @@ export async function runGeminiSearch(
 
       const chunks = candidate?.groundingMetadata?.groundingChunks ?? []
       const citations = chunks
-        .map((chunk: any) => {
+        .map((chunk): GeminiCitation | null => {
           const web = chunk?.web
           if (!web || typeof web.uri !== 'string') return null
           return { url: web.uri, title: typeof web.title === 'string' ? web.title : undefined }
         })
-        .filter(Boolean)
+        .filter((c): c is GeminiCitation => Boolean(c))
 
       return { content, citations }
     }
-  )) as { content: string; citations: any[] }
+  )
 
   const payload = {
     query,

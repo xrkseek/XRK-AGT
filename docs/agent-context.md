@@ -152,12 +152,20 @@ runChatAgent
 ```
 slash 展开（/recipe · /recipes …）
   → assemble 消息三层
-  → contextWindow 尾部裁剪（prepareOutboundMessages）
-  → harness continueTurn（tool 配对 / 压缩由 session 侧负责）
+  → contextWindow 尾部裁剪（prepareOutboundMessages）   ← AGT 硬裁，OpenAI messages
+  → harness continueTurn（CompactionOptions soft budget） ← session 侧软压 + 自动摘要
 ```
 
-配置：Provider `contextWindow`（出站裁剪）；`context.chatHistory`（群聊笔录条数）。多轮压缩归 harness。  
-实现：`ai-workflow.js` `prepareOutboundMessages` · `harness-module-loop.js` · `chat-pipeline.js`。
+**两层叠加（同一 Provider `contextWindow`）**
+
+| 层 | 函数 | 作用 |
+|----|------|------|
+| 出站硬裁 | `resolveInputTokenBudget` → `trimMessagesToTokenBudget`（`AiWorkflow.prepareOutboundMessages`） | 进 loop **前**按预算丢掉旧消息；复用 `sessionKey` 时先 `slimMessagesForExistingSession`，避免裁已废弃的客户端 history |
+| harness 软压 | `resolveHarnessCompaction`（同式算出 `maxRequestTokens`，`keepTokens≈45%`，`auto:true`） | loop **内**对 session 做 soft compact / 溢出摘要；**不**替代出站硬裁 |
+
+公式（两层共用）：`budget = max(800, floor(contextWindow×0.85) - maxTokens - 2000)`；`contextWindow < 1000` → 出站不裁、compaction 关闭。  
+配置：Provider `contextWindow` / `maxTokens`；`context.chatHistory`（群聊笔录条数）。  
+实现：`ai-workflow.ts` `prepareOutboundMessages` · `message-token-budget.ts` · `harness-module-loop.ts` `resolveHarnessCompaction`。
 
 ### 5.2 策略与安全
 
@@ -167,6 +175,8 @@ slash 展开（/recipe · /recipes …）
 | 威胁扫描 | `security.toolScan` | `tool-security-inspect.js`（默认开） |
 | 交互审批 | `security.approval`（默认 **false**） | 主人私聊 `#批准` / `#批准id`；关则 ask=拒绝（主人可 bypass） |
 | 执行门禁 | — | **统一**在 `MCPServer.handleToolCall`（LLM / HTTP / WS / JSON-RPC） |
+
+顺序（`inspectToolCallSecurity`）：`tool.call` policy（allow|deny|ask）→ `toolScan` 模式匹配 → ask 时主人旁路或 `security.approval`。测：`tests/framework/tool-security.test.mjs`。
 
 ### 5.3 斜杠与配方
 

@@ -4,13 +4,26 @@
 
 import RuntimeUtil from '#utils/runtime-util.js';
 
+type ChatMessage = Record<string, unknown> & {
+  role?: string;
+  content?: unknown;
+  tool_calls?: unknown[];
+  tool_call_id?: string;
+  name?: string;
+};
+
+type CleanupOptions = {
+  mergeConsecutive?: boolean;
+  ensureUserFirst?: boolean;
+};
+
 /**
  * 标准化消息序列
  */
-export function cleanupMessages(messages: any, options: any = {}) {
+export function cleanupMessages(messages: unknown, options: CleanupOptions = {}): ChatMessage[] {
   if (!Array.isArray(messages) || messages.length === 0) return [];
 
-  let cleaned = [...messages];
+  let cleaned = [...messages] as ChatMessage[];
 
   cleaned = removeInvalidMessages(cleaned);
   cleaned = normalizeMessageContent(cleaned);
@@ -40,13 +53,13 @@ export function cleanupMessages(messages: any, options: any = {}) {
 /**
  * 移除无效消息
  */
-function removeInvalidMessages(messages: any) {
-  return messages.filter((msg: any) => {
+function removeInvalidMessages(messages: ChatMessage[]): ChatMessage[] {
+  return messages.filter((msg) => {
     if (!msg?.role) return false;
     if (msg.role === 'system') return true;
 
     if (msg.role === 'assistant') {
-      return hasValidContent(msg.content) || (msg.tool_calls?.length > 0);
+      return hasValidContent(msg.content) || (Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0);
     }
 
     if (msg.role === 'tool') {
@@ -57,7 +70,7 @@ function removeInvalidMessages(messages: any) {
   });
 }
 
-function hasValidContent(content: any) {
+function hasValidContent(content: unknown): boolean {
   if (!content) return false;
   if (typeof content === 'string') return content.trim().length > 0;
   if (Array.isArray(content)) return content.length > 0;
@@ -67,8 +80,8 @@ function hasValidContent(content: any) {
 /**
  * 标准化消息内容
  */
-function normalizeMessageContent(messages: any) {
-  return messages.map((msg: any) => {
+function normalizeMessageContent(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((msg) => {
     const normalized = { ...msg };
 
     if (normalized.content === null || normalized.content === undefined) {
@@ -90,11 +103,11 @@ function normalizeMessageContent(messages: any) {
 /**
  * 合并连续的相同角色消息
  */
-function mergeConsecutiveMessages(messages: any) {
+function mergeConsecutiveMessages(messages: ChatMessage[]): ChatMessage[] {
   if (messages.length <= 1) return messages;
 
-  const merged = [];
-  let current = null;
+  const merged: ChatMessage[] = [];
+  let current: ChatMessage | null = null;
 
   for (const msg of messages) {
     if (!current) {
@@ -116,7 +129,7 @@ function mergeConsecutiveMessages(messages: any) {
   return merged;
 }
 
-function mergeContent(content1: any, content2: any) {
+function mergeContent(content1: unknown, content2: unknown): unknown {
   if (typeof content1 === 'string' && typeof content2 === 'string') {
     return content1 + '\n' + content2;
   }
@@ -129,9 +142,9 @@ function mergeContent(content1: any, content2: any) {
 /**
  * 确保第一条非 system 消息是 user
  */
-function ensureFirstUserMessage(messages: any) {
-  const systemMessages = [];
-  const otherMessages = [];
+function ensureFirstUserMessage(messages: ChatMessage[]): ChatMessage[] {
+  const systemMessages: ChatMessage[] = [];
+  const otherMessages: ChatMessage[] = [];
 
   for (const msg of messages) {
     if (msg.role === 'system') {
@@ -154,17 +167,17 @@ function ensureFirstUserMessage(messages: any) {
  * 修复工具调用序列
  * Gemini 规则：assistant(with tool_calls) 必须紧跟在 user 或 tool 后面
  */
-function fixToolCallSequence(messages: any) {
-  const fixed = [];
+function fixToolCallSequence(messages: ChatMessage[]): ChatMessage[] {
+  const fixed: ChatMessage[] = [];
   let expectingToolResponse = false;
   let toolCallsCount = 0;
   let pendingToolCallsStartIndex = -1;
 
   for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
+    const msg = messages[i]!;
     const prev = fixed[fixed.length - 1];
 
-    if (msg.role === 'assistant' && msg.tool_calls?.length > 0) {
+    if (msg.role === 'assistant' && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
       if (prev && prev.role !== 'user' && prev.role !== 'tool') {
         RuntimeUtil.makeLog('debug', `[message-cleanup] 跳过 assistant with tool_calls（前面是 ${prev.role}，需要 user 或 tool）`, 'MessageCleanup');
         continue;
@@ -214,4 +227,3 @@ function fixToolCallSequence(messages: any) {
 
   return fixed;
 }
-

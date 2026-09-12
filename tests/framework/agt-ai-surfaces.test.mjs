@@ -1,12 +1,13 @@
 /**
  * Surface contracts: web console /v1, ai.js harness gate, chat → callAI.
+ * Entry: tests/helpers/harness-ai.mjs
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { shouldUseHarnessModuleLoop } from '../../dist/src/utils/http/ai-v3-utils.js';
+import { shouldUseHarnessModuleLoop } from '../helpers/harness-ai.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -23,6 +24,19 @@ describe('AGT AI surface harness wiring', () => {
       if (key.startsWith('@xrkseek/')) {
         assert.doesNotMatch(String(deps[key]), /^link:/, key);
       }
+    }
+  });
+
+  it('HARNESS_SDK_PIN matches package.json and installed SDK', async () => {
+    const { HARNESS_SDK_PIN, readInstalledHarnessVersion } = await import(
+      '#infrastructure/ai-workflow/harness-resolve.js'
+    );
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    assert.equal(HARNESS_SDK_PIN, '0.3.3');
+    assert.equal(String(pkg.dependencies['@xrkseek/harness']), HARNESS_SDK_PIN);
+    const installed = readInstalledHarnessVersion();
+    if (installed) {
+      assert.equal(installed, HARNESS_SDK_PIN);
     }
   });
 
@@ -82,10 +96,10 @@ describe('AGT AI surface harness wiring', () => {
 
   it('runHarnessModuleLoop works for web-like no-workflow turn', async () => {
     const { importHarnessSdk } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
+      '#infrastructure/ai-workflow/harness-resolve.js'
     );
     const { runHarnessModuleLoop } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
+      '#infrastructure/ai-workflow/harness-module-loop.js'
     );
     let harness;
     try {

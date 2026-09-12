@@ -36,9 +36,10 @@ export class ToolApproval extends PluginBase {
     return false
   }
 
-  async #resolve(action: any, okVerb: any, failVerb: any) {
+  async #resolve(action: 'allow' | 'deny', okVerb: string, failVerb: string) {
     if (!(await this.#requireEnabled())) return true
-    const parsed = parseApprovalCommand(this.e.msg, action)
+    const msg = (this.e as { msg?: unknown } | undefined)?.msg
+    const parsed = parseApprovalCommand(msg, action)
     const result = resolveToolApproval(parsed?.id || '', action)
     await this.reply(result.ok ? `已${okVerb} ${result.id}` : result.error || `${failVerb}失败`)
     return true

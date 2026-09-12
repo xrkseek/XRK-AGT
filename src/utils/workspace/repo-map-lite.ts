@@ -30,16 +30,50 @@ const IMPORT_RES = [
   /^\s*import\s+(\.[\w./]+)\s*$/gm
 ];
 
-/**
- * @param {string} root
- * @param {{ maxFiles?: number, maxDepth?: number }} [opts]
- */
-async function walkFiles(root: any, opts: any = {}) {
+type WalkFilesOpts = {
+  maxFiles?: number;
+  maxDepth?: number;
+};
+
+type FileMeta = {
+  rel: string;
+  symbols: string[];
+  contentHead: string;
+};
+
+type RepoMapOpts = {
+  query?: string;
+  focusPaths?: string[];
+  maxTokens?: number;
+  maxFiles?: number;
+};
+
+type ScoredFile = {
+  path: string;
+  abs: string;
+  score: number;
+  rank: number;
+  symbols: string[];
+};
+
+type PickedFile = {
+  path: string;
+  score: number;
+  symbols: string[];
+  rank: number;
+};
+
+type RepoMapResult = {
+  text: string;
+  files: PickedFile[];
+};
+
+async function walkFiles(root: string, opts: WalkFilesOpts = {}): Promise<string[]> {
   const maxFiles = opts.maxFiles ?? 400;
   const maxDepth = opts.maxDepth ?? 4;
-  const out: any[] = [];
+  const out: string[] = [];
 
-  async function walk(dir: any, depth: any) {
+  async function walk(dir: string, depth: number): Promise<void> {
     if (out.length >= maxFiles || depth > maxDepth) return;
     let entries;
     try {
@@ -66,13 +100,12 @@ async function walkFiles(root: any, opts: any = {}) {
   return out;
 }
 
-/**
- * @param {string} fromAbs
- * @param {string} spec
- * @param {Set<string>} absSet
- * @param {string} root
- */
-function resolveImportTarget(fromAbs: any, spec: any, absSet: any, root: any) {
+function resolveImportTarget(
+  fromAbs: string,
+  spec: string,
+  absSet: Set<string>,
+  root: string,
+): string | null {
   const base = path.resolve(path.dirname(fromAbs), spec);
   const candidates = [
     base,
@@ -99,15 +132,16 @@ function resolveImportTarget(fromAbs: any, spec: any, absSet: any, root: any) {
 
 /**
  * 简易 PageRank（阻尼 0.85，迭代 20）。
- * @param {Map<string, Set<string>>} edges from -> to
- * @param {string[]} nodes
- * @param {Map<string, number>} [personalization]
  */
-function pageRank(edges: any, nodes: any, personalization: any = new Map()) {
+function pageRank(
+  edges: Map<string, Set<string>>,
+  nodes: string[],
+  personalization: Map<string, number> = new Map(),
+): Map<string, number> {
   const n = nodes.length;
   if (!n) return new Map();
   const damp = 0.85;
-  const idx = new Map(nodes.map((id: any, i: any) => [id, i]));
+  const idx = new Map(nodes.map((id, i) => [id, i]));
   let rank = new Float64Array(n).fill(1 / n);
   const pers = new Float64Array(n);
   let persSum = 0;
@@ -148,33 +182,29 @@ function pageRank(edges: any, nodes: any, personalization: any = new Map()) {
     rank = next;
   }
 
-  const out = new Map();
+  const out = new Map<string, number>();
   for (let i = 0; i < n; i++) out.set(nodes[i], rank[i]);
   return out;
 }
 
-/**
- * @param {string} workspace
- * @param {{ query?: string, focusPaths?: string[], maxTokens?: number, maxFiles?: number }} [opts]
- * @returns {Promise<{ text: string, files: Array<{ path: string, score: number, symbols: string[], rank?: number }> }>}
- */
-export async function buildRepoMapLite(workspace: any, opts: any = {}) {
-  const root = path.resolve(workspace || process.cwd());
+export async function buildRepoMapLite(
+  workspace: unknown,
+  opts: RepoMapOpts = {},
+): Promise<RepoMapResult> {
+  const root = path.resolve(String(workspace || '') || process.cwd());
   const maxTokens = opts.maxTokens ?? 1200;
   const queryTerms = String(opts.query || '')
     .toLowerCase()
     .split(/[^\p{L}\p{N}_]+/u)
     .filter((t) => t.length >= 2);
   const focus = new Set(
-    (opts.focusPaths || []).map((p: any) => path.resolve(String(p)))
+    (opts.focusPaths || []).map((p) => path.resolve(String(p)))
   );
 
   const files = await walkFiles(root, { maxFiles: opts.maxFiles ?? 400 });
   const absSet = new Set(files);
-  /** @type {Map<string, { rel: string, symbols: string[], contentHead: string }>} */
-  const meta = new Map();
-  /** @type {Map<string, Set<string>>} */
-  const edges = new Map();
+  const meta = new Map<string, FileMeta>();
+  const edges = new Map<string, Set<string>>();
 
   for (const abs of files) {
     let content = '';
@@ -184,9 +214,9 @@ export async function buildRepoMapLite(workspace: any, opts: any = {}) {
     } catch {
       continue;
     }
-    const symbols = [];
+    const symbols: string[] = [];
     SYM_RE.lastIndex = 0;
-    let m;
+    let m: RegExpExecArray | null;
     while ((m = SYM_RE.exec(content)) !== null) {
       if (symbols.length < 40) symbols.push(m[1]);
     }
@@ -197,10 +227,10 @@ export async function buildRepoMapLite(workspace: any, opts: any = {}) {
       contentHead: content.slice(0, 4000)
     });
 
-    const outs = edges.get(abs) || new Set();
+    const outs = edges.get(abs) || new Set<string>();
     for (const re of IMPORT_RES) {
       re.lastIndex = 0;
-      let im;
+      let im: RegExpExecArray | null;
       while ((im = re.exec(content)) !== null) {
         const target = resolveImportTarget(abs, im[1], absSet, root);
         if (target && target !== abs) outs.add(target);
@@ -210,18 +240,20 @@ export async function buildRepoMapLite(workspace: any, opts: any = {}) {
   }
 
   const nodes = [...meta.keys()];
-  const personalization = new Map();
+  const personalization = new Map<string, number>();
   const basePers = nodes.length ? 100 / nodes.length : 1;
   for (const abs of nodes) {
     let p = 0;
-    const { rel, symbols, contentHead } = meta.get(abs);
+    const entry = meta.get(abs);
+    if (!entry) continue;
+    const { rel, symbols, contentHead } = entry;
     if (focus.has(abs) || [...focus].some((f) => abs.startsWith(f + path.sep))) {
       p += basePers;
     }
     const lower = `${rel}\n${contentHead}`.toLowerCase();
     for (const t of queryTerms) {
       if (lower.includes(t)) p += basePers * 0.35;
-      if (symbols.some((s: any) => s.toLowerCase() === t)) p += basePers * 0.5;
+      if (symbols.some((s) => s.toLowerCase() === t)) p += basePers * 0.5;
     }
     const base = path.basename(abs, path.extname(abs)).toLowerCase();
     if (base.length >= 3 && queryTerms.includes(base)) p += basePers * 0.4;
@@ -233,9 +265,11 @@ export async function buildRepoMapLite(workspace: any, opts: any = {}) {
   for (const r of ranks.values()) if (r > maxRank) maxRank = r;
   if (maxRank <= 0) maxRank = 1;
 
-  const scored = [];
+  const scored: ScoredFile[] = [];
   for (const abs of nodes) {
-    const { rel, symbols, contentHead } = meta.get(abs);
+    const entry = meta.get(abs);
+    if (!entry) continue;
+    const { rel, symbols, contentHead } = entry;
     const rank = ranks.get(abs) || 0;
     let score = (rank / maxRank) * 100;
     score += Math.min(20, symbols.length);
@@ -245,7 +279,7 @@ export async function buildRepoMapLite(workspace: any, opts: any = {}) {
     const lower = `${rel}\n${contentHead}`.toLowerCase();
     for (const t of queryTerms) {
       if (lower.includes(t)) score += 8;
-      if (symbols.some((s: any) => s.toLowerCase() === t)) score += 15;
+      if (symbols.some((s) => s.toLowerCase() === t)) score += 15;
     }
     scored.push({
       path: rel,
@@ -260,7 +294,7 @@ export async function buildRepoMapLite(workspace: any, opts: any = {}) {
 
   const lines = ['# Workspace map', `root: ${root}`, 'ranking: import-graph PageRank + query personalization', ''];
   let tokens = estimateTokensMixed(lines.join('\n'));
-  const picked = [];
+  const picked: PickedFile[] = [];
   for (const row of scored) {
     const line = `- ${row.path}`
       + (row.symbols.length ? `  {${row.symbols.slice(0, 8).join(', ')}}` : '');

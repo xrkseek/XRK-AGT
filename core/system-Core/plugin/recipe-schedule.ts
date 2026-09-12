@@ -34,7 +34,7 @@ export class RecipeSchedule extends PluginBase {
         const { userPrompt } = materializeRecipe(r, {})
         RuntimeUtil.makeLog(
           'info',
-          `[recipe-schedule] 触发 ${r.id}: ${(userPrompt || r.title).slice(0, 120)}`,
+          `[recipe-schedule] 触发 ${r.id}: ${String(userPrompt || r.title || '').slice(0, 120)}`,
           'RecipeSchedule'
         )
       }

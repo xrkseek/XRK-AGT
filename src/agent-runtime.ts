@@ -42,6 +42,15 @@ import * as runtimeProxy from '#infrastructure/http/runtime-proxy.js';
 import * as runtimeMiddleware from '#infrastructure/http/runtime-middleware.js';
 import * as runtimeBoot from '#infrastructure/http/runtime-boot.js';
 import * as runtimeNet from '#infrastructure/http/runtime-net.js';
+import type {
+  AuthWhitelistRule,
+  ProxyDomainConfig,
+  RuntimeListenHost,
+  RuntimeProxyHost,
+  RuntimeWsHost,
+  WsConnectionLike,
+  WsHandlerEntry,
+} from '#infrastructure/http/runtime-host-types.js';
 
 /** 静态资源扩展名，用于基础放行（非鉴权） */
 const AUTH_STATIC_EXT_REGEX = /\.(html|css|js|json|png|jpg|jpeg|gif|svg|webp|ico|mp4|webm|mp3|wav|pdf|zip|woff|woff2|ttf|otf)$/i;
@@ -63,28 +72,33 @@ const AUTH_STATIC_EXT_REGEX = /\.(html|css|js|json|png|jpg|jpeg|gif|svg|webp|ico
  */
 export default class AgentRuntime extends EventEmitter {
   [key: string]: any;
-  _wsConnections: any = new Map();
-  _rateLimiters: any = new Map();
-  proxyMiddlewares: any = new Map();
-  domainConfigs: any = new Map();
-  sslContexts: any = new Map();
-  bots: any = {};
+  _wsConnections: Map<string, WsConnectionLike> = new Map();
+  _rateLimiters: Map<string, unknown> = new Map();
+  proxyMiddlewares: Map<string, unknown> = new Map();
+  domainConfigs: Map<string, ProxyDomainConfig> = new Map();
+  sslContexts: Map<string, unknown> = new Map();
+  bots: Record<string, any> = {};
   tasker: any[] = [];
-  server: any = null;
-  httpsServer: any = null;
-  multipartUpload: any = null;
-  _wsHeartbeatInterval: any = null;
+  server: import('node:http').Server | null = null;
+  httpsServer: import('node:http').Server | null = null;
+  multipartUpload: unknown = null;
+  _wsHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
   apiKey = '';
-  httpPort: any = null;
-  httpsPort: any = null;
-  actualPort: any = null;
-  actualHttpsPort: any = null;
+  httpPort: number | null = null;
+  httpsPort: number | null = null;
+  actualPort: number | null = null;
+  actualHttpsPort: number | null = null;
   proxyEnabled = false;
-  proxyApp: any = null;
-  proxyServer: any = null;
-  proxyHttpsServer: any = null;
-  _compiledHiddenFileMatchers: any = null;
-  _authWhitelistCache: any = { ref: null, rules: [] };
+  proxyApp: ReturnType<typeof express> | null = null;
+  proxyServer: import('node:http').Server | null = null;
+  proxyHttpsServer: import('node:http').Server | null = null;
+  _compiledHiddenFileMatchers: unknown = null;
+  _authWhitelistCache: { ref: unknown; rules: AuthWhitelistRule[] } = { ref: null, rules: [] };
+  /** WS 分发表 / 上传文件表：类字段，勿在 constructor 新建 */
+  wsf: Record<string, WsHandlerEntry | WsHandlerEntry[]> = Object.create(null);
+  fs: Record<string, any> = Object.create(null);
+  stat: { start_time: number } = { start_time: Date.now() / 1000 };
+  _cache = RuntimeUtil.getMap('core_cache', { ttl: 60000, autoClean: true });
 
   /**
    * 仅入口允许 `new AgentRuntime()`（start.js / debug.js）；Core 业务用裸名。
@@ -92,7 +106,6 @@ export default class AgentRuntime extends EventEmitter {
   constructor() {
     super();
 
-    this.stat = { start_time: Date.now() / 1000 };
     this.bot = this;
     this.uin = this._createUinManager();
 
@@ -128,14 +141,11 @@ export default class AgentRuntime extends EventEmitter {
       maxPayload: maxPayloadBytes,
       clientTracking: wsConfig?.clientTracking !== false,
     });
-    this.wsf = Object.create(null);
-    this.fs = Object.create(null);
 
     const cacheTtl = Number(runtimeConfig.server?.misc?.cache?.ttlMs);
-    this._cache = RuntimeUtil.getMap('core_cache', {
-      ttl: (Number.isFinite(cacheTtl) && cacheTtl > 0) ? cacheTtl : 60000,
-      autoClean: true,
-    });
+    if (Number.isFinite(cacheTtl) && cacheTtl > 0) {
+      this._cache = RuntimeUtil.getMap('core_cache', { ttl: cacheTtl, autoClean: true });
+    }
     this.url = runtimeNet.getConfiguredServerUrl();
 
     // runtimeConfig.server 可能尚未完全加载；run() 内会再初始化
@@ -154,20 +164,28 @@ export default class AgentRuntime extends EventEmitter {
     this.callSubserver = async (requestPath: any, options: any = {}) => {
       try {
         return await callSubserverApi(requestPath, options);
-      } catch (error: any) {
+      } catch (error: unknown) {
         const err = normalizeError(error);
-        const cause = err.cause ? ` cause=${(err.cause as any)?.message ?? err.cause}` : '';
-        RuntimeUtil.makeLog('debug', `子服务端调用失败 [${requestPath}]: ${err.message}${cause}`, 'AgentRuntime');
+        const causeRaw = (err as Error & { cause?: unknown }).cause;
+        const causeMsg =
+          causeRaw == null
+            ? ''
+            : ` cause=${Error.isError(causeRaw) ? causeRaw.message : String(causeRaw)}`;
+        RuntimeUtil.makeLog('debug', `子服务端调用失败 [${requestPath}]: ${err.message}${causeMsg}`, 'AgentRuntime');
         throw err;
       }
     };
     this.fetchSubserverToPath = async (requestPath: any, options: any = {}) => {
       try {
         return await fetchSubserverToPathApi(requestPath, options);
-      } catch (error: any) {
+      } catch (error: unknown) {
         const err = normalizeError(error);
-        const cause = err.cause ? ` cause=${(err as any).cause?.message ?? (err as any).cause}` : '';
-        RuntimeUtil.makeLog('debug', `子服务端文件拉取失败 [${requestPath}]: ${err.message}${cause}`, 'AgentRuntime');
+        const causeRaw = (err as Error & { cause?: unknown }).cause;
+        const causeMsg =
+          causeRaw == null
+            ? ''
+            : ` cause=${Error.isError(causeRaw) ? causeRaw.message : String(causeRaw)}`;
+        RuntimeUtil.makeLog('debug', `子服务端文件拉取失败 [${requestPath}]: ${err.message}${causeMsg}`, 'AgentRuntime');
         throw err;
       }
     };
@@ -181,9 +199,9 @@ export default class AgentRuntime extends EventEmitter {
    * @returns {Error} 标准化的错误对象
    */
   makeError(message: any, type: any = 'Error', details: any = {}) {
-    let error;
+    let error: any;
 
-    if ((Error as any).isError(message)) {
+    if (Error.isError(message)) {
       error = message;
       if (type === 'Error' && error.type) {
         type = error.type;
@@ -206,7 +224,8 @@ export default class AgentRuntime extends EventEmitter {
 
     RuntimeUtil.makeLog('error', chalk.red(`✗ ${logMessage}${logDetails}`), type);
 
-    if (error.stack && (runtimeConfig as any).debug) {
+    const agtCfg = runtimeConfig.agt as { debug?: unknown } | undefined;
+    if (error.stack && agtCfg?.debug) {
       RuntimeUtil.makeLog('debug', chalk.gray(error.stack), type);
     }
 
@@ -286,7 +305,7 @@ export default class AgentRuntime extends EventEmitter {
    * 初始化代理应用和服务器
    */
   async _initProxyApp() {
-    return runtimeProxy.initProxyApp(this as any);
+    return runtimeProxy.initProxyApp(this as unknown as RuntimeProxyHost);
   }
 
   /**
@@ -406,7 +425,7 @@ export default class AgentRuntime extends EventEmitter {
         }
 
         // 2. 其次返回已注册的子 AgentRuntime 实例
-        if (prop in botMap) {
+        if (typeof prop === 'string' && prop in botMap) {
           return botMap[prop];
         }
 
@@ -420,7 +439,7 @@ export default class AgentRuntime extends EventEmitter {
 
       },
       set: (target, prop, value, receiver) => {
-        if (isBotEntry(prop, value)) {
+        if (typeof prop === 'string' && isBotEntry(prop, value)) {
           botMap[prop] = value;
           return true;
         }
@@ -446,7 +465,7 @@ export default class AgentRuntime extends EventEmitter {
    * 生成API密钥
    */
   async generateApiKey() {
-    return runtimeAuth.generateApiKey(this as any);
+    return runtimeAuth.generateApiKey(this);
   }
 
   /**
@@ -473,7 +492,7 @@ export default class AgentRuntime extends EventEmitter {
    * 当 server.auth.apiKey.enabled 为 true 时，必须提供有效密钥；密钥未加载或缺失时一律拒绝
    */
   checkApiAuthorization(req: any, options: any = {}) {
-    return runtimeAuth.checkApiAuthorization(this as any, req, options);
+    return runtimeAuth.checkApiAuthorization(this, req, options);
   }
 
   /**
@@ -620,14 +639,14 @@ export default class AgentRuntime extends EventEmitter {
    * 停止WebSocket心跳检测
    */
   _stopWebSocketHeartbeat() {
-    return runtimeWs.stopWebSocketHeartbeat(this as any);
+    return runtimeWs.stopWebSocketHeartbeat(this as unknown as RuntimeWsHost);
   }
 
   /**
    * 获取WebSocket连接统计
    */
   getWebSocketStats() {
-    return runtimeWs.getWebSocketStats(this as any);
+    return runtimeWs.getWebSocketStats(this as unknown as RuntimeWsHost);
   }
 
   /**
@@ -636,28 +655,28 @@ export default class AgentRuntime extends EventEmitter {
    * - 其余连接若 server.auth.apiKey.enabled !== false，则必须通过 API Key 校验
    */
   wsConnect(req: any, socket: any, head: any) {
-    return runtimeWs.wsConnect(this as any, req, socket, head);
+    return runtimeWs.wsConnect(this as unknown as RuntimeWsHost, req, socket, head);
   }
 
   /**
    * 处理端口已占用错误
    */
   async serverEADDRINUSE(err: any, isHttps: any) {
-    return runtimeListen.serverEADDRINUSE(this as any, err, isHttps);
+    return runtimeListen.serverEADDRINUSE(this as unknown as RuntimeListenHost, err, isHttps);
   }
 
   /**
    * 服务器加载完成
    */
   async serverLoad(isHttps: any) {
-    return runtimeListen.serverLoad(this as any, isHttps);
+    return runtimeListen.serverLoad(this as unknown as RuntimeListenHost, isHttps);
   }
 
   /**
    * 启动代理服务器
    */
   async startProxyServers() {
-    return runtimeProxy.startProxyServers(this as any);
+    return runtimeProxy.startProxyServers(this as unknown as RuntimeProxyHost);
   }
 
   /**
@@ -665,7 +684,7 @@ export default class AgentRuntime extends EventEmitter {
    * 支持HTTP/2和现代TLS配置
    */
   async httpsLoad() {
-    return runtimeListen.httpsLoad(this as any);
+    return runtimeListen.httpsLoad(this as unknown as RuntimeListenHost);
   }
 
   /**
@@ -747,14 +766,14 @@ export default class AgentRuntime extends EventEmitter {
    * @param {{ fast?: boolean }} [options] fast 为 true 时跳过固定等待（用于 Ctrl+C 重启）
    */
   async closeServer(options: any = {}) {
-    return runtimeListen.closeServer(this as any, options);
+    return runtimeListen.closeServer(this as unknown as RuntimeListenHost, options);
   }
 
   /**
    * 获取服务器URL
    */
   getServerUrl() {
-    return runtimeListen.getServerUrl(this as any);
+    return runtimeListen.getServerUrl(this as unknown as RuntimeListenHost);
   }
 
   /**
@@ -1029,7 +1048,7 @@ export default class AgentRuntime extends EventEmitter {
     return {
       ok: response.ok,
       status: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
+      headers: Object.fromEntries([...(response.headers as any)]),
       data,
       raw: text
     };

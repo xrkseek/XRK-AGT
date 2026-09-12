@@ -6,7 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 export const SYSTEM_CORE_DIR = path.join(root, 'core', 'system-Core');
 
-/** 框架基准：仅 `git ls-files` 入库文件；本地未跟踪插件不计 */
+/** 框架基准：仅 `git ls-files` 入库文件；顺序 http/workflow/plugin/tasker/events → 11/7/18/4/4 */
 export const SYSTEM_CORE_BASELINE = Object.freeze({
   http: 11,
   workflow: 7,

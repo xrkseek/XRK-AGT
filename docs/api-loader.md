@@ -76,7 +76,7 @@ flowchart TB
 1. 调用 `paths.getCoreSubDirs('http')` 获取所有 `core/*/http` 目录
 2. 调用 `getApiFiles` 递归扫描每个目录，收集 `.js` 文件
 3. 对每个文件调用 `loadApi`：
-   - 生成 key（`resolveCoreModuleKey`，相对 `core/*/http/`，无 `.js`）
+   - 生成 key（`resolveQualifiedCoreModuleKey` / `resolveCoreModuleKey`，相对 `core/*/http/`，**无** `http/` 前缀、无扩展名；例 `system-Core/ai-workspace`）
    - 动态导入模块并实例化
    - 校验并存入 `apis` Map
 4. 调用 `sortByPriority` 排序

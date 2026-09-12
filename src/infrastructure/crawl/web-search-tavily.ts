@@ -15,11 +15,41 @@ import { withTrustedWebSearchEndpoint } from './web-search-endpoint.js'
 
 const DEFAULT_TAVILY_BASE_URL = 'https://api.tavily.com'
 
-function resolveTavilyApiKey(runtime: Record<string, any>) {
+type TavilyRuntime = {
+  tavily?: { apiKey?: string; baseUrl?: string }
+  timeoutSeconds?: number
+  cacheTtlMinutes?: number
+}
+
+type TavilySearchParams = {
+  query?: string
+  count?: number
+  search_depth?: string
+  topic?: string
+  include_answer?: boolean
+  time_range?: string
+  include_domains?: unknown[]
+  exclude_domains?: unknown[]
+}
+
+type TavilyResultEntry = {
+  title?: unknown
+  url?: unknown
+  content?: unknown
+  score?: unknown
+  published_date?: unknown
+}
+
+type TavilySearchResponse = {
+  results?: TavilyResultEntry[]
+  answer?: unknown
+}
+
+function resolveTavilyApiKey(runtime: TavilyRuntime) {
   return runtime?.tavily?.apiKey?.trim?.() || ''
 }
 
-function resolveTavilyBaseUrl(runtime: Record<string, any>) {
+function resolveTavilyBaseUrl(runtime: TavilyRuntime) {
   return (runtime?.tavily?.baseUrl?.trim?.() || DEFAULT_TAVILY_BASE_URL).replace(/\/+$/, '')
 }
 
@@ -42,8 +72,8 @@ export function missingTavilyApiKeyPayload() {
 }
 
 export async function runTavilySearch(
-  params: Record<string, any>,
-  runtime: Record<string, any> = {}
+  params: TavilySearchParams,
+  runtime: TavilyRuntime = {}
 ) {
   const apiKey = resolveTavilyApiKey(runtime)
   if (!apiKey) return missingTavilyApiKeyPayload()
@@ -71,12 +101,12 @@ export async function runTavilySearch(
     })
   )
   const cached = readSearchCache(SEARCH_CACHE, cacheKey) as
-    | { value: Record<string, any> }
+    | { value: Record<string, unknown> }
     | null
     | undefined
   if (cached) return { ...cached.value, cached: true }
 
-  const body: Record<string, any> = { query, max_results: count, api_key: apiKey }
+  const body: Record<string, unknown> = { query, max_results: count, api_key: apiKey }
   if (params.search_depth) body.search_depth = params.search_depth
   if (params.topic) body.topic = params.topic
   if (params.include_answer) body.include_answer = true
@@ -107,9 +137,9 @@ export async function runTavilySearch(
         const detail = await res.text().catch(() => '')
         throw new Error(`Tavily Search API error (${res.status}): ${detail || res.statusText}`)
       }
-      return res.json()
+      return res.json() as Promise<TavilySearchResponse>
     }
-  )) as any
+  ))
 
   const rawResults = Array.isArray(payload.results) ? payload.results : []
   const result = {
@@ -118,7 +148,7 @@ export async function runTavilySearch(
     count: rawResults.length,
     tookMs: Date.now() - start,
     externalContent: buildExternalSearchMeta('tavily'),
-    results: rawResults.map((r: any) => ({
+    results: rawResults.map((r) => ({
       title: typeof r.title === 'string' ? wrapWebContent(r.title, 'web_search') : '',
       url: typeof r.url === 'string' ? r.url : '',
       snippet: typeof r.content === 'string' ? wrapWebContent(r.content, 'web_search') : '',

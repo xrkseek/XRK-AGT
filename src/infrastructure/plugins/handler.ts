@@ -3,14 +3,35 @@
  * 用于管理和调度各种事件的处理函数
  */
 
-const gLogger = (): any => (globalThis as any).logger
+import { getRuntimeGlobal } from '#utils/runtime-globals.js'
+import { normalizeError } from '#utils/normalize-error.js'
+
+type LoggerLike = {
+  mark?: (msg: unknown) => void
+  error?: (msg: unknown) => void
+  debug?: (msg: unknown) => void
+}
+
+const gLogger = (): LoggerLike | undefined => getRuntimeGlobal<LoggerLike>('logger')
+
+type HandlerReject = (msg?: string) => void
+type HandlerFn = (this: unknown, e: unknown, args: unknown, reject: HandlerReject) => unknown
 
 type HandlerEntry = {
   priority: number
-  fn: (...args: any[]) => any
+  fn: HandlerFn
   ns: string
   self: unknown
   key: string
+}
+
+type HandlerAddConfig = {
+  ns: string
+  fn: HandlerFn
+  self?: unknown
+  priority?: number
+  key?: string
+  event?: string
 }
 
 class HandlerManager {
@@ -20,14 +41,7 @@ class HandlerManager {
   /**
    * 添加事件处理器
    */
-  add(runtimeConfig: {
-    ns: string
-    fn: (...args: any[]) => any
-    self?: unknown
-    priority?: number
-    key?: string
-    event?: string
-  }) {
+  add(runtimeConfig: HandlerAddConfig) {
     const { ns, fn, self, priority = 500 } = runtimeConfig
     const key = runtimeConfig.key || runtimeConfig.event || ''
 
@@ -197,7 +211,7 @@ class HandlerManager {
     let done = true
 
     // reject函数用于标记处理失败
-    const reject = (msg = '') => {
+    const reject: HandlerReject = (msg = '') => {
       if (msg) {
         gLogger()?.mark?.(`[Handler][Reject]: [${ns}][${key}] ${msg}`)
       }
@@ -212,9 +226,10 @@ class HandlerManager {
       }
 
       return { done, value }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = normalizeError(error)
       gLogger()?.error?.(`[Handler][Error]: [${ns}][${key}] 执行出错:`)
-      gLogger()?.error?.(error.stack || error)
+      gLogger()?.error?.(err.stack || err)
       return { done: false, value: undefined }
     }
   }

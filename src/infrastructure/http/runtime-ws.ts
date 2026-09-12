@@ -2,20 +2,25 @@
  * AgentRuntime WebSocket 连接 / 心跳 / 统计辅助
  * 由 AgentRuntime 类方法薄包装委托，不改变对外行为。
  */
+import type { IncomingMessage } from 'node:http'
+import type { Duplex } from 'node:stream'
 import RuntimeUtil from '#utils/runtime-util.js'
 import runtimeConfig from '#infrastructure/config/config.js'
+import { normalizeError } from '#utils/normalize-error.js'
+import type {
+  RuntimeHttpRequest,
+  RuntimeWsHost,
+  WsConnectionLike,
+  WsHandlerEntry
+} from '#infrastructure/http/runtime-host-types.js'
 
-function isErrorLike(err: unknown): err is Error {
-  return err instanceof Error
+export type { RuntimeWsHost, WsConnectionLike, WsHandlerEntry }
+
+function rec(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 }
 
-type RuntimeLike = {
-  wsf: Record<string, any>
-  wss: { handleUpgrade: (...args: any[]) => any }
-  _wsConnections: Map<string, any>
-  _wsHeartbeatInterval?: ReturnType<typeof setInterval> | null
-  checkApiAuthorization: (req: any, opts?: any) => boolean
-}
+type RuntimeLike = RuntimeWsHost
 
 export function getWsHandlersForPath(runtime: RuntimeLike, wsPath: string) {
   const rawHandlers = runtime.wsf?.[wsPath]
@@ -25,11 +30,14 @@ export function getWsHandlersForPath(runtime: RuntimeLike, wsPath: string) {
 
 export function isWsPathSkipAuth(runtime: RuntimeLike, wsPath: string) {
   const handlers = getWsHandlersForPath(runtime, wsPath)
-  return handlers.some((entry) => Boolean(entry && entry.skipAuth === true))
+  return handlers.some((entry) => {
+    if (!entry || typeof entry === 'function') return false
+    return entry.skipAuth === true
+  })
 }
 
 export function shouldRequireWsApiAuth(runtime: RuntimeLike, wsPath: string) {
-  const apiKeyEnabled = (runtimeConfig as any).server?.auth?.apiKey?.enabled !== false
+  const apiKeyEnabled = rec(rec(rec(runtimeConfig.server).auth).apiKey).enabled !== false
   if (!apiKeyEnabled) return false
   if (isWsPathSkipAuth(runtime, wsPath)) return false
   return true
@@ -38,18 +46,19 @@ export function shouldRequireWsApiAuth(runtime: RuntimeLike, wsPath: string) {
 export function startWebSocketHeartbeat(runtime: RuntimeLike) {
   if (runtime._wsHeartbeatInterval) return
 
-  const interval = (runtimeConfig as any).server.websocket?.heartbeatInterval || 30000
-  const timeout = (runtimeConfig as any).server.websocket?.heartbeatTimeout || 60000
+  const wsCfg = rec(rec(runtimeConfig.server).websocket)
+  const interval = Number(wsCfg.heartbeatInterval) || 30000
+  const timeout = Number(wsCfg.heartbeatTimeout) || 60000
 
   runtime._wsHeartbeatInterval = setInterval(() => {
     const now = Date.now()
     const deadConnections: string[] = []
 
     for (const [id, conn] of runtime._wsConnections.entries()) {
-      if (now - conn.lastPing > timeout) {
+      if (now - (conn.lastPing || 0) > timeout) {
         deadConnections.push(id)
         try {
-          conn.terminate()
+          conn.terminate?.()
         } catch {
           // 忽略已关闭的连接
         }
@@ -59,7 +68,7 @@ export function startWebSocketHeartbeat(runtime: RuntimeLike) {
       if (conn.readyState === conn.OPEN) {
         try {
           conn.isAlive = false
-          conn.ping()
+          conn.ping?.()
         } catch {
           deadConnections.push(id)
         }
@@ -120,18 +129,32 @@ export function getWebSocketStats(runtime: RuntimeLike) {
   return stats
 }
 
-export function wsConnect(runtime: RuntimeLike, req: any, socket: any, head: Buffer) {
-  req.rid = `${req.socket.remoteAddress}:${req.socket.remotePort}-${req.headers['sec-websocket-key']}`
-  req.sid = `ws://${req.headers.host || `${req.socket.localAddress}:${req.socket.localPort}`}${req.url}`
-  req.query = Object.fromEntries(new URL(req.sid).searchParams.entries())
+export function wsConnect(
+  runtime: RuntimeLike,
+  req: RuntimeHttpRequest,
+  socket: Duplex,
+  head: Buffer
+) {
+  const remoteAddress = String(req.socket?.remoteAddress || '')
+  const remotePort = req.socket?.remotePort
+  const localAddress = req.socket?.localAddress
+  const localPort = req.socket?.localPort
+  const headers = req.headers || {}
+  const host = String(headers.host || `${localAddress}:${localPort}`)
+  const secKey = String(headers['sec-websocket-key'] || '')
+  const url = String(req.url || '')
 
-  const pathStr = req.url.split('?')[0]
+  req.rid = `${remoteAddress}:${remotePort}-${secKey}`
+  req.sid = `ws://${host}${url}`
+  req.query = Object.fromEntries(new URL(String(req.sid)).searchParams.entries())
+
+  const pathStr = url.split('?')[0]
   const wsPath = pathStr.startsWith('/') ? pathStr.slice(1) : pathStr
 
   if (!wsPath || !(wsPath in runtime.wsf)) {
     RuntimeUtil.makeLog(
       'warn',
-      `WebSocket路径未找到: ${req.url} (解析为: ${wsPath}), 可用路径: ${Object.keys(runtime.wsf).join(', ')}`,
+      `WebSocket路径未找到: ${url} (解析为: ${wsPath}), 可用路径: ${Object.keys(runtime.wsf).join(', ')}`,
       '服务器'
     )
     socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
@@ -143,12 +166,12 @@ export function wsConnect(runtime: RuntimeLike, req: any, socket: any, head: Buf
     !runtime.checkApiAuthorization(req, {
       forceAuth:
         wsPath === 'OneBotv11' &&
-        (runtimeConfig as any).server?.auth?.onebot?.requireLoopbackAuth === true
+        rec(rec(rec(runtimeConfig.server).auth).onebot).requireLoopbackAuth === true
     })
   ) {
     RuntimeUtil.makeLog(
       'warn',
-      `WebSocket 鉴权失败：${req.url} ip=${req.socket.remoteAddress}`,
+      `WebSocket 鉴权失败：${url} ip=${remoteAddress}`,
       '服务器'
     )
     try {
@@ -159,77 +182,86 @@ export function wsConnect(runtime: RuntimeLike, req: any, socket: any, head: Buf
     return socket.destroy()
   }
 
-  RuntimeUtil.makeLog('debug', `WebSocket路径匹配: ${req.url} -> ${wsPath}`, '服务器')
+  RuntimeUtil.makeLog('debug', `WebSocket路径匹配: ${url} -> ${wsPath}`, '服务器')
 
-  runtime.wss.handleUpgrade(req, socket, head, (conn: any) => {
+  runtime.wss.handleUpgrade(req as unknown as IncomingMessage, socket, head, (conn: WsConnectionLike) => {
     const connectionId = `${Date.now()}-${RuntimeUtil.shortId()}`
     conn.id = connectionId
     conn.path = wsPath
-    conn.remoteAddress = req.socket.remoteAddress
+    conn.remoteAddress = remoteAddress
     conn.connectedAt = Date.now()
     conn.lastPing = Date.now()
     conn.isAlive = true
 
     runtime._wsConnections.set(connectionId, conn)
 
-    RuntimeUtil.makeLog('debug', `WebSocket连接建立：${req.url} [${connectionId}]`, '服务器')
+    RuntimeUtil.makeLog('debug', `WebSocket连接建立：${url} [${connectionId}]`, '服务器')
 
-    conn.on('pong', () => {
-      conn.isAlive = true
-      conn.lastPing = Date.now()
-    })
-
-    conn.on('error', (err: unknown) => {
-      const errorMsg = isErrorLike(err) ? err.message : String(err)
-      RuntimeUtil.makeLog('error', `WebSocket错误 [${connectionId}]: ${errorMsg}`, '服务器')
-      runtime._wsConnections.delete(connectionId)
-    })
-
-    conn.on('close', (code: number) => {
-      RuntimeUtil.makeLog(
-        'debug',
-        `WebSocket断开：${req.url} [${connectionId}] 代码: ${code}`,
-        '服务器'
-      )
-      runtime._wsConnections.delete(connectionId)
-    })
-
-    conn.on('message', (msg: any) => {
-      try {
+    const onFn = conn.on
+    const on = typeof onFn === 'function' ? onFn.bind(conn) : undefined
+    if (typeof on === 'function') {
+      on('pong', () => {
+        conn.isAlive = true
         conn.lastPing = Date.now()
-        const logMsg =
-          Buffer.isBuffer(msg) && msg.length > 1024
-            ? `[二进制消息，长度：${msg.length}]`
-            : RuntimeUtil.String(msg)
-        RuntimeUtil.makeLog('trace', `WS消息 [${connectionId}]: ${logMsg}`, '服务器')
-      } catch (err) {
-        const errorMsg = isErrorLike(err) ? err.message : String(err)
+      })
+
+      on('error', (...args: unknown[]) => {
+        const errorMsg = normalizeError(args[0]).message
+        RuntimeUtil.makeLog('error', `WebSocket错误 [${connectionId}]: ${errorMsg}`, '服务器')
+        runtime._wsConnections.delete(connectionId)
+      })
+
+      on('close', (...args: unknown[]) => {
+        const code = Number(args[0])
         RuntimeUtil.makeLog(
-          'error',
-          `WebSocket消息处理错误 [${connectionId}]: ${errorMsg}`,
+          'debug',
+          `WebSocket断开：${url} [${connectionId}] 代码: ${code}`,
           '服务器'
         )
-      }
-    })
+        runtime._wsConnections.delete(connectionId)
+      })
 
-    conn.sendMsg = (msg: any, options: Record<string, any> = {}) => {
+      on('message', (...args: unknown[]) => {
+        try {
+          conn.lastPing = Date.now()
+          const msg = args[0]
+          const logMsg =
+            Buffer.isBuffer(msg) && msg.length > 1024
+              ? `[二进制消息，长度：${msg.length}]`
+              : RuntimeUtil.String(msg)
+          RuntimeUtil.makeLog('trace', `WS消息 [${connectionId}]: ${logMsg}`, '服务器')
+        } catch (err) {
+          const errorMsg = normalizeError(err).message
+          RuntimeUtil.makeLog(
+            'error',
+            `WebSocket消息处理错误 [${connectionId}]: ${errorMsg}`,
+            '服务器'
+          )
+        }
+      })
+    }
+
+    conn.sendMsg = (msg: unknown, options: Record<string, unknown> = {}) => {
       try {
         if (conn.readyState !== conn.OPEN) {
           RuntimeUtil.makeLog('warn', `WebSocket未就绪，无法发送 [${connectionId}]`, '服务器')
           return false
         }
 
-        if (!Buffer.isBuffer(msg)) {
-          msg = Buffer.from(typeof msg === 'string' ? msg : JSON.stringify(msg))
+        let payload = msg
+        if (!Buffer.isBuffer(payload)) {
+          payload = Buffer.from(typeof payload === 'string' ? payload : JSON.stringify(payload))
         }
 
         const logMsg =
-          msg.length > 1024 ? `[二进制消息，长度：${msg.length}]` : RuntimeUtil.String(msg)
+          (payload as Buffer).length > 1024
+            ? `[二进制消息，长度：${(payload as Buffer).length}]`
+            : RuntimeUtil.String(payload)
         RuntimeUtil.makeLog('trace', `WS发送 [${connectionId}]: ${logMsg}`, '服务器')
 
-        return conn.send(msg, options)
+        return typeof conn.send === 'function' ? conn.send(payload, options) : false
       } catch (err) {
-        const errorMsg = isErrorLike(err) ? err.message : String(err)
+        const errorMsg = normalizeError(err).message
         RuntimeUtil.makeLog('error', `WebSocket发送错误 [${connectionId}]: ${errorMsg}`, '服务器')
         runtime._wsConnections.delete(connectionId)
         return false
@@ -247,7 +279,7 @@ export function wsConnect(runtime: RuntimeLike, req: any, socket: any, head: Buf
         }
       }
     } catch (err) {
-      const errorMsg = isErrorLike(err) ? err.message : String(err)
+          const errorMsg = normalizeError(err).message
       RuntimeUtil.makeLog(
         'error',
         `WebSocket处理器错误 [${connectionId}]: ${errorMsg}`,

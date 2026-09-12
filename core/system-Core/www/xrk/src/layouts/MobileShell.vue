@@ -19,11 +19,14 @@ function go(name) {
 
 <template>
   <a href="#main" class="skip-link">跳到主内容</a>
-  <div class="m-shell">
-    <header class="m-topbar brutal-card">
+  <div class="m-shell shell-enter">
+    <header class="m-topbar surface">
       <div class="m-brand">
-        <span class="logo" aria-hidden="true">★</span>
-        <h1>{{ pageTitle }}</h1>
+        <span class="logo" aria-hidden="true">XRK</span>
+        <div class="m-titles">
+          <strong class="brand-mark">XRK-AGT</strong>
+          <h1>{{ pageTitle }}</h1>
+        </div>
       </div>
       <NSpace size="small" align="center" :wrap="false">
         <NInput
@@ -103,32 +106,51 @@ function go(name) {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 6px 8px;
-  min-height: 40px;
+  padding: 8px 10px;
+  min-height: 44px;
   margin-bottom: 6px;
 }
 .m-brand {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 .logo {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
-  background: var(--yellow);
-  border: 2px solid var(--ink);
-  border-radius: 6px;
-  font-size: 11px;
-  box-shadow: var(--shadow);
+  background: var(--ink);
+  color: var(--accent);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 800;
   flex-shrink: 0;
+}
+.m-titles {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0;
+}
+.brand-mark {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 .m-topbar h1 {
   margin: 0;
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -169,42 +191,49 @@ function go(name) {
     0
     calc(-1 * max(6px, env(safe-area-inset-left)));
   padding: 4px 6px max(4px, env(safe-area-inset-bottom));
-  border-top: 2px solid var(--ink);
-  background: var(--card);
-  box-shadow: 0 -2px 0 color-mix(in srgb, var(--ink) 8%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
+  background: var(--surface);
 }
 .tab {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  border: 1.5px solid transparent;
+  gap: 2px;
+  border: 0;
   background: transparent;
-  color: var(--ink);
-  border-radius: 8px;
-  padding: 4px 2px;
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 6px 2px;
   font: inherit;
   font-size: 10px;
   font-weight: 600;
   touch-action: manipulation;
   min-height: 44px;
+  transition: color 160ms var(--ease-out), background 160ms var(--ease-out);
 }
 .tab-ico {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
-  border: 1.5px solid var(--ink);
-  border-radius: 8px;
-  background: var(--card);
 }
 .tab.active {
-  background: color-mix(in srgb, var(--accent) 45%, var(--card));
-  border-color: var(--ink);
-  box-shadow: var(--shadow);
+  color: var(--ink);
+  background: var(--accent-dim);
 }
 .tab.active .tab-ico {
+  color: var(--accent);
+}
+.tab.active::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 30%;
+  right: 30%;
+  height: 2px;
+  border-radius: 1px;
   background: var(--accent);
 }
 .tab-label {

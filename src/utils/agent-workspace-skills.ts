@@ -13,6 +13,15 @@ import {
 import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
 import { resolveSkillLimits, resolveSkillRoots } from '#utils/skills/config.js';
 
+type SkillRuntimeConfig = {
+  customSkillRoots?: unknown;
+  maxCandidatesPerRoot?: number;
+  maxSkillsLoadedPerSource?: number;
+  maxSkillsInPrompt?: number;
+  maxSkillsPromptChars?: number;
+  maxSkillFileBytes?: number;
+};
+
 type SkillLimits = {
   maxCandidatesPerRoot: number;
   maxSkillsLoadedPerSource: number;
@@ -283,7 +292,7 @@ function applySkillsPromptLimits(
  */
 export function buildSkillsPromptFromWorkspace(
   workspaceRootResolved: string,
-  runtimeConfig: Record<string, any> = {},
+  runtimeConfig: SkillRuntimeConfig = {},
 ): string {
   const limits = resolveSkillLimits(runtimeConfig) as SkillLimits;
   const skillRoots = resolveSkillRoots(runtimeConfig) as string[];

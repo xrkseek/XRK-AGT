@@ -37,5 +37,6 @@ description: 需要快速定位「该看哪份文档/哪段代码/哪份配置�
 
 - 配置类：给出 YAML 路径 + 字段 + 最小示例。
 - 行为类：给出代码文件 + 函数/类名。
+- **路径真相**：源码写 `.ts`（如 `src/agent-runtime.ts`、`core/.../chat.ts`）；运行/测 import 写 `dist/.../*.js` 或 `#utils/*` → dist。勿把已迁 TS 的源码再写成 `.js`。
 - 文档与代码冲突：以代码为准。
 - 分清读者：改代码 → `xrk-*`；办事助手怎么用工具 → `.xrk/skills/core/agent-tools`。

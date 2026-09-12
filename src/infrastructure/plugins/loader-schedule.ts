@@ -1,9 +1,20 @@
 // @ts-expect-error node-schedule 无官方类型
 import schedule from 'node-schedule'
+import { getRuntimeGlobal } from '#utils/runtime-globals.js'
+import { normalizeError } from '#utils/normalize-error.js'
+
+type LoggerLike = {
+  warn?: (msg: unknown) => void
+  debug?: (msg: unknown) => void
+  mark?: (msg: unknown) => void
+  error?: (msg: unknown, err?: unknown) => void
+}
+
+const gLogger = (): LoggerLike | undefined => getRuntimeGlobal<LoggerLike>('logger')
 
 type PluginTaskDef = {
   cron?: string
-  fnc?: string | ((...args: any[]) => any)
+  fnc?: string | ((...args: unknown[]) => unknown)
   name?: string
   log?: boolean
 }
@@ -12,7 +23,7 @@ type ScheduledTask = {
   name: string
   taskName: string
   cron: string
-  fnc: (...args: any[]) => any
+  fnc: (...args: unknown[]) => unknown
   log: boolean
   job?: { cancel: () => void }
 }
@@ -22,27 +33,26 @@ type ScheduleHost = {
   _taskScheduleKey: string
 }
 
-const gLogger = (): any => (globalThis as any).logger
-
 export const scheduleMethods = {
   /**
    * 注册插件定时任务
    */
-  registerPluginTasks(this: ScheduleHost, plugin: Record<string, any>, pluginName: string, pluginKey: string) {
+  registerPluginTasks(this: ScheduleHost, plugin: Record<string, unknown>, pluginName: string, pluginKey: string) {
     if (!plugin.task) return
 
     const tasks: PluginTaskDef[] = Array.isArray(plugin.task) ? plugin.task : [plugin.task]
     tasks.forEach((t) => {
       if (!t?.cron || !t.fnc) return
 
-      let fnc: ((...args: any[]) => any) | null = null
+      let fnc: ((...args: unknown[]) => unknown) | null = null
       // 字符串 fnc 解析到插件实例方法（勿查 PluginBase 类上不存在的方法名）
       if (typeof t.fnc === 'string') {
-        if (typeof plugin[t.fnc] !== 'function') {
+        const method = plugin[t.fnc]
+        if (typeof method !== 'function') {
           gLogger()?.warn?.(`定时任务 ${t.name || pluginName} 的 fnc「${t.fnc}」不是插件实例方法，已跳过`)
           return
         }
-        fnc = plugin[t.fnc].bind(plugin)
+        fnc = (method as (...args: unknown[]) => unknown).bind(plugin)
       } else if (typeof t.fnc === 'function') {
         fnc = t.fnc
       } else {
@@ -54,7 +64,7 @@ export const scheduleMethods = {
         name: pluginKey, // 使用插件键名，便于卸载时精确匹配
         taskName: t.name || pluginName, // 保存原始任务名称用于日志
         cron: t.cron,
-        fnc: fnc!,
+        fnc,
         // 默认可静默；挂机刷屏多因默认真导致「开始执行/执行完成」刷 console
         log: t.log === true
       })
@@ -92,8 +102,8 @@ export const scheduleMethods = {
           if (task.log) gLogger()?.mark?.(`${name} 开始执行`)
           await task.fnc()
           if (task.log) gLogger()?.mark?.(`${name} 执行完成 ${Date.now() - start}ms`)
-        } catch (err) {
-          gLogger()?.error?.(`定时任务 ${name} 执行失败`, err)
+        } catch (err: unknown) {
+          gLogger()?.error?.(`定时任务 ${name} 执行失败`, normalizeError(err))
         }
       })
     }

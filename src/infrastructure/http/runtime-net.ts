@@ -7,29 +7,42 @@
 import chalk from 'chalk'
 import RuntimeUtil from '#utils/runtime-util.js'
 import runtimeConfig from '#infrastructure/config/config.js'
+import { normalizeError } from '#utils/normalize-error.js'
+
+function rec(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+}
+
+function serverYaml(): Record<string, unknown> {
+  return rec(runtimeConfig.server)
+}
+
+function miscYaml(): Record<string, unknown> {
+  return rec(serverYaml().misc)
+}
 
 type RuntimeLike = {
   proxyEnabled?: boolean
   wwwMountPaths?: string[]
-  _cache: { get: (key: string) => any; set: (key: string, value: any) => void }
+  _cache?: { get: (key: string) => unknown; set: (key: string, value: unknown) => void }
 }
 
 export function getServerHost() {
-  const host = (runtimeConfig as any)?.server?.server?.host
+  const host = rec(serverYaml().server).host
   return typeof host === 'string' && host.trim() ? host.trim() : '0.0.0.0'
 }
 
 export function getConfiguredServerUrl() {
-  const configuredUrl = (runtimeConfig as any)?.server?.server?.url
+  const configuredUrl = rec(serverYaml().server).url
   return typeof configuredUrl === 'string' ? configuredUrl.trim() : ''
 }
 
-export function getProxyConfig() {
-  return (runtimeConfig as any)?.server?.proxy || {}
+export function getProxyConfig(): Record<string, unknown> {
+  return rec(serverYaml().proxy)
 }
 
 export function isHttpsEnabled() {
-  return (runtimeConfig as any)?.server?.https?.enabled === true
+  return rec(serverYaml().https).enabled === true
 }
 
 export function getPublicServerUrl(runtime: RuntimeLike, override = '') {
@@ -47,8 +60,8 @@ export function getPublicServerUrl(runtime: RuntimeLike, override = '') {
 
   const proxyConfig = getProxyConfig()
   if (runtime.proxyEnabled && Array.isArray(proxyConfig.domains) && proxyConfig.domains[0]) {
-    const domain = proxyConfig.domains[0]
-    const protocol = domain.ssl?.enabled ? 'https' : 'http'
+    const domain = rec(proxyConfig.domains[0])
+    const protocol = rec(domain.ssl).enabled ? 'https' : 'http'
     return `${protocol}://${domain.domain}`.replace(/\/+$/, '')
   }
 
@@ -110,7 +123,7 @@ function resolveAccessBase(publicIp: string | null, protocol: string, port: numb
 }
 
 export async function displayAccessUrls(runtime: RuntimeLike, protocol: string, port: number) {
-  const detectPublic = (runtimeConfig as any).server?.misc?.detectPublicIP !== false
+  const detectPublic = miscYaml().detectPublicIP !== false
   const publicIp = detectPublic ? await getPublicIP(runtime) : null
   const base = resolveAccessBase(publicIp, protocol, port)
 
@@ -150,22 +163,22 @@ export async function displayAccessUrls(runtime: RuntimeLike, protocol: string, 
  */
 export async function getLocalIpAddress(runtime: RuntimeLike) {
   const cacheKey = 'local_ip_addresses'
-  const cached = runtime._cache.get(cacheKey)
+  const cached = runtime._cache?.get(cacheKey)
   if (cached) return cached
 
-  const result: { local: any[]; public: string | null; primary: null } = {
+  const result: { local: unknown[]; public: string | null; primary: null } = {
     local: [],
     public: null,
     primary: null
   }
   try {
-    if ((runtimeConfig as any).server?.misc?.detectPublicIP !== false) {
+    if (miscYaml().detectPublicIP !== false) {
       result.public = await getPublicIP(runtime)
     }
-    runtime._cache.set(cacheKey, result)
+    runtime._cache?.set(cacheKey, result)
     return result
-  } catch (err: any) {
-    RuntimeUtil.makeLog('debug', `获取IP地址失败：${err.message}`, '服务器')
+  } catch (err: unknown) {
+    RuntimeUtil.makeLog('debug', `获取IP地址失败：${normalizeError(err).message}`, '服务器')
     return result
   }
 }
@@ -179,20 +192,20 @@ async function getPublicIP(runtime?: RuntimeLike | null) {
   const cacheKey = 'public_ip_only'
   if (runtime?._cache) {
     const hit = runtime._cache.get(cacheKey)
-    if (hit !== undefined) return hit
+    if (hit !== undefined) return hit as string | null
   }
 
+  const rawApis = miscYaml().publicIpApis
   const apis =
-    Array.isArray((runtimeConfig as any).server?.misc?.publicIpApis) &&
-    (runtimeConfig as any).server.misc.publicIpApis.length
-      ? (runtimeConfig as any).server.misc.publicIpApis
+    Array.isArray(rawApis) && rawApis.length
+      ? rawApis.map(String)
       : [
           'https://ifconfig.me/ip',
           'https://api.ipify.org',
           'https://icanhazip.com',
           'https://ipinfo.io/ip'
         ]
-  const timeoutMs = Number((runtimeConfig as any).server?.misc?.publicIpTimeoutMs) || 3000
+  const timeoutMs = Number(miscYaml().publicIpTimeoutMs) || 3000
 
   let found: string | null = null
   for (const apiUrl of apis) {

@@ -97,7 +97,7 @@ type SecurityInspectResult = {
 };
 
 function errMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err ?? '');
+  return Error.isError(err) ? err.message : String(err ?? '');
 }
 
 /**

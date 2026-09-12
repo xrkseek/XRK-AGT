@@ -1,25 +1,79 @@
 import RuntimeUtil from '#utils/runtime-util.js'
 import { HttpResponse } from '#utils/http-utils.js'
+import { normalizeError } from '#utils/normalize-error.js'
 import { ensureSystemCoreAuth } from './auth.js'
+
+export type HttpRouteHandler = (
+  req: unknown,
+  res: unknown,
+  bot?: unknown,
+  next?: unknown
+) => unknown
+
+export type HttpRoute = {
+  method?: string
+  path?: string
+  handler?: HttpRouteHandler
+  middleware?: unknown[]
+  systemAuth?: unknown
+}
+
+export type HttpApiOptions = {
+  name?: string
+  dsc?: string
+  routes?: HttpRoute[]
+  priority?: number
+  enable?: boolean
+  init?: (this: HttpApi, app: unknown, bot: unknown) => unknown
+  ws?: Record<string, unknown>
+  middleware?: unknown[]
+}
+
+type ExpressLikeApp = {
+  use: (...args: unknown[]) => unknown
+} & Record<string, unknown>
+
+export type WsHandlerFn = ((
+  conn: unknown,
+  req: unknown,
+  bot?: unknown,
+  socket?: unknown,
+  head?: unknown
+) => unknown) & {
+  __ownerKey?: string
+  __originalHandler?: unknown
+  skipAuth?: boolean
+  handler?: unknown
+}
+
+export type AgentRuntimeBot = {
+  wsf?: Record<string, WsHandlerFn[]>
+  checkApiAuthorization?: (req: unknown) => boolean
+}
+
+type ExpressLikeReq = { agentRuntime?: unknown; api?: HttpApi }
+type ExpressLikeRes = { headersSent?: boolean }
 
 /**
  * HTTP API基础类
  * 提供统一的HTTP API接口结构，支持路由注册、WebSocket处理、中间件等。
+ * handler 应使用 HttpResponse.success（普通对象拍平到顶层，禁默认 json.data）。
  */
 export default class HttpApi {
   _wsDisposers: Array<() => void> = []
   name: string
   dsc: string
-  routes: any[]
+  routes: HttpRoute[]
   priority: number
   enable: boolean
-  initHook: ((...args: any[]) => any) | null
-  wsHandlers: Record<string, any>
-  middleware: any[]
+  initHook: ((this: HttpApi, app: unknown, bot: unknown) => unknown) | null
+  wsHandlers: Record<string, unknown>
+  middleware: unknown[]
   createTime: number
   key?: string
+  filePath?: string
 
-  constructor(data: Record<string, any> = {}) {
+  constructor(data: HttpApiOptions = {}) {
     this.name = data.name || 'unnamed-api'
     this.dsc = data.dsc || '暂无描述'
     this.routes = data.routes || []
@@ -31,7 +85,7 @@ export default class HttpApi {
     this.createTime = Date.now()
   }
 
-  async init(app: any, bot: any) {
+  async init(app: ExpressLikeApp, bot: AgentRuntimeBot) {
     if (this.middleware && this.middleware.length > 0) {
       for (const mw of this.middleware) {
         if (typeof mw === 'function') {
@@ -51,7 +105,7 @@ export default class HttpApi {
     return true
   }
 
-  registerRoutes(app: any, bot: any) {
+  registerRoutes(app: ExpressLikeApp, bot: AgentRuntimeBot) {
     if (!Array.isArray(this.routes) || this.routes.length === 0) return
 
     for (const route of this.routes) {
@@ -67,7 +121,8 @@ export default class HttpApi {
       }
 
       const lowerMethod = method.toLowerCase()
-      if (typeof app[lowerMethod] !== 'function') {
+      const register = app[lowerMethod]
+      if (typeof register !== 'function') {
         RuntimeUtil.makeLog(
           'error',
           `[HttpApi] ${this.name} 不支持的HTTP方法: ${method}`,
@@ -78,15 +133,25 @@ export default class HttpApi {
 
       const wrappedHandler = this.wrapHandler(handler, bot, this._withDefaultSystemAuth(route))
 
+      // Express 方法必须带 app 作 this；拆出后裸调会触发 lazyrouter undefined
       if (middleware.length > 0) {
-        app[lowerMethod](path, ...middleware, wrappedHandler)
+        ;(register as (this: ExpressLikeApp, ...args: unknown[]) => unknown).call(
+          app,
+          path,
+          ...middleware,
+          wrappedHandler,
+        )
       } else {
-        app[lowerMethod](path, wrappedHandler)
+        ;(register as (this: ExpressLikeApp, ...args: unknown[]) => unknown).call(
+          app,
+          path,
+          wrappedHandler,
+        )
       }
     }
   }
 
-  _withDefaultSystemAuth(route: Record<string, any>) {
+  _withDefaultSystemAuth(route: HttpRoute) {
     if (route.systemAuth === false) return route
     if (route.systemAuth != null && route.systemAuth !== '') return route
     const p = route.path
@@ -100,8 +165,8 @@ export default class HttpApi {
     return { ...route, systemAuth: ctx }
   }
 
-  wrapHandler(handler: (...args: any[]) => any, bot: any, route: Record<string, any> = {}) {
-    return async (req: any, res: any, next: any) => {
+  wrapHandler(handler: HttpRouteHandler, bot: AgentRuntimeBot, route: HttpRoute = {}) {
+    return async (req: ExpressLikeReq, res: ExpressLikeRes, next: unknown) => {
       if (res.headersSent) return
 
       try {
@@ -109,17 +174,27 @@ export default class HttpApi {
         req.api = this
         if (route.systemAuth) {
           const ctx = typeof route.systemAuth === 'string' ? route.systemAuth : this.name
-          const authResp = ensureSystemCoreAuth(req, res, bot, ctx)
+          const authResp = ensureSystemCoreAuth(
+            req as Parameters<typeof ensureSystemCoreAuth>[0],
+            res as Parameters<typeof ensureSystemCoreAuth>[1],
+            bot,
+            ctx
+          )
           if (authResp) return authResp
         }
         await handler(req, res, bot, next)
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (!res.headersSent) {
-          HttpResponse.error(res, error, 500, `${this.name}.route`)
+          HttpResponse.error(
+            res as Parameters<typeof HttpResponse.error>[0],
+            error,
+            500,
+            `${this.name}.route`
+          )
         } else {
           RuntimeUtil.makeLog(
             'error',
-            `[HttpApi] ${this.name} 处理请求失败: ${error.message}`,
+            `[HttpApi] ${this.name} 处理请求失败: ${normalizeError(error).message}`,
             'HttpApi',
             true
           )
@@ -128,7 +203,7 @@ export default class HttpApi {
     }
   }
 
-  registerWebSocketHandlers(bot: any, ownerKey = 'unknown') {
+  registerWebSocketHandlers(bot: AgentRuntimeBot, ownerKey = 'unknown') {
     if (!this.wsHandlers || typeof this.wsHandlers !== 'object') {
       return []
     }
@@ -150,17 +225,19 @@ export default class HttpApi {
         const rawHandler =
           typeof handlerEntry === 'function'
             ? handlerEntry
-            : handlerEntry && typeof handlerEntry.handler === 'function'
-              ? handlerEntry.handler
+            : handlerEntry &&
+                typeof handlerEntry === 'object' &&
+                typeof (handlerEntry as { handler?: unknown }).handler === 'function'
+              ? (handlerEntry as { handler: WsHandlerFn }).handler
               : null
         if (typeof rawHandler === 'function') {
-          const wrapped: any = (conn: any, req: any, socket: any, head: any) => {
+          const wrapped: WsHandlerFn = (conn, req, socket, head) => {
             try {
               rawHandler(conn, req, bot, socket, head)
-            } catch (error: any) {
+            } catch (error: unknown) {
               RuntimeUtil.makeLog(
                 'error',
-                `[HttpApi] ${this.name} WebSocket处理失败: ${error.message}`,
+                `[HttpApi] ${this.name} WebSocket处理失败: ${normalizeError(error).message}`,
                 'HttpApi',
                 true
               )
@@ -168,23 +245,23 @@ export default class HttpApi {
           }
           wrapped.__ownerKey = ownerKey
           wrapped.__originalHandler = rawHandler
-          if (handlerEntry && typeof handlerEntry === 'object' && handlerEntry.skipAuth === true) {
+          if (handlerEntry && typeof handlerEntry === 'object' && (handlerEntry as { skipAuth?: boolean }).skipAuth === true) {
             wrapped.skipAuth = true
             wrapped.handler = wrapped
           }
 
           const exists = bot.wsf[path].some(
-            (h: any) => h && h.__ownerKey === ownerKey && h.__originalHandler === rawHandler
+            (h) => h && h.__ownerKey === ownerKey && h.__originalHandler === rawHandler
           )
           if (exists) continue
 
           bot.wsf[path].push(wrapped)
           disposers.push(() => {
-            const list = bot.wsf[path]
+            const list = bot.wsf?.[path]
             if (!Array.isArray(list)) return
             const index = list.indexOf(wrapped)
             if (index >= 0) list.splice(index, 1)
-            if (list.length === 0) delete bot.wsf[path]
+            if (list.length === 0) delete bot.wsf?.[path]
           })
         }
       }
@@ -204,7 +281,15 @@ export default class HttpApi {
     this._wsDisposers = []
   }
 
-  getInfo() {
+  getInfo(): {
+    name: string
+    dsc: string
+    priority: number
+    routes: number
+    ws?: number
+    enable: boolean
+    createTime: number
+  } {
     return {
       name: this.name,
       dsc: this.dsc,
@@ -227,7 +312,7 @@ export default class HttpApi {
     RuntimeUtil.makeLog('info', `[HttpApi] ${this.name} 已停用`, 'HttpApi')
   }
 
-  async reload(app: any, bot: any) {
+  async reload(app: ExpressLikeApp, bot: AgentRuntimeBot) {
     RuntimeUtil.makeLog('info', `[HttpApi] ${this.name} 开始重载`, 'HttpApi')
     this.stop()
     await this.init(app, bot)

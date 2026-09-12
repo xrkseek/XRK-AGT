@@ -27,6 +27,7 @@ import {
   writeSSEChunk,
   createOpenAIChunk,
   createOpenAiWorkflowDeltaHandler,
+  createHarnessLiveSessionEventHandler,
 } from '#utils/sse-openai.js';
 import { pickPromptCacheOverrides } from '#utils/llm/prompt-cache-policy.js';
 import { transformOpenAIStyleVisionMessages } from '#utils/llm/message-transform.js';
@@ -40,6 +41,7 @@ import {
   estimateTokens,
   resolveWorkflowStreams,
   shouldUseHarnessModuleLoop,
+  shouldWantOpenAiLiveSse,
   buildOverridesFromBody
 } from '#utils/http/ai-v3-utils.js';
 import { resolveInputTokenBudget, trimMessagesToTokenBudget } from '#utils/llm/message-token-budget.js';
@@ -348,8 +350,8 @@ async function handleChatCompletionsV3(req: any, res: any) {
     );
   }
 
-  const base = LLMFactory.getProviderConfig(provider) || {};
-  const llmConfig = {
+  const base: any = LLMFactory.getProviderConfig(provider) || {};
+  const llmConfig: any = {
     provider,
     ...base,
     promptCache: aiWorkflowCfgForRequest.llm?.promptCache
@@ -390,16 +392,15 @@ async function handleChatCompletionsV3(req: any, res: any) {
   // Web 控制台 · /v1+MCP · 无 client-tools 纯对话：runHarnessModuleLoop
   if (useHarnessLoop) {
     const responseModel = llmConfig.provider || 'unknown';
-    const wantLiveSse = streamFlag
-      && req.xrkGatewayFormat !== 'anthropic'
-      && req.xrkGatewayFormat !== 'responses';
+    // OpenAI stream=true → live SSE（chunk/tool）；Anthropic/Responses 网关仍整段 JSON
+    const wantLiveSse = shouldWantOpenAiLiveSse(streamFlag, req.xrkGatewayFormat);
     let liveId = null;
     let liveCreated = null;
     try {
       const sessionKey = pickFirst(body, ['xrk_session_id', 'conversation_id', 'session_id'])
         || (workspaceCtx.presetId ? `ws_${workspaceCtx.presetId}` : null);
 
-      let harnessMessages = llmMessages;
+      let harnessMessages: any = llmMessages;
       if (sessionKey) {
         try {
           const harness = await importHarnessSdk();
@@ -411,7 +412,7 @@ async function handleChatCompletionsV3(req: any, res: any) {
         }
       }
 
-      const budget = resolveInputTokenBudget({ ...llmConfig, ...overrides });
+      const budget = resolveInputTokenBudget({ ...llmConfig, ...overrides } as any);
       if (budget > 0) {
         const trimmed = trimMessagesToTokenBudget(harnessMessages, budget, estimateTokens);
         if (trimmed.length < harnessMessages.length) {
@@ -424,9 +425,8 @@ async function handleChatCompletionsV3(req: any, res: any) {
         harnessMessages = trimmed;
       }
 
-      let liveHandler = null;
-      /** @type {Map<string, { name?: string, arguments?: unknown }>} */
-      const pendingToolArgs = new Map();
+      let liveHandler: ReturnType<typeof createOpenAiWorkflowDeltaHandler> | null = null;
+      let liveSessionBridge: ReturnType<typeof createHarnessLiveSessionEventHandler> | null = null;
       if (wantLiveSse) {
         liveId = `chatcmpl_${Date.now()}`;
         liveCreated = Math.floor(Date.now() / 1000);
@@ -436,6 +436,7 @@ async function handleChatCompletionsV3(req: any, res: any) {
           created: liveCreated,
           model: responseModel,
         });
+        liveSessionBridge = createHarnessLiveSessionEventHandler(liveHandler);
       }
 
       const harnessResult: any = await runWithAiConsoleContext(
@@ -455,35 +456,7 @@ async function handleChatCompletionsV3(req: any, res: any) {
             ...overrides,
             ...(effectiveStreams?.length ? { workflows: effectiveStreams } : {}),
             ...(sessionKey ? { sessionKey: String(sessionKey) } : {}),
-            ...(liveHandler ? {
-              onSessionEvent(ev: any) {
-                if (ev?.type === 'assistant/chunk') {
-                  if (ev.kind === 'text' && ev.text) liveHandler.callback(ev.text);
-                  else if (ev.kind === 'reasoning' && ev.text) {
-                    liveHandler.callback('', { reasoning_content: ev.text });
-                  }
-                } else if (ev?.type === 'tool/call' && ev.call?.id) {
-                  // Buffer args only; emit once on tool/result (complete card).
-                  pendingToolArgs.set(ev.call.id, {
-                    name: ev.call.name,
-                    arguments: ev.call.arguments ?? {},
-                  });
-                } else if (ev?.type === 'tool/result' && ev.result) {
-                  const id = ev.result.toolCallId;
-                  const pending = id ? pendingToolArgs.get(id) : null;
-                  if (id) pendingToolArgs.delete(id);
-                  liveHandler.callback('', {
-                    mcp_tools: [{
-                      id,
-                      name: ev.result.name || pending?.name,
-                      arguments: pending?.arguments ?? {},
-                      result: ev.result.content,
-                      ...(ev.result.isError ? { isError: true } : {}),
-                    }],
-                  });
-                }
-              },
-            } : {}),
+            ...(liveSessionBridge ? { onSessionEvent: liveSessionBridge.onSessionEvent } : {}),
           },
         })
       );
@@ -527,6 +500,7 @@ async function handleChatCompletionsV3(req: any, res: any) {
         usage
       };
 
+      // harness 路径：Anthropic/Responses 即使 body.stream=true 也不走 OpenAI live SSE，整段 JSON
       if (streamFlag && (req.xrkGatewayFormat === 'anthropic' || req.xrkGatewayFormat === 'responses')) {
         RuntimeUtil.makeLog(
           'warn',
@@ -612,7 +586,7 @@ async function handleChatCompletionsV3(req: any, res: any) {
   }
 
   // 仅 client tools 透传：工厂单次 / 流式（不经 harness）
-  const client = LLMFactory.createClient(llmConfig);
+  const client: any = LLMFactory.createClient(llmConfig);
 
   if (!streamFlag) {
     try {
@@ -741,7 +715,7 @@ async function handleChatCompletionsV3(req: any, res: any) {
       created: now,
       model: modelName,
       usageMessages: messages,
-      extractMessageText,
+      extractMessageText: extractMessageText as any,
       estimateTokens,
       runWrapped: (async (run: any) => runWithAiConsoleContext({ workspaceId: auditWorkspaceId }, run)) as any
     });

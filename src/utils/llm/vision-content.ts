@@ -19,13 +19,85 @@
  *
  * 设计原则：入口归一到 AGT 形态 → transform 出 OpenAI parts → 工厂按厂商编码。
  * 不另起 VisionFactory，不绑死 QQ。
+ * @see .cursor/skills/xrk-v3-api/SKILL.md — 网关多模态仍走 Chat Completions parts
  */
 
 /** 单条 user 消息默认最多附图（引用+当前合计）；可由 llm.visionMaxImages 覆盖 */
 export const DEFAULT_VISION_MAX_IMAGES = 10;
 
+export type VisionRole = 'current' | 'reply' | string;
+
+export type VisionRefObject = {
+  ref: string;
+  role?: VisionRole;
+  mime?: string;
+  caption?: string;
+};
+
+export type VisionRef = string | VisionRefObject;
+
+export type VisionRefInput = VisionRef | {
+  url?: string;
+  file?: string;
+  path?: string;
+  src?: string;
+  mimeType?: string;
+  image_url?: { url?: string };
+  [key: string]: unknown;
+};
+
+export type VisionRefDefaults = {
+  role?: VisionRole;
+  mime?: string;
+  caption?: string;
+};
+
+export type OpenAIVisionPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
+export type AgtVisionContent = {
+  text?: string;
+  content?: unknown;
+  images?: unknown;
+  replyImages?: unknown;
+  [key: string]: unknown;
+};
+
+type MessageSegment = {
+  type?: string;
+  sub_type?: unknown;
+  file?: unknown;
+  url?: unknown;
+  path?: unknown;
+  file_id?: unknown;
+  data?: Record<string, unknown> & {
+    file?: unknown;
+    url?: unknown;
+    path?: unknown;
+    file_id?: unknown;
+    sub_type?: unknown;
+  };
+  [key: string]: unknown;
+};
+
+type VisionEventLike = {
+  message?: unknown;
+  img?: unknown;
+  images?: unknown;
+  replyImages?: unknown;
+  getReply?: () => Promise<{ message?: unknown } | null | undefined>;
+  [key: string]: unknown;
+};
+
+type ChatMessage = {
+  role?: string;
+  content?: unknown;
+  [key: string]: unknown;
+};
+
 /** 解码日志/CQ/表单里常见的 HTML 实体，避免 `&amp;` 导致 fetch 失败（幂等，可解多层编码） */
-export function decodeHtmlEntitiesInUrl(url: any) {
+export function decodeHtmlEntitiesInUrl(url: unknown): string {
   let s = String(url ?? '').trim();
   if (!s) return '';
   for (let i = 0; i < 5; i++) {
@@ -41,21 +113,10 @@ export function decodeHtmlEntitiesInUrl(url: any) {
   return s;
 }
 
-/**
- * @typedef {string | {
- *   ref: string,
- *   role?: 'current' | 'reply',
- *   mime?: string,
- *   caption?: string
- * }} VisionRef
- */
-
-/**
- * @param {unknown} input
- * @param {{ role?: 'current'|'reply', mime?: string, caption?: string }} [defaults]
- * @returns {{ ref: string, role?: string, mime?: string, caption?: string }|null}
- */
-export function normalizeVisionRef(input: any, defaults: any = {}) {
+export function normalizeVisionRef(
+  input: unknown,
+  defaults: VisionRefDefaults = {},
+): VisionRefObject | null {
   if (input == null) return null;
   if (typeof input === 'string') {
     const ref = decodeHtmlEntitiesInUrl(input);
@@ -64,38 +125,42 @@ export function normalizeVisionRef(input: any, defaults: any = {}) {
       ref,
       role: defaults.role,
       mime: defaults.mime,
-      caption: defaults.caption
+      caption: defaults.caption,
     };
   }
   if (typeof input === 'object' && !Array.isArray(input)) {
+    const obj = input as Record<string, unknown> & {
+      image_url?: { url?: string };
+    };
     const raw =
-      input.ref ??
-      input.url ??
-      input.file ??
-      input.path ??
-      input.src ??
-      input.image_url?.url;
+      obj.ref ??
+      obj.url ??
+      obj.file ??
+      obj.path ??
+      obj.src ??
+      obj.image_url?.url;
     const ref = decodeHtmlEntitiesInUrl(raw);
     if (!ref) return null;
     return {
       ref,
-      role: input.role || defaults.role,
-      mime: input.mime || input.mimeType || defaults.mime,
-      caption: input.caption || defaults.caption
+      role: (typeof obj.role === 'string' ? obj.role : undefined) || defaults.role,
+      mime:
+        (typeof obj.mime === 'string' ? obj.mime : undefined) ||
+        (typeof obj.mimeType === 'string' ? obj.mimeType : undefined) ||
+        defaults.mime,
+      caption: (typeof obj.caption === 'string' ? obj.caption : undefined) || defaults.caption,
     };
   }
   return null;
 }
 
-/**
- * @param {unknown} list
- * @param {{ role?: 'current'|'reply' }} [defaults]
- * @returns {Array<{ ref: string, role?: string, mime?: string, caption?: string }>}
- */
-export function coerceVisionRefList(list: any, defaults: any = {}) {
+export function coerceVisionRefList(
+  list: unknown,
+  defaults: VisionRefDefaults = {},
+): VisionRefObject[] {
   if (!Array.isArray(list)) return [];
-  const out = [];
-  const seen = new Set();
+  const out: VisionRefObject[] = [];
+  const seen = new Set<string>();
   for (const item of list) {
     const n = normalizeVisionRef(item, defaults);
     if (!n || seen.has(n.ref)) continue;
@@ -106,29 +171,26 @@ export function coerceVisionRefList(list: any, defaults: any = {}) {
 }
 
 /** @param {VisionRef|ReturnType<typeof normalizeVisionRef>} ref */
-export function visionRefToLocator(ref: any) {
+export function visionRefToLocator(ref: unknown): string {
   const n = normalizeVisionRef(ref);
   return n?.ref || '';
 }
 
-/**
- * 从通用消息段提取附图（不绑死 QQ；兼容 OneBot / device / 自定义 type）
- * @param {unknown[]} segments
- * @param {{
- *   skipStickers?: boolean,
- *   imageTypes?: string[],
- *   replyTypes?: string[]
- * }} [opts]
- * @returns {{ images: ReturnType<typeof normalizeVisionRef>[], replyImages: ReturnType<typeof normalizeVisionRef>[] }}
- */
-export function extractVisionFromSegments(segments: any, opts: any = {}) {
-  const images: any[] = [];
-  const replyImages: any[] = [];
+export function extractVisionFromSegments(
+  segments: unknown,
+  opts: {
+    skipStickers?: boolean;
+    imageTypes?: string[];
+    replyTypes?: string[];
+  } = {},
+): { images: VisionRefObject[]; replyImages: VisionRefObject[] } {
+  const images: VisionRefObject[] = [];
+  const replyImages: VisionRefObject[] = [];
   const skipStickers = opts.skipStickers !== false;
   const imageTypes = new Set(opts.imageTypes || ['image', 'mface']);
   const replyTypes = new Set(opts.replyTypes || ['reply']);
 
-  const push = (bucket: any, seg: any, role: any) => {
+  const push = (bucket: VisionRefObject[], seg: MessageSegment, role: VisionRole) => {
     const data = seg?.data && typeof seg.data === 'object' ? seg.data : {};
     const candidates = [
       seg?.file,
@@ -138,12 +200,12 @@ export function extractVisionFromSegments(segments: any, opts: any = {}) {
       data.file,
       data.url,
       data.path,
-      data.file_id
+      data.file_id,
     ];
     for (const c of candidates) {
       const n = normalizeVisionRef(c, { role });
       if (!n) continue;
-      if (bucket.some((x: any) => x.ref === n.ref)) return;
+      if (bucket.some((x) => x.ref === n.ref)) return;
       bucket.push(n);
       return;
     }
@@ -154,7 +216,8 @@ export function extractVisionFromSegments(segments: any, opts: any = {}) {
   let inReplyRegion = false;
   for (const seg of segments) {
     if (!seg || typeof seg !== 'object') continue;
-    const type = String(seg.type || '').toLowerCase();
+    const s = seg as MessageSegment;
+    const type = String(s.type || '').toLowerCase();
 
     if (replyTypes.has(type)) {
       inReplyRegion = true;
@@ -167,34 +230,36 @@ export function extractVisionFromSegments(segments: any, opts: any = {}) {
     }
 
     if (skipStickers) {
-      const subType = seg.sub_type ?? seg.data?.sub_type;
+      const subType = s.sub_type ?? s.data?.sub_type;
       if (subType === 1 || subType === '1') continue;
     }
 
     if (inReplyRegion) {
-      push(replyImages, seg, 'reply');
+      push(replyImages, s, 'reply');
       inReplyRegion = false;
     } else {
-      push(images, seg, 'current');
+      push(images, s, 'current');
     }
   }
 
   return { images, replyImages };
 }
 
-/**
- * 从事件对象提取附图（通道无关：有 message 段 / img 列表 / getReply 即可）
- * @param {object|null|undefined} e
- * @param {object} [opts]
- */
-export async function extractVisionFromEvent(e: any, opts: any = {}) {
+export async function extractVisionFromEvent(
+  e: VisionEventLike | null | undefined,
+  opts: {
+    skipStickers?: boolean;
+    imageTypes?: string[];
+    replyTypes?: string[];
+  } = {},
+): Promise<{ images: VisionRefObject[]; replyImages: VisionRefObject[] }> {
   const fromSeg = extractVisionFromSegments(e?.message, opts);
   const images = [...fromSeg.images];
   const replyImages = [...fromSeg.replyImages];
 
-  const mergeList = (bucket: any, list: any, role: any) => {
+  const mergeList = (bucket: VisionRefObject[], list: unknown, role: VisionRole) => {
     for (const item of coerceVisionRefList(list, { role })) {
-      if (!bucket.some((x: any) => x.ref === item.ref)) bucket.push(item);
+      if (!bucket.some((x) => x.ref === item.ref)) bucket.push(item);
     }
   };
 
@@ -208,11 +273,17 @@ export async function extractVisionFromEvent(e: any, opts: any = {}) {
       if (reply && Array.isArray(reply.message)) {
         const fromReply = extractVisionFromSegments(reply.message, {
           ...opts,
-          // 被引用消息内的图一律算 replyImages
         });
-        // 引用目标消息里的图：无论是否带 reply 段，都并入 replyImages
-        mergeList(replyImages, fromReply.images.map((x: any) => x.ref), 'reply');
-        mergeList(replyImages, fromReply.replyImages.map((x: any) => x.ref), 'reply');
+        mergeList(
+          replyImages,
+          fromReply.images.map((x) => x.ref),
+          'reply',
+        );
+        mergeList(
+          replyImages,
+          fromReply.replyImages.map((x) => x.ref),
+          'reply',
+        );
       }
     } catch {
       /* 通道未实现 getReply 时忽略 */
@@ -222,17 +293,14 @@ export async function extractVisionFromEvent(e: any, opts: any = {}) {
   return { images, replyImages };
 }
 
-/**
- * 组装 AGT user content：无图时退化为纯字符串（省 token / 兼容旧路径）
- * @param {{
- *   text?: string,
- *   images?: unknown,
- *   replyImages?: unknown,
- *   extra?: Record<string, unknown>
- * }} input
- * @returns {string | { text: string, images: string[], replyImages: string[], [k: string]: unknown }}
- */
-export function buildAgtUserContent(input: any = {}) {
+export function buildAgtUserContent(
+  input: {
+    text?: unknown;
+    images?: unknown;
+    replyImages?: unknown;
+    extra?: Record<string, unknown>;
+  } = {},
+): string | Record<string, unknown> {
   const text = input.text != null ? String(input.text) : '';
   const images = coerceVisionRefList(input.images, { role: 'current' });
   const replyImages = coerceVisionRefList(input.replyImages, { role: 'reply' });
@@ -245,25 +313,23 @@ export function buildAgtUserContent(input: any = {}) {
 
   return {
     text,
-    images: images.map((x: any) => x.ref),
-    replyImages: replyImages.map((x: any) => x.ref),
-    ...extra
+    images: images.map((x) => x.ref),
+    replyImages: replyImages.map((x) => x.ref),
+    ...extra,
   };
 }
 
-/**
- * 将上传图合并进 messages 最后一条 user（HTTP / 任意入口）
- * @param {object[]} messages
- * @param {string[]} uploadedLocators
- * @param {{ roles?: Array<'current'|'reply'|string> }} [opts]
- */
-export function mergeUploadedImagesIntoMessages(messages: any, uploadedLocators: any, opts: any = {}) {
+export function mergeUploadedImagesIntoMessages(
+  messages: ChatMessage[],
+  uploadedLocators: unknown[] | null | undefined,
+  opts: { roles?: Array<'current' | 'reply' | string> } = {},
+): ChatMessage[] {
   if (!Array.isArray(messages) || !uploadedLocators?.length) return messages;
   const roles = Array.isArray(opts.roles) ? opts.roles : [];
 
-  const current: any[] = [];
-  const reply: any[] = [];
-  uploadedLocators.forEach((loc: any, i: any) => {
+  const current: string[] = [];
+  const reply: string[] = [];
+  uploadedLocators.forEach((loc, i) => {
     const role = roles[i] === 'reply' ? 'reply' : 'current';
     const n = normalizeVisionRef(loc, { role });
     if (!n) return;
@@ -271,36 +337,35 @@ export function mergeUploadedImagesIntoMessages(messages: any, uploadedLocators:
     else current.push(n.ref);
   });
 
-  const imageParts = [...reply, ...current].map((url) => ({
+  const imageParts: OpenAIVisionPart[] = [...reply, ...current].map((url) => ({
     type: 'image_url',
-    image_url: { url }
+    image_url: { url },
   }));
 
   if (messages.length > 0 && messages[messages.length - 1]?.role === 'user') {
-    const last = messages[messages.length - 1];
+    const last = messages[messages.length - 1]!;
     if (Array.isArray(last.content)) {
-      last.content.push(...imageParts);
+      (last.content as OpenAIVisionPart[]).push(...imageParts);
     } else if (typeof last.content === 'string') {
       const text = last.content.trim();
-      // 有 reply 角色时走 AGT 对象形态，便于 transform 标注「引用附图」
       if (reply.length > 0) {
         last.content = {
           text,
           images: current,
-          replyImages: reply
+          replyImages: reply,
         };
       } else {
-        const imageOnly = current.map((url) => ({
+        const imageOnly: OpenAIVisionPart[] = current.map((url) => ({
           type: 'image_url',
-          image_url: { url }
+          image_url: { url },
         }));
         last.content = text ? [{ type: 'text', text }, ...imageOnly] : imageOnly;
       }
     } else if (last.content && typeof last.content === 'object') {
-      const c = last.content;
+      const c = last.content as AgtVisionContent;
       c.text = (c.text || c.content || '').toString();
-      c.images = [...coerceVisionRefList(c.images).map((x: any) => x.ref), ...current];
-      c.replyImages = [...coerceVisionRefList(c.replyImages).map((x: any) => x.ref), ...reply];
+      c.images = [...coerceVisionRefList(c.images).map((x) => x.ref), ...current];
+      c.replyImages = [...coerceVisionRefList(c.replyImages).map((x) => x.ref), ...reply];
       last.content = c;
     } else {
       last.content = imageParts;
@@ -311,13 +376,13 @@ export function mergeUploadedImagesIntoMessages(messages: any, uploadedLocators:
       content:
         reply.length > 0
           ? { text: '', images: current, replyImages: reply }
-          : imageParts
+          : imageParts,
     });
   }
   return messages;
 }
 
-function isProbablyBareBase64(str: any) {
+function isProbablyBareBase64(str: unknown): boolean {
   if (!str || typeof str !== 'string') return false;
   if (str.startsWith('data:')) return true;
   if (str.includes('://')) return false;
@@ -326,7 +391,10 @@ function isProbablyBareBase64(str: any) {
   return /^[A-Za-z0-9+/=\r\n]+$/.test(s);
 }
 
-function wrapLocatorAsDataUrlIfNeeded(locator: any, { allowBase64, defaultMime }: any) {
+function wrapLocatorAsDataUrlIfNeeded(
+  locator: unknown,
+  { allowBase64, defaultMime }: { allowBase64: boolean; defaultMime: string },
+): string {
   let url = decodeHtmlEntitiesInUrl(locator);
   if (!url) return '';
   if (allowBase64 && isProbablyBareBase64(url) && !url.startsWith('data:')) {
@@ -335,26 +403,23 @@ function wrapLocatorAsDataUrlIfNeeded(locator: any, { allowBase64, defaultMime }
   return url;
 }
 
-/**
- * AGT {text,images,replyImages} → OpenAI multimodal parts（标准化、可标注、可截断）
- * @param {{ text?: string, images?: unknown, replyImages?: unknown }} content
- * @param {{ visionImageMimeType?: string, visionMaxImages?: number }} [config]
- * @param {{
- *   allowBase64?: boolean,
- *   labelImages?: boolean,
- *   maxImages?: number
- * }} [options]
- * @returns {Array<{type:string, text?:string, image_url?:{url:string}}>}
- */
-export function buildOpenAIVisionParts(content: any = {}, config: any = {}, options: any = {}) {
+export function buildOpenAIVisionParts(
+  content: AgtVisionContent = {},
+  config: { visionImageMimeType?: string; visionMaxImages?: number } = {},
+  options: {
+    allowBase64?: boolean;
+    labelImages?: boolean;
+    maxImages?: number;
+  } = {},
+): OpenAIVisionPart[] {
   const text = content.text != null ? String(content.text) : String(content.content || '');
   const allowBase64 = options.allowBase64 !== false;
   const defaultMime = config.visionImageMimeType || 'image/png';
   const maxImages = Math.max(
     1,
-    Number(options.maxImages ?? config.visionMaxImages ?? DEFAULT_VISION_MAX_IMAGES) || DEFAULT_VISION_MAX_IMAGES
+    Number(options.maxImages ?? config.visionMaxImages ?? DEFAULT_VISION_MAX_IMAGES) ||
+      DEFAULT_VISION_MAX_IMAGES,
   );
-  // 有引用图、或多于 1 张图时默认加短标注，便于模型区分
   const replyList = coerceVisionRefList(content.replyImages, { role: 'reply' });
   const currentList = coerceVisionRefList(content.images, { role: 'current' });
   const total = replyList.length + currentList.length;
@@ -363,21 +428,19 @@ export function buildOpenAIVisionParts(content: any = {}, config: any = {}, opti
       ? options.labelImages !== false
       : replyList.length > 0 || total > 1;
 
-  const parts = [];
+  const parts: OpenAIVisionPart[] = [];
   if (text) parts.push({ type: 'text', text });
 
   let remain = maxImages;
-  const appendGroup = (list: any, roleTag: any) => {
+  const appendGroup = (list: VisionRefObject[], roleTag: string) => {
     const slice = list.slice(0, remain);
     const n = slice.length;
     for (let i = 0; i < n; i++) {
-      const item = slice[i];
+      const item = slice[i]!;
       const url = wrapLocatorAsDataUrlIfNeeded(item.ref, { allowBase64, defaultMime });
       if (!url) continue;
       if (labelImages) {
-        const caption =
-          item.caption ||
-          (n > 1 ? `${roleTag} ${i + 1}/${n}` : roleTag);
+        const caption = item.caption || (n > 1 ? `${roleTag} ${i + 1}/${n}` : roleTag);
         parts.push({ type: 'text', text: `[${caption}]` });
       }
       parts.push({ type: 'image_url', image_url: { url } });
@@ -385,37 +448,31 @@ export function buildOpenAIVisionParts(content: any = {}, config: any = {}, opti
     }
   };
 
-  // 先引用图、后当前图（与历史约定一致；标注消除歧义）
   appendGroup(replyList, '引用附图');
   appendGroup(currentList, '当前附图');
 
   if (total > maxImages && parts.length) {
     parts.push({
       type: 'text',
-      text: `[附图已截断：共 ${total} 张，本次送入 ${maxImages} 张]`
+      text: `[附图已截断：共 ${total} 张，本次送入 ${maxImages} 张]`,
     });
   }
 
   return parts;
 }
 
-/**
- * 统计 user 消息中的附图数量（三种形态）
- * @param {unknown} content
- */
-export function countVisionInContent(content: any) {
+export function countVisionInContent(content: unknown): number {
   if (content == null) return 0;
   if (typeof content === 'string') return 0;
   if (Array.isArray(content)) {
-    return content.filter(
-      (p) => p?.type === 'image_url' || p?.type === 'image' || p?.type === '__image_url__'
-    ).length;
+    return content.filter((p) => {
+      const part = p as { type?: string };
+      return part?.type === 'image_url' || part?.type === 'image' || part?.type === '__image_url__';
+    }).length;
   }
   if (typeof content === 'object') {
-    return (
-      coerceVisionRefList(content.images).length +
-      coerceVisionRefList(content.replyImages).length
-    );
+    const c = content as AgtVisionContent;
+    return coerceVisionRefList(c.images).length + coerceVisionRefList(c.replyImages).length;
   }
   return 0;
 }

@@ -1,4 +1,5 @@
-/** refLocator 移植 — role / aria / ax ref + frame scope */
+/** refLocator — role / aria / ax ref + frame scope */
+import type { FrameLocator, Locator, Page } from 'playwright';
 import { parseRoleRef } from './pw-role-snapshot.js';
 import {
   AX_REF_PATTERN,
@@ -7,17 +8,15 @@ import {
   getPageState,
 } from './pw-page-state.js';
 
-type PageLike = {
-  frameLocator: (selector: string) => any;
-  locator: (selector: string) => any;
-  getByRole: (role: any, options?: { name?: string; exact?: boolean }) => any;
-};
+type RoleScope = Pick<Page, 'locator' | 'getByRole'> | FrameLocator;
+
+type PageLike = Pick<Page, 'frameLocator' | 'locator' | 'getByRole'>;
 
 /**
  * @param page Playwright Page
  * @param ref 引用字符串
  */
-export function refLocator(page: PageLike, ref: string): any {
+export function refLocator(page: PageLike, ref: string): Locator {
   const normalized = ref.startsWith('@')
     ? ref.slice(1)
     : ref.startsWith('ref=')
@@ -25,9 +24,9 @@ export function refLocator(page: PageLike, ref: string): any {
       : ref;
 
   if (/^e\d+$/i.test(normalized)) {
-    const state: any = getPageState(page as any) ?? ensurePageState(page as any);
+    const state = getPageState(page as Page) ?? ensurePageState(page as Page);
     if (state.roleRefsMode === 'aria') {
-      const scope = state.roleRefsFrameSelector
+      const scope: RoleScope = state.roleRefsFrameSelector
         ? page.frameLocator(state.roleRefsFrameSelector)
         : page;
       return scope.locator(`aria-ref=${normalized}`);
@@ -38,32 +37,38 @@ export function refLocator(page: PageLike, ref: string): any {
         `Unknown ref "${normalized}". Run a new snapshot and use a ref from that snapshot.`,
       );
     }
-    const scope = state.roleRefsFrameSelector
+    const scope: RoleScope = state.roleRefsFrameSelector
       ? page.frameLocator(state.roleRefsFrameSelector)
       : page;
     const locator = info.name
-      ? scope.getByRole(info.role, { name: info.name, exact: true })
-      : scope.getByRole(info.role);
+      ? scope.getByRole(info.role as Parameters<Page['getByRole']>[0], {
+          name: info.name,
+          exact: true,
+        })
+      : scope.getByRole(info.role as Parameters<Page['getByRole']>[0]);
     return info.nth !== undefined ? locator.nth(info.nth) : locator;
   }
 
   if (AX_REF_PATTERN.test(normalized)) {
-    const state: any = getPageState(page as any) ?? ensurePageState(page as any);
+    const state = getPageState(page as Page) ?? ensurePageState(page as Page);
     const info = state.roleRefs?.[normalized];
     if (!info) {
       throw new Error(
         `Unknown ref "${normalized}". Run a new snapshot and use a ref from that snapshot.`,
       );
     }
-    const scope = state.roleRefsFrameSelector
+    const scope: RoleScope = state.roleRefsFrameSelector
       ? page.frameLocator(state.roleRefsFrameSelector)
       : page;
     if (info.domMarker) {
       return scope.locator(`[${BROWSER_REF_MARKER_ATTRIBUTE}="${normalized}"]`);
     }
     const locator = info.name
-      ? scope.getByRole(info.role, { name: info.name, exact: true })
-      : scope.getByRole(info.role);
+      ? scope.getByRole(info.role as Parameters<Page['getByRole']>[0], {
+          name: info.name,
+          exact: true,
+        })
+      : scope.getByRole(info.role as Parameters<Page['getByRole']>[0]);
     return info.nth !== undefined ? locator.nth(info.nth) : locator;
   }
 
@@ -77,7 +82,7 @@ export function refLocator(page: PageLike, ref: string): any {
 export function resolveInteractionTarget(
   target: { ref?: string; selector?: string },
   page: PageLike,
-): { kind: string; ref?: string; selector?: string; locator: any } {
+): { kind: string; ref?: string; selector?: string; locator: Locator } {
   const refRaw = typeof target.ref === 'string' ? target.ref.trim() : '';
   if (refRaw) {
     const parsed = parseRoleRef(refRaw);

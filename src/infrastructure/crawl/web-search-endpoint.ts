@@ -53,7 +53,10 @@ export async function throwWebSearchApiError(response: Response, label: string):
  */
 export async function validateSelfHostedBaseUrl(
   baseUrl: string,
-  lookupFn?: unknown,
+  lookupFn?: (
+    hostname: string,
+    options: { all: true },
+  ) => Promise<Array<{ address: string; family: number }>>,
 ): Promise<'selfHosted' | 'strict'> {
   let parsed: URL;
   try {
@@ -68,10 +71,10 @@ export async function validateSelfHostedBaseUrl(
     return 'selfHosted';
   }
   try {
-    const pinned = (await resolvePinnedHostnameWithPolicy(parsed.hostname, {
+    const pinned = await resolvePinnedHostnameWithPolicy(parsed.hostname, {
       lookupFn,
       policy: { allowPrivateNetwork: true, allowRfc2544BenchmarkRange: true },
-    })) as { addresses: string[] };
+    });
     const allPrivate = pinned.addresses.every((addr) => isPrivateIpAddress(addr));
     return allPrivate ? 'selfHosted' : 'strict';
   } catch {

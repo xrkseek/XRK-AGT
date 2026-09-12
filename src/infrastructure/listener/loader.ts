@@ -3,15 +3,39 @@ import TaskerLoader from '#infrastructure/tasker/loader.js'
 import RuntimeUtil from '#utils/runtime-util.js'
 import { FileLoader } from '#utils/file-loader.js'
 import { LOADER_BATCH_SIZE } from '#utils/loader-constants.js'
+import { normalizeError } from '#utils/normalize-error.js'
 
-type BotLike = {
-  tasker: any[]
+/** ListenerLoader / TaskerLoader 共用的 bot 面（仅 tasker 数组） */
+export type ListenerBot = {
+  tasker: unknown[]
+  on?: (event: string, handler: (...args: unknown[]) => unknown) => unknown
 }
 
-class ListenerLoader {
-  bot: BotLike | null = null
+/** core 下 events 导出的 Listener 实例契约 */
+export type ListenerInstance = {
+  bot?: unknown
+  init?: () => Promise<unknown> | unknown
+}
 
-  async load(bot: BotLike) {
+export type TaskerLike = {
+  name?: string
+  id?: string | number
+  path?: string
+  load?: () => Promise<unknown> | unknown
+}
+
+/**
+ * 事件监听器加载器
+ *
+ * 生命周期（与原版 JS 一致）：
+ * 1. load(bot)：扫描 core 下 events（非递归）→ importFresh → new → 注入 bot → await init()
+ * 2. 仅当 process.argv 含 server 时：loadTaskers() → TaskerLoader.load → 各 tasker.load()
+ * 3. events / tasker 不热重载；改后需重启
+ */
+class ListenerLoader {
+  bot: ListenerBot | null = null
+
+  async load(bot: ListenerBot) {
     this.bot = bot
     let eventCount = 0
 
@@ -28,7 +52,7 @@ class ListenerLoader {
         const listener = await FileLoader.importFresh(filePath)
         if (!listener.default) return 0
 
-        const ListenerCtor = listener.default as new () => any
+        const ListenerCtor = listener.default as new () => ListenerInstance
         const instance = new ListenerCtor()
         instance.bot = this.bot
 
@@ -43,13 +67,15 @@ class ListenerLoader {
       const results = await FileLoader.mapInBatches(eventFiles, LOADER_BATCH_SIZE, loadEventFile)
       for (const result of results) {
         if (result.status === 'fulfilled') eventCount += result.value
-        else
+        else {
+          const reason = result.reason
           RuntimeUtil.makeLog(
             'error',
-            `监听事件加载错误: ${(result.reason as Error).message}`,
+            `监听事件加载错误: ${normalizeError(reason).message}`,
             'ListenerLoader',
-            true
+            Boolean(reason)
           )
+        }
       }
     }
 
@@ -66,10 +92,12 @@ class ListenerLoader {
   }
 
   async loadTaskers() {
-    RuntimeUtil.makeLog('info', '加载 tasker 中...', 'ListenerLoader')
-    await TaskerLoader.load(this.bot!)
+    if (!this.bot) return
 
-    if (this.bot!.tasker.length === 0) {
+    RuntimeUtil.makeLog('info', '加载 tasker 中...', 'ListenerLoader')
+    await TaskerLoader.load(this.bot as any)
+
+    if (this.bot.tasker.length === 0) {
       RuntimeUtil.makeLog('warn', '未找到已注册的 tasker', 'ListenerLoader')
       return
     }
@@ -79,12 +107,21 @@ class ListenerLoader {
     let taskerErrorCount = 0
 
     const initResults = await Promise.allSettled(
-      this.bot!.tasker.map(async (tasker: any) => {
+      this.bot.tasker.map(async (raw) => {
+        const tasker = raw as TaskerLike
         if (typeof tasker.load !== 'function') {
-          RuntimeUtil.makeLog('warn', `tasker 无效: ${tasker.name}(${tasker.id})`, 'ListenerLoader')
+          RuntimeUtil.makeLog(
+            'warn',
+            `tasker 无效: ${tasker.name}(${tasker.id})`,
+            'ListenerLoader'
+          )
           return false
         }
-        RuntimeUtil.makeLog('debug', `初始化 tasker: ${tasker.name}(${tasker.id})`, 'ListenerLoader')
+        RuntimeUtil.makeLog(
+          'debug',
+          `初始化 tasker: ${tasker.name}(${tasker.id})`,
+          'ListenerLoader'
+        )
         await tasker.load()
         return true
       })
@@ -94,11 +131,12 @@ class ListenerLoader {
       if (result.status === 'fulfilled' && result.value) taskerCount++
       else if (result.status === 'rejected') {
         taskerErrorCount++
+        const reason = result.reason
         RuntimeUtil.makeLog(
           'error',
-          `tasker 初始化错误: ${(result.reason as Error).message}`,
+          `tasker 初始化错误: ${normalizeError(reason).message}`,
           'ListenerLoader',
-          true
+          Boolean(reason)
         )
       }
     }

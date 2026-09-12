@@ -6,7 +6,7 @@
 
 | 我想… | 从这里开始 |
 |--------|------------|
-| 跑起来 | [README.md §快速开始](../README.md#-快速开始) · [startup.md](startup.md) |
+| 跑起来 | [README.md §快速开始](../README.md#-快速开始) · [startup.md](startup.md) · [上线底层检查单.md](上线底层检查单.md) |
 | **看实拍** | [README §项目展示](../README.md#-项目展示) |
 | **写业务（先看挂载）** | **[runtime-surface.md](runtime-surface.md)** → [base-classes.md](base-classes.md) |
 | **写法与性能** | **[coding-style.md](coding-style.md)** → [node-26-runtime.md](node-26-runtime.md) |
@@ -17,6 +17,7 @@
 | 用内置能力 | [system-core.md](system-core.md) |
 | 写插件 / API / 工作流 | [框架可扩展性指南](框架可扩展性指南.md) |
 | 发布前检查 | [框架测试指南](框架测试指南.md) → [代码审查清单](代码审查清单.md) → [文档审查清单](文档审查清单.md) |
+| any 热度 | [any-heat-2026-09-12.md](any-heat-2026-09-12.md)（`pnpm any-heat`） |
 
 > 配图约定：[DOCSTYLE.md](DOCSTYLE.md) · 仓库 [github.com/xrkseek/XRK-AGT](https://github.com/xrkseek/XRK-AGT)
 
@@ -73,7 +74,7 @@
 
 分层与职责见 **[底层架构设计](底层架构设计.md)**（本页不重复架构图）。业务实现放在 `core/*/`；`src/` 为基础设施，**勿写业务 API/工作流**。能力诚实与决策见 **[status.md](status.md)** · **[adr/](adr/README.md)**；Harness 模块见 **[harness-module-loop.md](harness-module-loop.md)**。
 
-**system-Core 内置模块**：11 HTTP / 7 工作流 / 15 插件 / 4 Tasker / 4 events；MCP 工具在七个自带工作流内合计 **80** 个（`registerMCPTool` 计数）。详见 **[system-Core 特性文档](system-core.md)**；标准值见本地 **`tests/helpers/system-core.mjs`**（`tests/` 不入库）与 **[框架测试指南](框架测试指南.md)**。
+**system-Core 内置模块**：11 HTTP / 7 工作流 / 18 插件 / 4 Tasker / 4 events；MCP 工具在七个自带工作流内合计 **95** 个（`registerMCPTool` 计数）。详见 **[system-Core 特性文档](system-core.md)**；标准值见 **`tests/helpers/system-core.mjs`** 与 **[框架测试指南](框架测试指南.md)**。
 
 ### 🔌 插件与事件系统
 

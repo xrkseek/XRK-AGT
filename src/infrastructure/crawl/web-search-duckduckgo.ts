@@ -12,7 +12,10 @@ import {
   resolveSiteName,
   writeSearchCache,
   wrapWebContent,
-  SEARCH_CACHE
+  SEARCH_CACHE,
+  type WebSearchParams,
+  type WebSearchResult,
+  type WebSearchRuntime
 } from './web-search-shared.js'
 
 const DDG_HTML_ENDPOINT = 'https://html.duckduckgo.com/html'
@@ -91,8 +94,8 @@ export function parseDuckDuckGoHtml(html: string) {
 }
 
 export async function runDuckDuckGoSearch(
-  params: Record<string, any>,
-  runtime: Record<string, any> = {}
+  params: WebSearchParams,
+  runtime: WebSearchRuntime = {}
 ) {
   const count = resolveSearchCount(params.count ?? runtime.maxResults, DEFAULT_SEARCH_COUNT)
   const region =
@@ -102,20 +105,26 @@ export async function runDuckDuckGoSearch(
         ? runtime.region.trim()
         : ''
   const safeRaw = params.safeSearch ?? runtime.safeSearch
-  const safeSearch = ['strict', 'moderate', 'off'].includes(safeRaw) ? safeRaw : 'moderate'
+  const safeSearch =
+    typeof safeRaw === 'string' && ['strict', 'moderate', 'off'].includes(safeRaw)
+      ? safeRaw
+      : 'moderate'
   const timeoutSeconds = resolveSearchTimeoutSeconds(params.timeoutSeconds ?? runtime.timeoutSeconds)
   const cacheTtlMs = resolveSearchCacheTtlMs(params.cacheTtlMinutes ?? runtime.cacheTtlMinutes)
   const cacheKey = normalizeCacheKey(
     JSON.stringify({ provider: 'duckduckgo', query: params.query, count, region, safeSearch })
   )
-  const cached = readSearchCache(SEARCH_CACHE, cacheKey) as
-    | { value: Record<string, any> }
-    | null
-    | undefined
-  if (cached) return { ...cached.value, cached: true }
+  const cached = readSearchCache(SEARCH_CACHE, cacheKey)
+  if (cached) {
+    const value =
+      cached.value && typeof cached.value === 'object' && !Array.isArray(cached.value)
+        ? (cached.value as WebSearchResult)
+        : {}
+    return { ...value, cached: true }
+  }
 
   const url = new URL(DDG_HTML_ENDPOINT)
-  url.searchParams.set('q', params.query)
+  url.searchParams.set('q', String(params.query ?? ''))
   if (region) url.searchParams.set('kl', region)
   url.searchParams.set('kp', DDG_SAFE_SEARCH_PARAM[safeSearch])
 

@@ -17,7 +17,17 @@ describe('加载器集成（system-Core 基准）', () => {
     const keys = systemCoreHttpApiKeys();
     assert.equal(keys.length, SYSTEM_CORE_BASELINE.http);
     for (const key of keys) {
+      // 与原版一致：相对 http/ 目录，无 `http/` 前缀（如 system-Core/ai-workspace）
+      assert.equal(key.includes('/http/'), false, `key 不应含 http/ 段: ${key}`);
+      assert.match(key, /^system-Core\/[^/]+$/, `key 形状应为 system-Core/<name>: ${key}`);
       assert.ok(apis.has(key), `缺少 API: ${key}`);
+    }
+    for (const key of apis.keys()) {
+      assert.equal(
+        key.includes('/http/') || key.startsWith('http/'),
+        false,
+        `已注册 key 不应含 http/ 前缀: ${key}`,
+      );
     }
   });
 

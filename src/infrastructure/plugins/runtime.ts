@@ -8,22 +8,70 @@ import path from 'node:path'
 import common from '#utils/common.js'
 import runtimeConfig from '#infrastructure/config/config.js'
 import RendererLoader from '#infrastructure/renderer/loader.js'
+import { getRuntimeGlobal } from '#utils/runtime-globals.js'
+import { normalizeError } from '#utils/normalize-error.js'
 import Handler from './handler.js'
+import type { PluginEvent } from './plugin-base.js'
 
-const gLogger = (): any => (globalThis as any).logger
-const gAgentRuntime = (): any => (globalThis as any).AgentRuntime
-const gMsgSegment = (): any => (globalThis as any).msgSegment
+type LoggerLike = {
+  warn?: (msg: unknown) => void
+  info?: (msg: unknown) => void
+  error?: (msg: unknown) => void
+}
+
+type AgentRuntimeLike = {
+  mkdir?: (dir: string) => Promise<string> | string
+}
+
+type MsgSegmentLike = {
+  image?: (img: unknown) => unknown
+}
+
+const gLogger = (): LoggerLike | undefined => getRuntimeGlobal<LoggerLike>('logger')
+const gAgentRuntime = (): AgentRuntimeLike | undefined =>
+  getRuntimeGlobal<AgentRuntimeLike>('AgentRuntime')
+const gMsgSegment = (): MsgSegmentLike | undefined => getRuntimeGlobal<MsgSegmentLike>('msgSegment')
+
+type RuntimeExtensionInstance = {
+  enhanceRenderData?: (
+    data: Record<string, unknown>,
+    plugin: string,
+    pathMod: typeof path
+  ) => unknown
+  init?: () => unknown
+}
+
+type RuntimeExtensionFn = {
+  (e: unknown, runtime: PluginRuntime): RuntimeExtensionInstance | undefined
+  initCache?: () => unknown
+}
+
+type RuntimeExtensionCtor = {
+  new (e: unknown, runtime: PluginRuntime): RuntimeExtensionInstance
+  prototype: object
+  initCache?: () => unknown
+}
+
+type RuntimeExtension = RuntimeExtensionCtor | RuntimeExtensionFn | RuntimeExtensionInstance
+
+type RenderRuntimeCfg = {
+  beforeRender?: (ctx: { data: Record<string, unknown> }) => Record<string, unknown>
+  retType?: string
+  recallMsg?: unknown
+}
+
+type RuntimeEvent = PluginEvent & { runtime?: PluginRuntime }
 
 /**
  * 运行时扩展注册器
  */
 class RuntimeExtensionRegistry {
-  extensions = new Map<string, any>()
+  extensions = new Map<string, RuntimeExtension>()
 
   /**
    * 注册运行时扩展
    */
-  register(name: string, extension: any, options: { replace?: boolean } = {}) {
+  register(name: string, extension: RuntimeExtension, options: { replace?: boolean } = {}) {
     const key = String(name || '').trim()
     if (!key) return false
     const replace = options?.replace === true
@@ -77,7 +125,7 @@ class RuntimeExtensionRegistry {
 const extensionRegistry = new RuntimeExtensionRegistry()
 
 /** 事件句柄放 WeakMap，避免 own 属性 `runtime.e` ↔ `e.runtime` 自指嵌套 */
-const runtimeEvents = new WeakMap<object, any>()
+const runtimeEvents = new WeakMap<object, RuntimeEvent>()
 
 /**
  * 核心运行时类
@@ -86,14 +134,14 @@ const runtimeEvents = new WeakMap<object, any>()
  * 每个插件实例都会有一个Runtime实例，用于访问系统功能。
  */
 export default class PluginRuntime {
-  _extensions: Record<string, any> = {}
+  _extensions: Record<string, RuntimeExtensionInstance> = {}
   handler: {
     has: typeof Handler.has
     call: typeof Handler.call
     callAll: typeof Handler.callAll
   }
 
-  constructor(e: any) {
+  constructor(e: RuntimeEvent) {
     runtimeEvents.set(this, e)
 
     this.handler = {
@@ -120,10 +168,10 @@ export default class PluginRuntime {
         if (typeof Extension === 'function') {
           // 如果是类，创建实例
           if (Extension.prototype) {
-            this._extensions[name] = new Extension(this.e, this)
+            this._extensions[name] = new (Extension as RuntimeExtensionCtor)(this.e, this)
           } else {
             // 如果是函数，直接调用
-            const ext = Extension(this.e, this)
+            const ext = (Extension as RuntimeExtensionFn)(this.e, this)
             if (ext) {
               this._extensions[name] = ext
             }
@@ -132,8 +180,8 @@ export default class PluginRuntime {
           // 如果是对象，直接使用
           this._extensions[name] = Extension
         }
-      } catch (error: any) {
-        gLogger()?.error?.(`[PluginRuntime] 加载扩展 ${name} 失败: ${error.message}`)
+      } catch (error: unknown) {
+        gLogger()?.error?.(`[PluginRuntime] 加载扩展 ${name} 失败: ${normalizeError(error).message}`)
       }
     }
   }
@@ -170,8 +218,8 @@ export default class PluginRuntime {
   async render(
     plugin: string,
     tplPath: string,
-    data: Record<string, any> = {},
-    runtimeCfg: Record<string, any> = {}
+    data: Record<string, unknown> = {},
+    runtimeCfg: RenderRuntimeCfg = {}
   ) {
     const cleanPath = String(tplPath || '').replace(/\.html$/, '')
     const parts = lodash.filter(cleanPath.split('/'), Boolean)
@@ -202,7 +250,7 @@ export default class PluginRuntime {
     // 让扩展添加自己的渲染数据
     for (const [, ext] of Object.entries(this._extensions)) {
       if (ext && typeof ext.enhanceRenderData === 'function') {
-        data = (await ext.enhanceRenderData(data, plugin, path)) || data
+        data = ((await ext.enhanceRenderData(data, plugin, path)) as Record<string, unknown>) || data
       }
     }
 
@@ -214,7 +262,7 @@ export default class PluginRuntime {
     // 保存模板数据（开发模式）
     if (process.argv.includes('dev')) {
       const saveDir = await gAgentRuntime()?.mkdir?.(`trash/ViewData/${plugin}`)
-      const file = `${saveDir}/${data._htmlPath.split('/').join('_')}.json`
+      const file = `${saveDir}/${String(data._htmlPath).split('/').join('_')}.json`
       await fs.writeFile(file, JSON.stringify(data))
     }
 
@@ -231,12 +279,12 @@ export default class PluginRuntime {
       return base64
     }
 
-    let ret: any = true
+    let ret: unknown = true
     if (base64) {
       if (runtimeCfg.recallMsg) {
-        ret = await this.e.reply(base64, false, {})
+        ret = await this.e?.reply?.(base64, false, {})
       } else {
-        ret = await this.e.reply(base64)
+        ret = await this.e?.reply?.(base64)
       }
     }
     return runtimeCfg.retType === 'msgId' ? ret : true
@@ -245,14 +293,17 @@ export default class PluginRuntime {
   /**
    * 静态初始化方法
    */
-  static async init(e: any) {
+  static async init(e: RuntimeEvent) {
     // 初始化扩展
     for (const [name, Extension] of extensionRegistry.getAll()) {
-      if (Extension.initCache && typeof Extension.initCache === 'function') {
+      const initCache = (Extension as { initCache?: () => unknown }).initCache
+      if (typeof initCache === 'function') {
         try {
-          await Extension.initCache()
-        } catch (error: any) {
-          gLogger()?.error?.(`[PluginRuntime] 扩展 ${name} 缓存初始化失败: ${error.message}`)
+          await initCache()
+        } catch (error: unknown) {
+          gLogger()?.error?.(
+            `[PluginRuntime] 扩展 ${name} 缓存初始化失败: ${normalizeError(error).message}`
+          )
         }
       }
     }
@@ -260,12 +311,14 @@ export default class PluginRuntime {
     e.runtime = new PluginRuntime(e)
 
     for (const name of Object.keys(e.runtime._extensions)) {
-      const ext: any = e.runtime._extensions[name]
+      const ext = e.runtime._extensions[name]
       if (ext && typeof ext.init === 'function') {
         try {
           await ext.init()
-        } catch (error: any) {
-          gLogger()?.error?.(`[PluginRuntime] 扩展 ${name} 初始化失败: ${error.message}`)
+        } catch (error: unknown) {
+          gLogger()?.error?.(
+            `[PluginRuntime] 扩展 ${name} 初始化失败: ${normalizeError(error).message}`
+          )
         }
       }
     }

@@ -10,6 +10,10 @@ import {
 } from '#utils/observability.js';
 import { getHttpRequestMetricsSummary } from '#utils/http-request-metrics.js';
 
+function rec(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
 type ExpressLikeReq = {
   requestId?: string | null;
   query?: Record<string, unknown>;
@@ -17,8 +21,13 @@ type ExpressLikeReq = {
 };
 
 type ExpressLikeRes = {
+  headersSent?: boolean;
   setHeader: (name: string, value: string) => unknown;
-  status: (code: number) => { send: (body: string) => unknown };
+  status: (code: number) => ExpressLikeRes;
+  json: (body: unknown) => unknown;
+  write: (chunk: string) => unknown;
+  end: () => unknown;
+  send: (body: string) => unknown;
 };
 
 type RuntimeLike = {
@@ -38,7 +47,7 @@ export function handleLiveness(
   res: ExpressLikeRes,
 ): unknown {
   if (runtime._checkHeadersSent(res)) return;
-  return HttpResponse.json(res as any, {
+  return HttpResponse.json(res, {
     status: '健康',
     uptime: process.uptime(),
     timestamp: Date.now(),
@@ -53,6 +62,7 @@ export function handleStatus(
 ): unknown {
   if (runtime._checkHeadersSent(res)) return;
 
+  const serverYaml = rec(runtimeConfig.server);
   const status = {
     status: '运行中',
     uptime: process.uptime(),
@@ -66,17 +76,17 @@ export function handleStatus(
       httpsPort: runtime.httpsPort,
       actualPort: runtime.actualPort,
       actualHttpsPort: runtime.actualHttpsPort,
-      https: (runtimeConfig as any).server?.https?.enabled || false,
+      https: rec(serverYaml.https).enabled || false,
       proxy: runtime.proxyEnabled,
       domains: runtime.proxyEnabled ? Array.from(runtime.domainConfigs?.keys() ?? []) : [],
     },
     auth: {
-      apiKeyEnabled: (runtimeConfig as any).server?.auth?.apiKey?.enabled !== false,
-      loopbackExempt: (runtimeConfig as any).server?.auth?.loopbackExempt === true,
+      apiKeyEnabled: rec(rec(serverYaml.auth).apiKey).enabled !== false,
+      loopbackExempt: rec(serverYaml.auth).loopbackExempt === true,
     },
   };
 
-  return HttpResponse.json(res as any, status);
+  return HttpResponse.json(res, status);
 }
 
 export function handleMetrics(
@@ -88,7 +98,7 @@ export function handleMetrics(
 
   const metrics = buildProcessMetrics({
     getWebSocketStats: () => runtime.getWebSocketStats(),
-    getTraceSummary: () => (MonitorService as any).getTraceSummary(),
+    getTraceSummary: () => MonitorService.getTraceSummary(),
     httpPort: runtime.httpPort,
     httpsPort: runtime.httpsPort,
     actualPort: runtime.actualPort,
@@ -107,5 +117,5 @@ export function handleMetrics(
     return;
   }
 
-  return HttpResponse.json(res as any, metrics);
+  return HttpResponse.json(res, metrics);
 }

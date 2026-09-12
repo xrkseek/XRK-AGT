@@ -9,14 +9,79 @@ const MIN_DISK_BYTES = 1 * 1024 * 1024 * 1024
 const PSEUDO_FS_RE = /^(tmpfs|overlay|devtmpfs|squashfs|ramfs|aufs|fuse\.|proc|sysfs|cgroup)/i
 const PSEUDO_MOUNT_RE = /^\/(dev|proc|sys|run|snap)(\/|$)/i
 
+/** systeminformation fsSize 条目（只取用到的字段） */
+export type DiskRaw = {
+  fs?: string
+  type?: string
+  mount?: string
+  size?: number
+  used?: number
+  use?: number
+}
+
+export type DiskNormalized = {
+  fs: string
+  mount: string
+  size: number
+  used: number
+  use: number
+}
+
+export type MemSnapshot = {
+  total: number
+  used: number
+  free: number
+  swapTotal: number
+  swapUsed: number
+}
+
+/** systeminformation mem() 用到的字段 */
+type MemRaw = {
+  total?: number
+  available?: number
+  free?: number
+  swaptotal?: number
+  swapused?: number
+}
+
+export type NetIfaceMeta = {
+  iface?: string
+  internal?: boolean
+  virtual?: boolean
+  default?: boolean
+}
+
+export type NetStatRow = {
+  iface?: string
+  interface?: string
+  rx_bytes?: number
+  tx_bytes?: number
+  bytes_recv?: number
+  bytes_sent?: number
+}
+
+export type NetBytes = { rx: number; tx: number }
+
 function isRootMount(mount: string) {
   const m = String(mount || '')
   return m === '/' || m === 'C:\\' || /^[A-Za-z]:\\?$/.test(m)
 }
 
+function asDiskList(raw: unknown): DiskRaw[] {
+  return Array.isArray(raw) ? (raw as DiskRaw[]) : []
+}
+
+function asNetStats(raw: unknown): NetStatRow[] {
+  return Array.isArray(raw) ? (raw as NetStatRow[]) : []
+}
+
+function asIfaceList(raw: unknown): NetIfaceMeta[] {
+  return Array.isArray(raw) ? (raw as NetIfaceMeta[]) : []
+}
+
 /** 滤掉伪/过小卷，根分区优先，否则按容量降序 */
-export function normalizeDisks(raw: any[]) {
-  const list = (Array.isArray(raw) ? raw : [])
+export function normalizeDisks(raw: DiskRaw[] | unknown): DiskNormalized[] {
+  const list = asDiskList(raw)
     .map((d) => {
       const size = Number(d.size || 0)
       const used = Number(d.used || 0)
@@ -49,25 +114,25 @@ export function normalizeDisks(raw: any[]) {
   return pool
 }
 
-export async function readDisks() {
+export async function readDisks(): Promise<DiskNormalized[]> {
   return normalizeDisks(await si.fsSize().catch(() => []))
 }
 
 /**
  * 内存：优先 available（Linux/mac 准确「可用」），否则 free
  */
-export async function readMem() {
-  const m = await si.mem().catch(() => null)
-  if (m && (m as any).total > 0) {
-    const total = Number((m as any).total)
-    const available = Number((m as any).available > 0 ? (m as any).available : (m as any).free || 0)
+export async function readMem(): Promise<MemSnapshot> {
+  const m = (await si.mem().catch(() => null)) as MemRaw | null
+  if (m && Number(m.total) > 0) {
+    const total = Number(m.total)
+    const available = Number(m.available && m.available > 0 ? m.available : m.free || 0)
     const used = Math.max(0, Math.min(total, total - available))
     return {
       total,
       used,
       free: available,
-      swapTotal: Number((m as any).swaptotal || 0),
-      swapUsed: Number((m as any).swapused || 0)
+      swapTotal: Number(m.swaptotal || 0),
+      swapUsed: Number(m.swapused || 0)
     }
   }
   const total = os.totalmem()
@@ -78,7 +143,10 @@ export async function readMem() {
 /** 回环 / docker / Hyper-V 等；勿把 eth0/ens 仅因 virtual:true 算进来 */
 const VIRTUAL_IFACE_RE = /^(lo\d*|veth|br-|docker|virbr|tun|tap|wg|isatap|teredo|vEthernet)/i
 
-export function isSkippableNetIface(name: unknown, meta: { internal?: boolean } | null = null) {
+export function isSkippableNetIface(
+  name: unknown,
+  meta: Pick<NetIfaceMeta, 'internal' | 'virtual'> | null = null
+): boolean {
   const iface = String(name || '')
   if (!iface) return true
   if (meta?.internal) return true
@@ -89,11 +157,14 @@ export function isSkippableNetIface(name: unknown, meta: { internal?: boolean } 
 }
 
 /** 累加各网卡字节；跳过回环与明显虚拟口，避免 Windows vEthernet / docker 双计 */
-export function sumNetworkBytes(stats: any[], skipIfaces?: Set<string> | null) {
+export function sumNetworkBytes(
+  stats: NetStatRow[] | unknown,
+  skipIfaces?: Set<string> | null
+): NetBytes {
   const skip = skipIfaces instanceof Set ? skipIfaces : null
   let rx = 0
   let tx = 0
-  for (const n of Array.isArray(stats) ? stats : []) {
+  for (const n of asNetStats(stats)) {
     const iface = String(n.iface || n.interface || '')
     if (!iface) continue
     if (skip?.has(iface)) continue
@@ -105,9 +176,9 @@ export function sumNetworkBytes(stats: any[], skipIfaces?: Set<string> | null) {
 }
 
 /** 从 ifaces 元数据构建 skip 集合（仅 internal / 名字像虚拟口） */
-export function buildNetworkSkipSet(ifaces: any[]) {
+export function buildNetworkSkipSet(ifaces: NetIfaceMeta[] | unknown): Set<string> {
   const skip = new Set<string>()
-  for (const i of Array.isArray(ifaces) ? ifaces : []) {
+  for (const i of asIfaceList(ifaces)) {
     const name = String(i?.iface || '')
     if (!name) continue
     if (isSkippableNetIface(name, i)) skip.add(name)
@@ -115,12 +186,16 @@ export function buildNetworkSkipSet(ifaces: any[]) {
   return skip
 }
 
-function pickFallbackNetBytes(stats: any[], ifaces: any[]) {
-  const list = (Array.isArray(stats) ? stats : []).filter(
+function pickFallbackNetBytes(
+  stats: NetStatRow[] | unknown,
+  ifaces: NetIfaceMeta[] | unknown
+): NetBytes {
+  const list = asNetStats(stats).filter(
     (n) => !isSkippableNetIface(String(n?.iface || n?.interface || ''))
   )
   if (!list.length) return { rx: 0, tx: 0 }
-  const defName = (Array.isArray(ifaces) ? ifaces : []).find((i) => i?.default)?.iface
+  const ifaceList = asIfaceList(ifaces)
+  const defName = ifaceList.find((i) => i?.default)?.iface
   const pick =
     (defName && list.find((n) => n.iface === defName)) ||
     list.reduce((a, b) => {
@@ -134,24 +209,25 @@ function pickFallbackNetBytes(stats: any[], ifaces: any[]) {
   }
 }
 
-export async function readNetworkBytes() {
+export async function readNetworkBytes(): Promise<NetBytes> {
   const [stats, ifaces] = await Promise.all([
     si.networkStats('*').catch(() => si.networkStats().catch(() => [])),
     si.networkInterfaces().catch(() => [])
   ])
-  const skip = buildNetworkSkipSet(ifaces as any[])
-  const summed = sumNetworkBytes(stats as any[], skip)
+  const skip = buildNetworkSkipSet(ifaces)
+  const summed = sumNetworkBytes(stats, skip)
   if (summed.rx > 0 || summed.tx > 0) return summed
-  return pickFallbackNetBytes(stats as any[], ifaces as any[])
+  return pickFallbackNetBytes(stats, ifaces)
 }
 
 /** 一次性 CPU 占用（#状态等） */
-export async function readCpuLoadPercent() {
+export async function readCpuLoadPercent(): Promise<number> {
   const load = await si.currentLoad().catch(() => null)
   if (load && Number.isFinite(load.currentLoad)) return +Number(load.currentLoad).toFixed(2)
   const cpus = load?.cpus
   if (Array.isArray(cpus) && cpus.length) {
-    const avg = cpus.reduce((s, c) => s + Number((c as any).load || 0), 0) / cpus.length
+    const avg =
+      cpus.reduce((s, c) => s + Number((c as { load?: number }).load || 0), 0) / cpus.length
     return +avg.toFixed(2)
   }
   return 0

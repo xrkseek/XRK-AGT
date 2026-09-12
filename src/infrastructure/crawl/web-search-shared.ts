@@ -14,7 +14,83 @@ export { DEFAULT_CACHE_MAX_ENTRIES, normalizeCacheKey }
 export const readSearchCache = readTTLCache
 export const writeSearchCache = writeTTLCache
 
-export const SEARCH_CACHE = new Map<string, any>()
+/** Per-provider YAML / override slice (apiKey, baseUrl, url, …) */
+export type WebSearchProviderConfig = {
+  apiKey?: string
+  baseUrl?: string
+  url?: string
+  [key: string]: unknown
+}
+
+/** ai-workflow.crawl.webSearch runtime (+ overrides) */
+export type WebSearchRuntime = {
+  enabled?: boolean
+  provider?: string
+  region?: string
+  safeSearch?: string
+  country?: string
+  timeoutSeconds?: number
+  cacheTtlMinutes?: number
+  maxResults?: number
+  parallel?: WebSearchProviderConfig
+  parallelFree?: WebSearchProviderConfig
+  [key: string]: unknown
+}
+
+/** Common search tool / CLI args across providers */
+export type WebSearchParams = {
+  query?: string
+  count?: number
+  provider?: string
+  objective?: string
+  search_queries?: unknown
+  session_id?: string
+  client_model?: unknown
+  region?: string
+  safeSearch?: string
+  timeoutSeconds?: number
+  cacheTtlMinutes?: number
+  [key: string]: unknown
+}
+
+export type WebSearchHit = {
+  title: string
+  url: string
+  description?: string
+  snippet?: string
+  siteName?: string
+  published?: string
+  excerpts?: string[]
+  [key: string]: unknown
+}
+
+/** Success, cache hit, or structured error payload from a provider */
+export type WebSearchResult = {
+  error?: string
+  message?: string
+  docs?: string
+  query?: string
+  provider?: string
+  count?: number
+  tookMs?: number
+  cached?: boolean
+  results?: WebSearchHit[]
+  objective?: string
+  searchQueries?: string[]
+  externalContent?: Record<string, unknown>
+  searchId?: string
+  sessionId?: string
+  warnings?: unknown[]
+  [key: string]: unknown
+}
+
+type SearchCacheEntry = {
+  value: unknown
+  expiresAt: number
+  insertedAt: number
+}
+
+export const SEARCH_CACHE = new Map<string, SearchCacheEntry>()
 
 export const DEFAULT_SEARCH_COUNT = 5
 export const MAX_SEARCH_COUNT = 10
@@ -30,9 +106,14 @@ export function buildSearchCacheKey(parts: unknown[]) {
   )
 }
 
-export function readCachedSearchPayload(key: string) {
-  const hit = readSearchCache(SEARCH_CACHE, key) as { value: Record<string, any> } | null | undefined
-  return hit ? { ...hit.value, cached: true } : null
+export function readCachedSearchPayload(key: string): (WebSearchResult & { cached: true }) | null {
+  const hit = readSearchCache(SEARCH_CACHE, key)
+  if (!hit) return null
+  const value =
+    hit.value && typeof hit.value === 'object' && !Array.isArray(hit.value)
+      ? (hit.value as WebSearchResult)
+      : {}
+  return { ...value, cached: true }
 }
 
 export function writeCachedSearchPayload(key: string, value: unknown, ttlMs: number) {

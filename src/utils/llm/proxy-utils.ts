@@ -16,6 +16,10 @@ type FetchOptions = Record<string, unknown> & {
   dispatcher?: ProxyAgent;
 };
 
+type AgentRuntimeLike = {
+  makeLog?: (level: string, message: string, tag?: string) => void;
+};
+
 /**
  * 为全局 fetch 请求构建带代理能力的配置（Undici dispatcher）
  */
@@ -44,7 +48,7 @@ export function buildFetchOptionsWithProxy(
   try {
     options.dispatcher = new ProxyAgent(url);
   } catch (err) {
-    (globalThis as any).AgentRuntime?.makeLog?.(
+    (globalThis as { AgentRuntime?: AgentRuntimeLike }).AgentRuntime?.makeLog?.(
       'warn',
       `[LLM Proxy] 创建代理失败: ${normalizeError(err).message}`,
     );
@@ -58,8 +62,9 @@ export function buildFetchOptionsWithProxy(
  */
 export function createFetchWithProxy(
   config: FetchConfigWithProxy = {},
-): ((url: any, init?: any) => Promise<Response>) | undefined {
+): ((url: string | URL | Request, init?: RequestInit) => Promise<Response>) | undefined {
   const { dispatcher } = buildFetchOptionsWithProxy(config, {});
   if (!dispatcher) return undefined;
-  return (url, init = {}) => fetch(url, { ...init, dispatcher } as any);
+  return (url, init = {}) =>
+    fetch(url, { ...init, dispatcher } as unknown as RequestInit);
 }

@@ -20,11 +20,53 @@ import {
 const DEFAULT_BRAVE_BASE_URL = 'https://api.search.brave.com'
 const BRAVE_SEARCH_PATH = '/res/v1/web/search'
 
-function resolveBraveApiKey(runtime: Record<string, any>) {
+type BraveRuntime = {
+  brave?: { apiKey?: string; baseUrl?: string }
+  maxResults?: number
+  timeoutSeconds?: number
+  cacheTtlMinutes?: number
+  country?: string
+}
+
+type BraveSearchParams = {
+  query?: string
+  count?: number
+  country?: string
+  search_lang?: string
+  language?: string
+  ui_lang?: string
+  date_after?: string
+  date_before?: string
+  freshness?: string
+}
+
+type BraveUrlParams = {
+  query: string
+  count: number
+  country?: string
+  search_lang?: string
+  ui_lang?: string
+  freshness?: string
+  dateAfter?: string
+  dateBefore?: string
+}
+
+type BraveWebResult = {
+  title?: string
+  url?: string
+  description?: string
+  age?: string
+}
+
+type BraveSearchResponse = {
+  web?: { results?: BraveWebResult[] }
+}
+
+function resolveBraveApiKey(runtime: BraveRuntime) {
   return runtime?.brave?.apiKey?.trim?.() || ''
 }
 
-function resolveBraveBaseUrl(runtime: Record<string, any>) {
+function resolveBraveBaseUrl(runtime: BraveRuntime) {
   const configured = runtime?.brave?.baseUrl?.trim?.() || ''
   return (configured || DEFAULT_BRAVE_BASE_URL).replace(/\/+$/, '')
 }
@@ -77,7 +119,7 @@ function normalizeBraveCountry(value: unknown) {
   return allowed.has(c) ? c : undefined
 }
 
-function setBraveSearchUrlParams(url: URL, params: Record<string, any>) {
+function setBraveSearchUrlParams(url: URL, params: BraveUrlParams) {
   url.searchParams.set('q', params.query)
   if (params.country) url.searchParams.set('country', params.country)
   if (params.search_lang) url.searchParams.set('search_lang', params.search_lang)
@@ -107,8 +149,8 @@ export function missingBraveApiKeyPayload() {
 }
 
 export async function runBraveSearch(
-  params: Record<string, any>,
-  runtime: Record<string, any> = {}
+  params: BraveSearchParams,
+  runtime: BraveRuntime = {}
 ) {
   const apiKey = resolveBraveApiKey(runtime)
   if (!apiKey) return missingBraveApiKeyPayload()
@@ -147,7 +189,7 @@ export async function runBraveSearch(
     })
   )
   const cached = readSearchCache(SEARCH_CACHE, cacheKey) as
-    | { value: Record<string, any> }
+    | { value: Record<string, unknown> }
     | null
     | undefined
   if (cached) return { ...cached.value, cached: true }
@@ -183,7 +225,7 @@ export async function runBraveSearch(
     throw new Error(`Brave Search API error (${response.status}): ${detail || response.statusText}`)
   }
 
-  const data = (await response.json()) as any
+  const data = (await response.json()) as BraveSearchResponse
   const entries = Array.isArray(data?.web?.results) ? data.web.results : []
   const payload = {
     query,
@@ -191,7 +233,7 @@ export async function runBraveSearch(
     count: entries.length,
     tookMs: Date.now() - startedAt,
     externalContent: buildExternalSearchMeta('brave'),
-    results: entries.map((entry: any) => {
+    results: entries.map((entry) => {
       const title = entry.title ?? ''
       const href = entry.url ?? ''
       const description = entry.description ?? ''

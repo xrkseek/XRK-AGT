@@ -54,8 +54,10 @@ export {
   resolvePinnedHostnameWithPolicy,
   createPinnedDispatcher,
   closeDispatcher,
-  mergeSsrFPolicies
+  mergeSsrFPolicies,
+  isPrivateNetworkAllowedByPolicy
 } from './ssrf-policy.js'
+export type { SsrFPolicy } from './ssrf-policy.js'
 export {
   gotoWithNavigationGuard,
   InvalidBrowserNavigationUrlError,

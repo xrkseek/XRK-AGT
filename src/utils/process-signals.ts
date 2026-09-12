@@ -125,21 +125,16 @@ type MenuLogger = {
  */
 export class MenuSignalHandler {
   logger: MenuLogger;
-  tap: SignalTapState;
-  isSetup: boolean;
-  inRestartLoop: boolean;
-  onStopRestartLoop: (() => void | Promise<void>) | null;
-  handlers: Record<string, () => void>;
-  _rl: readline.Interface | null;
+  tap = new SignalTapState();
+  isSetup = false;
+  inRestartLoop = false;
+  onStopRestartLoop: (() => void | Promise<void>) | null = null;
+  /** 信号 handler 表：类字段，勿在 constructor 建空对象缓存 */
+  handlers: Record<string, () => void> = {};
+  _rl: readline.Interface | null = null;
 
   constructor(logger: MenuLogger = {}) {
     this.logger = logger;
-    this.tap = new SignalTapState();
-    this.isSetup = false;
-    this.inRestartLoop = false;
-    this.onStopRestartLoop = null;
-    this.handlers = {};
-    this._rl = null;
   }
 
   _closeReadline(): void {

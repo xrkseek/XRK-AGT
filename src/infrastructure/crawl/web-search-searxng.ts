@@ -21,7 +21,28 @@ import {
 
 const MAX_RESPONSE_BYTES = 1_000_000
 
-function resolveSearxngBaseUrl(runtime: Record<string, any>) {
+type SearxngRuntime = {
+  searxng?: { baseUrl?: string; categories?: string; language?: string }
+  maxResults?: number
+  timeoutSeconds?: number
+  cacheTtlMinutes?: number
+}
+
+type SearxngSearchParams = {
+  query?: string
+  count?: number
+  categories?: string
+  language?: string
+}
+
+type SearxngRawResult = {
+  url?: unknown
+  title?: unknown
+  content?: unknown
+  img_src?: unknown
+}
+
+function resolveSearxngBaseUrl(runtime: SearxngRuntime) {
   return runtime?.searxng?.baseUrl?.trim?.() || ''
 }
 
@@ -42,19 +63,20 @@ function buildSearxngSearchUrl(
   return url.toString()
 }
 
-function normalizeSearxngResult(value: any) {
+function normalizeSearxngResult(value: unknown) {
   if (!value || typeof value !== 'object') return null
-  if (typeof value.url !== 'string' || typeof value.title !== 'string') return null
+  const raw = value as SearxngRawResult
+  if (typeof raw.url !== 'string' || typeof raw.title !== 'string') return null
   return {
-    url: value.url,
-    title: value.title,
-    content: typeof value.content === 'string' ? value.content : undefined,
-    img_src: typeof value.img_src === 'string' ? value.img_src : undefined
+    url: raw.url,
+    title: raw.title,
+    content: typeof raw.content === 'string' ? raw.content : undefined,
+    img_src: typeof raw.img_src === 'string' ? raw.img_src : undefined
   }
 }
 
 function parseSearxngResponseText(text: string, count: number) {
-  const parsed = JSON.parse(text)
+  const parsed = JSON.parse(text) as { results?: unknown[] }
   const rawResults = Array.isArray(parsed?.results) ? parsed.results : []
   const results: Array<{
     url: string
@@ -124,8 +146,8 @@ export function missingSearxngBaseUrlPayload() {
 }
 
 export async function runSearxngSearch(
-  params: Record<string, any>,
-  runtime: Record<string, any> = {}
+  params: SearxngSearchParams,
+  runtime: SearxngRuntime = {}
 ) {
   const baseUrl = resolveSearxngBaseUrl(runtime)
   if (!baseUrl) return missingSearxngBaseUrlPayload()
@@ -158,7 +180,7 @@ export async function runSearxngSearch(
     })
   )
   const cached = readSearchCache(SEARCH_CACHE, cacheKey) as
-    | { value: Record<string, any> }
+    | { value: Record<string, unknown> }
     | null
     | undefined
   if (cached) return { ...cached.value, cached: true }

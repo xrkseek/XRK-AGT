@@ -7,59 +7,128 @@ import RuntimeUtil from '#utils/runtime-util.js';
 import { logPromptCacheUsage } from '#utils/llm/prompt-cache-policy.js';
 import { iterateSSE } from '#utils/llm/sse-utils.js';
 
+type LlmClientConfig = Record<string, unknown> & {
+  model?: string;
+  chatModel?: string;
+  baseUrl?: string;
+  path?: string;
+  apiKey?: string;
+  authMode?: string;
+  headers?: Record<string, string>;
+  timeout?: number;
+  thinkingType?: string;
+  thinking_type?: string;
+  response_format?: unknown;
+  responseFormat?: unknown;
+  proxy?: unknown;
+};
+
+type ChatMessage = {
+  role?: string;
+  content?: unknown;
+  tool_calls?: unknown;
+  [key: string]: unknown;
+};
+
+type LlmOverrides = Record<string, unknown> & {
+  headers?: Record<string, string>;
+  stream?: boolean;
+  thinkingType?: string;
+  thinking_type?: string;
+  response_format?: unknown;
+  responseFormat?: unknown;
+};
+
+type OnDeltaCallback = (chunk: string, meta?: Record<string, unknown>) => void;
+
+type ToolCallDelta = {
+  index?: number;
+  id?: string;
+  type?: string;
+  function?: { name?: string; arguments?: string };
+};
+
+type ToolCallAccumulator = {
+  id: string;
+  type: string;
+  function: { name: string; arguments: string };
+};
+
+type ChatCompletionBody = Record<string, unknown> & {
+  model?: string;
+  tools?: unknown[];
+  thinking?: { type: unknown };
+  response_format?: unknown;
+};
+
+type ChatCompletionResponse = {
+  usage?: unknown;
+  choices?: Array<{
+    message?: {
+      content?: string;
+      tool_calls?: unknown[];
+    };
+    delta?: {
+      content?: string;
+      reasoning_content?: string;
+      tool_calls?: ToolCallDelta[];
+    };
+    finish_reason?: string | null;
+  }>;
+};
+
+type StreamCollector = {
+  toolCalls: ToolCallAccumulator[];
+  content: string;
+  reasoningContent: string;
+  finishReason: string | null;
+};
+
 /**
- * 小米 MiMo LLM 客户端
+ * ?? MiMo LLM ???
  * @see https://mimo.mi.com/docs/en-US/api/chat/openai-api
  *
- * - baseUrl: https://api.xiaomimimo.com/v1 · path: /chat/completions
- * - 认证：`api-key`（默认）或 `authMode: bearer` → Authorization
- * - 可选 `thinking: { type }`；出站 `max_completion_tokens`
- * - 纯文本模型：图片由上游 text_only 占位
+ * - baseUrl: https://api.xiaomimimo.com/v1 � path: /chat/completions
+ * - ???`api-key`????? `authMode: bearer` ? Authorization
+ * - ?? `thinking: { type }`??? `max_completion_tokens`
+ * - ??????????? text_only ??
+ *
+ * harness???? createXiaomiAdapter?? OpenAICompatible ???????? Chat Completions ?????
  */
 export default class XiaomiMiMoLLMClient {
-  [key: string]: any;
+  config: LlmClientConfig;
+  endpoint: string;
   _toolNames = createToolNameMapper();
-
   _timeout = 360000;
 
-  constructor(config: any = {}) {
+  constructor(config: LlmClientConfig = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
-    this._timeout = config.timeout ?? 360000;
+    this._timeout = Number(config.timeout ?? 360000);
   }
 
-  /**
-   * 规范化端点地址
-   */
-  normalizeEndpoint(config: any) {
+  normalizeEndpoint(config: LlmClientConfig) {
     const base = (config.baseUrl || 'https://api.xiaomimimo.com/v1').replace(/\/+$/, '');
     const path = (config.path || '/chat/completions').replace(/^\/?/, '/');
     return `${base}${path}`;
   }
 
-  /**
-   * 获取超时时间
-   */
   get timeout() {
     return this._timeout ?? 360000;
   }
 
-  /**
-   * 构建请求头
-   */
-  buildHeaders(extra: any = {}) {
-    const headers = {
+  buildHeaders(extra: Record<string, string> = {}) {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...extra
+      ...extra,
     };
 
-    // 小米 MiMo 支持两种认证方式：api-key 或 Authorization: Bearer
     if (this.config.apiKey) {
-      const mode = (this.config.authMode || 'api-key').toLowerCase();
+      const mode = String(this.config.authMode || 'api-key').toLowerCase();
       if (mode === 'bearer') {
         headers.Authorization = `Bearer ${this.config.apiKey}`;
       } else {
-        headers['api-key'] = this.config.apiKey;
+        headers['api-key'] = String(this.config.apiKey);
       }
     }
 
@@ -70,38 +139,31 @@ export default class XiaomiMiMoLLMClient {
     return headers;
   }
 
-  async transformMessages(messages: any) {
-    // MiMo 当前仅文本，退化为 text_only，占位拼接图片 URL / base64 方便调试
+  async transformMessages(messages: ChatMessage[]) {
     return await transformMessagesWithVision(messages, this.config, { mode: 'text_only' });
   }
 
-  /**
-   * 构建请求体（OpenAI 兼容格式）
-   * 小米 MiMo API 使用 max_completion_tokens 而非 max_tokens
-   * 支持高级参数：stop、thinking、tool_choice、tools、response_format
-   */
-  buildBody(messages: any, overrides: any = {}) {
-    // 规范化消息中的 tool_calls（历史回合 seed 需要）
+  buildBody(messages: ChatMessage[], overrides: LlmOverrides = {}): ChatCompletionBody {
     const normalizedMessages = this._toolNames.normalizeMessages(messages);
-
-    // 复用 OpenAI-like 归一化逻辑，确保：
-    // - extraBody 生效
-    // - parallel_tool_calls / tool_choice 兼容
-    // - maxTokens 同时映射到 max_completion_tokens / max_tokens（MiMo 使用前者）
     const defaultModel = this.config.model || this.config.chatModel || 'mimo-v2-flash';
-    const body = buildOpenAIChatCompletionsBody(normalizedMessages, this.config, overrides, defaultModel);
+    const body = buildOpenAIChatCompletionsBody(
+      normalizedMessages,
+      this.config,
+      overrides,
+      defaultModel,
+    ) as ChatCompletionBody;
     applyOpenAITools(body, this.config, overrides);
 
-    // MiMo 扩展字段
-    const thinkingType = overrides.thinkingType ?? overrides.thinking_type ?? this.config.thinkingType ?? this.config.thinking_type;
+    const thinkingType =
+      overrides.thinkingType ?? overrides.thinking_type ?? this.config.thinkingType ?? this.config.thinking_type;
     if (thinkingType !== undefined && thinkingType !== '') {
       body.thinking = { type: thinkingType };
     }
 
-    // MiMo: response_format 官方为对象，这里兼容 string/对象两种写法
-    const rf = overrides.response_format ?? overrides.responseFormat ?? this.config.response_format ?? this.config.responseFormat;
+    const rf =
+      overrides.response_format ?? overrides.responseFormat ?? this.config.response_format ?? this.config.responseFormat;
     if (rf !== undefined) {
-      const type = typeof rf === 'string' ? rf.trim() : rf?.type;
+      const type = typeof rf === 'string' ? rf.trim() : (rf as { type?: string })?.type;
       if (type) {
         body.response_format = { type };
       } else {
@@ -113,49 +175,42 @@ export default class XiaomiMiMoLLMClient {
       else delete body.response_format;
     }
 
-    // MiMo 对 tool.name 有严格限制：出站 tools 需要规范化名称
     if (Array.isArray(body.tools) && body.tools.length > 0) {
-      body.tools = this._toolNames.normalizeTools(body.tools);
+      body.tools = this._toolNames.normalizeTools(body.tools) as unknown[];
     }
 
     return body;
   }
 
-  /**
-   * 非流式调用（支持工具调用）
-   * @param {Array} messages - 消息数组
-   * @param {Object} overrides - 覆盖配置
-   * @returns {Promise<string>} AI 回复文本
-   */
-  async chat(messages: any, overrides: any = {}) {
+  async chat(messages: ChatMessage[], overrides: LlmOverrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
-    
+
     const resp = await fetch(
       this.endpoint,
-      (buildFetchOptionsWithProxy(this.config, {
+      buildFetchOptionsWithProxy(this.config as Parameters<typeof buildFetchOptionsWithProxy>[0], {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
-        body: JSON.stringify(this.buildBody(transformedMessages, overrides)),
-        signal: AbortSignal.timeout(this.timeout)
-      }) as any)
+        body: JSON.stringify(this.buildBody(transformedMessages as ChatMessage[], overrides)),
+        signal: AbortSignal.timeout(this.timeout),
+      }) as RequestInit,
     );
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
-        `XiaomiMiMoLLMClient 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
-        { status: resp.status, headers: resp.headers as any }
+        `XiaomiMiMoLLMClient ????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        { status: resp.status, headers: resp.headers as { get?: (name: string) => string | null } },
       );
     }
 
-    const json: any = await resp.json();
+    const json = (await resp.json()) as ChatCompletionResponse;
     logPromptCacheUsage(json?.usage, 'XiaomiMiMoLLMClient');
     const message = json?.choices?.[0]?.message;
     const content = message?.content || '';
     if (message?.tool_calls?.length) {
       RuntimeUtil.makeLog(
         'info',
-        `[XiaomiMiMoLLMClient] 单次补全含 tool_calls×${message.tool_calls.length}（本客户端不执行工具）`,
+        `[XiaomiMiMoLLMClient] ????? tool_calls�${message.tool_calls.length}???????????`,
         'LLMFactory',
       );
       return { content, tool_calls: message.tool_calls };
@@ -163,56 +218,45 @@ export default class XiaomiMiMoLLMClient {
     return content;
   }
 
-  async chatStream(messages: any, onDelta: any, overrides: any = {}) {
+  async chatStream(messages: ChatMessage[], onDelta: OnDeltaCallback, overrides: LlmOverrides = {}) {
     const transformedMessages = await this.transformMessages(messages);
-    
+
     const resp = await fetch(
       this.endpoint,
-      (buildFetchOptionsWithProxy(this.config, {
+      buildFetchOptionsWithProxy(this.config as Parameters<typeof buildFetchOptionsWithProxy>[0], {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
-        body: JSON.stringify(this.buildBody(transformedMessages, { ...overrides, stream: true })),
-        signal: AbortSignal.timeout(this.timeout)
-      }) as any)
+        body: JSON.stringify(this.buildBody(transformedMessages as ChatMessage[], { ...overrides, stream: true })),
+        signal: AbortSignal.timeout(this.timeout),
+      }) as RequestInit,
     );
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`XiaomiMiMoLLMClient 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw new Error(`XiaomiMiMoLLMClient ??????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
 
-    const collector = { toolCalls: [], content: '', reasoningContent: '', finishReason: null };
-    if (typeof this._consumeSSEWithToolCalls === 'function') {
-      await this._consumeSSEWithToolCalls(resp, onDelta, collector, overrides);
-    } else {
-      // fallback: text-only SSE
-      const { iterateSSE } = await import('#utils/llm/sse-utils.js');
-      for await (const { data } of iterateSSE(resp as any)) {
-        try {
-          const j = JSON.parse(data);
-          const delta = j?.choices?.[0]?.delta?.content;
-          if (delta) {
-            collector.content += delta;
-            if (typeof onDelta === 'function') onDelta(delta);
-          }
-        } catch { /* ignore */ }
-      }
-    }
+    const collector: StreamCollector = { toolCalls: [], content: '', reasoningContent: '', finishReason: null };
+    await this._consumeSSEWithToolCalls(resp, onDelta, collector);
     if (collector.toolCalls.length) {
       RuntimeUtil.makeLog(
         'info',
-        `[XiaomiMiMoLLMClient] 流式单次补全含 tool_calls×${collector.toolCalls.length}（本客户端不执行工具）`,
+        `[XiaomiMiMoLLMClient] ??????? tool_calls�${collector.toolCalls.length}???????????`,
         'LLMFactory',
       );
     }
     return collector.content;
   }
 
-  async _consumeSSEWithToolCalls(resp: any, onDelta: any, collector: any, options: any = {}) {
-    const toolCallsMap = new Map();
-    for await (const { data } of iterateSSE(resp as any)) {
+  async _consumeSSEWithToolCalls(
+    resp: Response,
+    onDelta: OnDeltaCallback,
+    collector: StreamCollector,
+  ) {
+    const toolCallsMap = new Map<number, ToolCallAccumulator>();
+    for await (const { data } of iterateSSE(resp as Parameters<typeof iterateSSE>[0])) {
       try {
-        const json = JSON.parse(data);
+        const json = JSON.parse(data) as ChatCompletionResponse;
         const delta = json?.choices?.[0]?.delta;
         const finishReason = json?.choices?.[0]?.finish_reason;
 
@@ -242,11 +286,11 @@ export default class XiaomiMiMoLLMClient {
               toolCallsMap.set(index, {
                 id: '',
                 type: 'function',
-                function: { name: '', arguments: '' }
+                function: { name: '', arguments: '' },
               });
             }
 
-            const toolCall = toolCallsMap.get(index);
+            const toolCall = toolCallsMap.get(index)!;
             if (tc.id) toolCall.id = tc.id;
             if (tc.function?.name) toolCall.function.name = tc.function.name;
             if (tc.function?.arguments) {
@@ -261,7 +305,7 @@ export default class XiaomiMiMoLLMClient {
 
     if (toolCallsMap.size > 0) {
       const sortedIndices = Array.from(toolCallsMap.keys()).sort((a, b) => a - b);
-      collector.toolCalls = sortedIndices.map(index => toolCallsMap.get(index));
+      collector.toolCalls = sortedIndices.map((index) => toolCallsMap.get(index)!);
     }
   }
 }

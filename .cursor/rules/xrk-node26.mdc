@@ -1,0 +1,37 @@
+---
+description: 本机与 Agent 必须用系统 Node ≥26；禁止 Cursor 自带 Node 22；测试要做厚
+alwaysApply: true
+---
+
+# Node ≥26 + 厚测试（工具链真源）
+
+仓库 `engines.node`：**`>=26`**（本机已装系统 Node，例如探测到 **26.8.x**）。包管理仅 **pnpm**。
+
+## 用哪份 node
+
+| 来源 | 识别方式 | 可否用 |
+|------|----------|--------|
+| Cursor helper | 路径含 `cursor/resources/app/resources/helpers/node.exe`（常为 **22.x**） | **禁止** |
+| 系统安装 | `where.exe node` 里**非 helper** 的条目 | **必须**，且 `node -v` ≥ 26 |
+
+**勿写死盘符**。以当前机器 `where.exe node` 探测为准，把**第一个非 Cursor helper** 的目录 prepend 到 `PATH` 后再跑命令。
+
+Agent 跑 `pnpm` · `tsc` · `pnpm test*` · `pnpm build` 前：
+
+```powershell
+$pick = @(where.exe node 2>$null) | Where-Object {
+  $_ -notmatch '\\cursor\\resources\\app\\resources\\helpers\\node\.exe$'
+} | Select-Object -First 1
+if (-not $pick) { throw 'No system Node on PATH' }
+$env:Path = "$(Split-Path -Parent $pick);$env:Path"
+node -v   # 须 ≥26
+```
+
+若仍为 22.x：**先修正 PATH**，不要带着 Cursor Node 过门禁或写测。
+
+## 测试要做厚（底层质量）
+
+- **默认**：改 `src/` / harness 嵌入 / Loader / HTTP 契约后，至少 `pnpm test:fast`；触及加载器再 `pnpm test`（含 integration）；触及启动链再 `pnpm test:e2e`。
+- **做厚**：关键路径补负例（空输入、busy、safety limit、dangling tool、鉴权拒绝、路径穿越、SSRF）；harness 用 `createReplayAdapter`，**无密钥**可复现。
+- **禁止**：用 Node 22「测绿」当验收；跳过失败断言；只改码不补测。
+- 口径见 `docs/框架测试指南.md` · `docs/代码审查清单.md`。

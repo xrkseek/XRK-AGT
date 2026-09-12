@@ -1,5 +1,6 @@
 /**
  * Unit tests for harness module loop helpers + SDK smoke.
+ * Entry: tests/helpers/harness-ai.mjs (#infrastructure / #utils)
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,7 +15,7 @@ import {
   resolveDenyToolNames,
   resolveHarnessLlmRetry,
   withRouteReasoning,
-} from '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js';
+} from '../helpers/harness-ai.mjs';
 
 describe('harness-module-loop helpers', () => {
   it('splitOutboundMessages extracts system, history, latest user', () => {
@@ -123,10 +124,10 @@ describe('harness-module-loop helpers', () => {
 
   it('buildHarnessUserTurn maps data-URL image via SDK attachment store', async () => {
     const { importHarnessSdk } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
+      '#infrastructure/ai-workflow/harness-resolve.js'
     );
     const { buildHarnessUserTurn } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
+      '#infrastructure/ai-workflow/harness-module-loop.js'
     );
     let harness;
     try {
@@ -162,7 +163,7 @@ describe('harness SDK continueTurn smoke', () => {
     let harness;
     try {
       const { importHarnessSdk } = await import(
-        '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
+        '#infrastructure/ai-workflow/harness-resolve.js'
       );
       harness = await importHarnessSdk();
     } catch (err) {
@@ -187,10 +188,10 @@ describe('harness SDK continueTurn smoke', () => {
 
   it('runHarnessModuleLoop embeds loop under callAI shape', async () => {
     const { importHarnessSdk } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
+      '#infrastructure/ai-workflow/harness-resolve.js'
     );
     const { runHarnessModuleLoop } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
+      '#infrastructure/ai-workflow/harness-module-loop.js'
     );
     let harness;
     try {
@@ -221,10 +222,10 @@ describe('harness SDK continueTurn smoke', () => {
 
   it('registerTools hook adds tools before continueTurn', async () => {
     const { importHarnessSdk } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
+      '#infrastructure/ai-workflow/harness-resolve.js'
     );
     const { runHarnessModuleLoop } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
+      '#infrastructure/ai-workflow/harness-module-loop.js'
     );
     let harness;
     try {
@@ -263,7 +264,7 @@ describe('harness SDK continueTurn smoke', () => {
 
   it('foldMcpToolsFromEvents keeps last-turn args + result', async () => {
     const { foldMcpToolsFromEvents } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
+      '#infrastructure/ai-workflow/harness-module-loop.js'
     );
     const tools = foldMcpToolsFromEvents([
       { type: 'turn/start', turnId: 't1' },
@@ -282,17 +283,17 @@ describe('harness SDK continueTurn smoke', () => {
 
   it('reuses harness session for same sessionKey', async () => {
     const { importHarnessSdk } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
+      '#infrastructure/ai-workflow/harness-resolve.js'
     );
     const {
       runHarnessModuleLoop,
       resetHarnessToolSurfaceCacheForTests,
       __harnessToolSurfaceCacheSizeForTests,
     } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
+      '#infrastructure/ai-workflow/harness-module-loop.js'
     );
     const { resetHarnessSessionRegistryForTests } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-session-registry.js'
+      '#infrastructure/ai-workflow/harness-session-registry.js'
     );
     let harness;
     try {
@@ -342,16 +343,16 @@ describe('harness SDK continueTurn smoke', () => {
 
   it('onSessionEvent observes assistant message appends', async () => {
     const { importHarnessSdk } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-resolve.js'
+      '#infrastructure/ai-workflow/harness-resolve.js'
     );
     const {
       runHarnessModuleLoop,
       resetHarnessToolSurfaceCacheForTests,
     } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-module-loop.js'
+      '#infrastructure/ai-workflow/harness-module-loop.js'
     );
     const { resetHarnessSessionRegistryForTests } = await import(
-      '../../dist/src/infrastructure/ai-workflow/harness-session-registry.js'
+      '#infrastructure/ai-workflow/harness-session-registry.js'
     );
     let harness;
     try {
@@ -385,5 +386,132 @@ describe('harness SDK continueTurn smoke', () => {
     assert.ok(types.includes('assistant/message') || types.includes('assistant/chunk'));
     resetHarnessSessionRegistryForTests();
     resetHarnessToolSurfaceCacheForTests();
+  });
+});
+
+describe('harness replay multi-step tool turns', () => {
+  it('replay multi-step: parallel read-only + denyTools + reply concludesTurn', async () => {
+    const { importHarnessSdk } = await import(
+      '#infrastructure/ai-workflow/harness-resolve.js'
+    );
+    const { runHarnessModuleLoop } = await import(
+      '#infrastructure/ai-workflow/harness-module-loop.js'
+    );
+    let harness;
+    try {
+      harness = await importHarnessSdk();
+    } catch {
+      return;
+    }
+    globalThis.logger = globalThis.logger || {
+      mark: () => {}, info: () => {}, warn: () => {}, error: () => {}, debug: () => {},
+    };
+
+    const order = [];
+    const starts = {};
+    const out = await runHarnessModuleLoop({
+      stream: { name: 'chat', _getToolWorkflowNames: () => [] },
+      messages: [{ role: 'user', content: 'go' }],
+      config: {
+        _harnessLlm: harness.createReplayAdapter([
+          {
+            content: '',
+            toolCalls: [
+              { id: 'c1', name: 'fs.read', arguments: { path: 'a' } },
+              { id: 'c2', name: 'db.query', arguments: { q: 'x' } },
+            ],
+          },
+          {
+            content: '',
+            toolCalls: [
+              { id: 'c3', name: 'shell.run', arguments: {} },
+              { id: 'c4', name: 'chat.reply', arguments: { text: 'all-done' } },
+            ],
+          },
+          // concludesTurn on reply must stop before needing this step
+          { content: 'should-not-reach', toolCalls: [] },
+        ]),
+        safety: false,
+        parallel_tool_calls: true,
+        maxParallelToolCalls: 4,
+        maxToolRounds: 5,
+        denyTools: ['shell.run'],
+      },
+      apiConfig: {
+        workflows: [],
+        registerTools(registry) {
+          registry.register({
+            name: 'fs.read',
+            description: 'read-only a',
+            parameters: { type: 'object', properties: { path: { type: 'string' } } },
+            isConcurrencySafe: () => true,
+            async execute() {
+              starts.a = Date.now();
+              order.push('a:s');
+              await new Promise((r) => setTimeout(r, 35));
+              order.push('a:e');
+              return { content: 'A' };
+            },
+          });
+          registry.register({
+            name: 'db.query',
+            description: 'read-only b',
+            parameters: { type: 'object', properties: { q: { type: 'string' } } },
+            isConcurrencySafe: () => true,
+            async execute() {
+              starts.b = Date.now();
+              order.push('b:s');
+              await new Promise((r) => setTimeout(r, 35));
+              order.push('b:e');
+              return { content: 'B' };
+            },
+          });
+          registry.register({
+            name: 'chat.reply',
+            description: 'conclude turn',
+            parameters: { type: 'object', properties: { text: { type: 'string' } } },
+            async execute(args) {
+              order.push('reply');
+              return {
+                content: String(args?.text || 'ok'),
+                concludesTurn: true,
+              };
+            },
+          });
+          registry.register({
+            name: 'shell.run',
+            description: 'denied',
+            parameters: { type: 'object', properties: {} },
+            async execute() {
+              order.push('shell');
+              return { content: 'should-not-run' };
+            },
+          });
+          return 4;
+        },
+      },
+    });
+
+    // Parallel settle: both reads start before either finishes
+    const aStart = order.indexOf('a:s');
+    const bStart = order.indexOf('b:s');
+    const aEnd = order.indexOf('a:e');
+    const bEnd = order.indexOf('b:e');
+    assert.ok(aStart >= 0 && bStart >= 0 && aEnd >= 0 && bEnd >= 0, String(order));
+    assert.ok(aStart < aEnd && bStart < bEnd);
+    assert.ok(Math.max(aStart, bStart) < Math.min(aEnd, bEnd), `overlap expected: ${order}`);
+    assert.ok(Math.abs((starts.a || 0) - (starts.b || 0)) < 25, 'read-only tools should start nearly together');
+
+    // denyTools: Guard blocks shell.run execute (never in order)
+    assert.equal(order.includes('shell'), false);
+    assert.ok(order.includes('reply'));
+
+    // reply concludesTurn: loop stops at step 2 (no third LLM 'should-not-reach')
+    assert.equal(out.steps, 2);
+    assert.equal(out.usedReplyTool, true);
+    assert.ok(out.executedToolNames.includes('fs.read'));
+    assert.ok(out.executedToolNames.includes('db.query'));
+    assert.ok(out.executedToolNames.includes('chat.reply'));
+    assert.notEqual(out.content, 'should-not-reach');
   });
 });

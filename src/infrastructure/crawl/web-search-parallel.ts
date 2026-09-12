@@ -5,7 +5,9 @@ import {
   readCachedSearchPayload,
   resolveSearchCacheTtlMs,
   resolveSearchTimeoutSeconds,
-  writeCachedSearchPayload
+  writeCachedSearchPayload,
+  type WebSearchParams,
+  type WebSearchRuntime
 } from './web-search-shared.js'
 import { withTrustedWebSearchEndpoint } from './web-search-endpoint.js'
 import {
@@ -20,12 +22,21 @@ export { normalizeParallelSearchQueries } from './web-search-parallel-shared.js'
 const PARALLEL_BASE_URL = 'https://api.parallel.ai'
 const PARALLEL_SEARCH_PATH = '/v1/search'
 
-function resolveParallelApiKey(runtime: Record<string, any>) {
-  return runtime?.parallel?.apiKey?.trim?.() || ''
+type ParallelSearchApiResponse = {
+  results?: unknown
+  search_id?: unknown
+  session_id?: unknown
+  warnings?: unknown
 }
 
-function resolveParallelEndpoint(runtime: Record<string, any>) {
-  const configured = runtime?.parallel?.baseUrl?.trim?.() || ''
+function resolveParallelApiKey(runtime: WebSearchRuntime) {
+  const scoped = runtime?.parallel
+  return typeof scoped?.apiKey === 'string' ? scoped.apiKey.trim() : ''
+}
+
+function resolveParallelEndpoint(runtime: WebSearchRuntime) {
+  const configured =
+    typeof runtime?.parallel?.baseUrl === 'string' ? runtime.parallel.baseUrl.trim() : ''
   if (!configured) return `${PARALLEL_BASE_URL}${PARALLEL_SEARCH_PATH}`
   const candidate = /^https?:\/\//i.test(configured) ? configured : `https://${configured}`
   const parsed = new URL(candidate)
@@ -45,8 +56,8 @@ export function missingParallelApiKeyPayload() {
 }
 
 export async function runParallelSearch(
-  params: Record<string, any>,
-  runtime: Record<string, any> = {}
+  params: WebSearchParams,
+  runtime: WebSearchRuntime = {}
 ) {
   const apiKey = resolveParallelApiKey(runtime)
   if (!apiKey) return missingParallelApiKeyPayload()
@@ -69,13 +80,13 @@ export async function runParallelSearch(
     objective,
     searchQueries,
     count,
-    sessionId: params.session_id,
+    sessionId: typeof params.session_id === 'string' ? params.session_id : undefined,
     clientModel: params.client_model
   })
   const cached = readCachedSearchPayload(cacheKey)
   if (cached) return cached
 
-  const body: Record<string, any> = {
+  const body: Record<string, unknown> = {
     search_queries: searchQueries,
     advanced_settings: { max_results: count }
   }
@@ -84,7 +95,7 @@ export async function runParallelSearch(
   if (params.client_model) body.client_model = String(params.client_model).slice(0, 100)
 
   const start = Date.now()
-  const response = (await withTrustedWebSearchEndpoint(
+  const response = await withTrustedWebSearchEndpoint(
     {
       url: endpoint,
       timeoutSeconds,
@@ -99,14 +110,14 @@ export async function runParallelSearch(
         body: JSON.stringify(body)
       }
     },
-    async (res: Response) => {
+    async (res: Response): Promise<ParallelSearchApiResponse> => {
       if (!res.ok) {
         const detail = await res.text().catch(() => '')
         throw new Error(`Parallel API error (${res.status}): ${detail || res.statusText}`)
       }
-      return res.json()
+      return (await res.json()) as ParallelSearchApiResponse
     }
-  )) as any
+  )
 
   const results = mapParallelResults(response)
   const payload = {

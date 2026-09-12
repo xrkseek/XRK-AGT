@@ -28,7 +28,8 @@
 | 批量加载 | `FileLoader.forEachBatch` + `LOADER_BATCH_SIZE` | 全量 `Promise.all(上千 import)` |
 | 模块语言 | 迁移期可用 `.ts`；目标为 `tsc` → `dist/`（见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md)） | 生产主路径依赖 strip-types 直跑源码 |
 | Map 默认 | `map.getOrInsert(k, () => v)` | `get \|\| set` 样板（可写时） |
-| 配置/代码变更 | **重启进程**生效；无业务热重载 | 引入 chokidar / 自建文件监视 |
+| 配置/代码变更 | **重启进程**生效；无业务热重载；**勿加回** `src/utils/hot-reload-base` / chokidar（测：`no-hot-reload` · [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md)） | 引入 chokidar / 自建文件监视 / 恢复 HotReloadBase |
+| 类型断言 | 能建最小接口就建；**禁止** `@ts-ignore`；`@ts-expect-error` 仅缺官方类型；少用 `as unknown as`（测：`ts-cast-hygiene`） | 双断言糊弄过编译 / 无注释的 expect-error |
 | 挂载 | `setRuntimeGlobal`（`#utils/runtime-globals.js`） | `global.x = globalThis.x =` 双写 |
 
 Node 26 API 明细与审查清单见 [node-26-runtime.md](node-26-runtime.md)、skill **`xrk-node-runtime`**。  
@@ -200,7 +201,7 @@ export default {
 1. 类字段存 Map / 缓存  
 2. `FileLoader.getCoreSubDirFiles(subDir)` 扫描  
 3. `importFresh` + `forEachBatch`  
-4. **无文件热重载**；改插件/配置/模板后重启。见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md) · [infrastructure-shared.md](infrastructure-shared.md)
+4. **无文件热重载**；改插件/配置/模板后重启。`hot-reload-base` **有意删除**，由 `tests/framework/no-hot-reload.test.mjs`（`pnpm test:fast`）锁定，勿默默加回。见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md) · [infrastructure-shared.md](infrastructure-shared.md)
 
 挂载面见 [runtime-surface.md](runtime-surface.md)。
 
@@ -221,6 +222,7 @@ export default {
 - [ ] 无 `global.` 前缀（业务裸名或 import）  
 - [ ] 无 constructor 可变容器  
 - [ ] 无 `node-fetch` / 分散 `promisify(exec)` / `instanceof Error`  
+- [ ] 无 `@ts-ignore`；少用 `as unknown as`（见 `ts-cast-hygiene`）  
 - [ ] HTTP 用 `HttpResponse` + 服务端超时 `fetch`；www 用 `unwrapSuccess` / `abortTimeout`  
 - [ ] 改 `www/` 对照 skill **`xrk-www-compat`**  
 - [ ] 配置三件套已同步（若改字段）  

@@ -8,8 +8,8 @@
 system-Core 是 XRK-AGT 的内置核心模块，提供了开箱即用的完整功能集，包括：
 
 - ✅ **11个HTTP API模块**：核心系统、机器人管理、配置管理、文件管理、插件管理、AI服务、**AI 工作区**、MCP服务、设备管理、标准输入、数据编辑
-- ✅ **7个工作流**：chat、desktop、tools、memory、database、web、browser（MCP 工具数以 `registerMCPTool` 为准，当前 **80** 个）
-- ✅ **15个内置插件**：增强器（OneBot/OPQ/Device/Stdin）+ 运维与示例业务
+- ✅ **7个工作流**：chat、desktop、tools、memory、database、web、browser（MCP 工具数以 `registerMCPTool` 为准，当前 **95** 个）
+- ✅ **18个内置插件**：增强器（OneBot/OPQ/Device/Stdin）+ 运维与示例业务
 - ✅ **4个Tasker**：OneBotv11、GSUIDCORE、QBQBot、stdin
 - ✅ **4个事件监听器**：onebot、stdin、device、ai-workspace
 - ✅ **Web控制台**：企业级管理界面，支持系统监控、API调试、配置管理
@@ -421,7 +421,7 @@ flowchart LR
 ### 增强器插件（协议/事件增强）
 
 - **OneBotEnhancer**  
-  - OneBotv11 事件增强插件（位于 `core/system-Core/plugin/OneBotEnhancer.js`）  
+  - OneBotv11 事件增强插件（位于 `core/system-Core/plugin/OneBotEnhancer.ts`）  
   - 负责为 OneBot 事件挂载 `isOneBot`（与 `markTasker` 同名，勿再写 `isOnebot`）、`isPrivate/isGroup/friend/group/member` 等，并统一日志、别名与 onlyReplyAt。
 - **OPQEnhancer**  
   - OPQ 协议增强插件，补齐 OPQ 事件的 Tasker 特定字段与日志文本。
@@ -471,9 +471,9 @@ flowchart LR
 在 `system-Core` 中，业务逻辑放在插件业务层：
 
 - **业务承载位置**：
-  - `core/system-Core/plugin/*.js`：具体业务插件（命令、管理功能、日志、状态查询等）
-  - `src/infrastructure/plugins/plugin-base.js`：插件基类，定义统一的业务接口（规则、任务、事件订阅、上下文、工作流集成等）
-  - `src/infrastructure/plugins/loader.js`：`PluginLoader`，作为插件业务层的调度核心
+  - `core/system-Core/plugin/*.ts`：具体业务插件（命令、管理功能、日志、状态查询等）
+  - `src/infrastructure/plugins/plugin-base.ts`：插件基类，定义统一的业务接口（规则、任务、事件订阅、上下文、工作流集成等）
+  - `src/infrastructure/plugins/loader.ts`：`PluginLoader`，作为插件业务层的调度核心
 - **分层关系（自下而上）**：
   1. **Tasker 层**（如 `core/system-Core/tasker/OneBotv11.js`）将平台消息转换为统一事件
   2. **事件监听层**（`core/system-Core/events/*.js`：`onebot` / `device` / `stdin` / `opqbot` / `gsuidcore` 等）去重并 `PluginLoader.deal`；契约见 [事件系统标准化文档](事件系统标准化文档.md) · skill **`xrk-tasker`**
@@ -751,8 +751,8 @@ system-Core 提供了完整的配置管理功能：
 system-Core 是 XRK-AGT 的核心模块，提供了：
 
 - ✅ **11个HTTP API模块**：覆盖系统管理、机器人管理、配置管理、文件管理、插件管理、AI服务、AI 工作区、MCP服务、设备管理、标准输入、数据编辑
-- ✅ **7个工作流**：chat、desktop、tools、memory、database、web、browser；MCP 工具以 `registerMCPTool` 注册为准（当前 **80** 个）
-- ✅ **15个内置插件**：增强器 + 运维与示例业务
+- ✅ **7个工作流**：chat、desktop、tools、memory、database、web、browser；MCP 工具以 `registerMCPTool` 注册为准（当前 **95** 个）
+- ✅ **18个内置插件**：增强器 + 运维与示例业务
 - ✅ **4个Tasker**：支持OneBotv11、GSUIDCORE、QBQBot、stdin
 - ✅ **Web控制台**：企业级管理界面，支持系统监控、API调试、配置管理
 - ✅ **完整配置系统**：支持多种配置类型，Schema验证，可视化编辑

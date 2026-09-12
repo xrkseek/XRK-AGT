@@ -45,7 +45,7 @@ XRK_MCP_SERVERS=[{"name":"agt","url":"http://127.0.0.1:<agt-port>/api/mcp/jsonrp
 xrkh serve --preset server --workspace <shared-workspace>
 ```
 
-AGT 侧打开模块 loop 后，工具仍走本仓 MCPServer（经 `MCPToolAdapter` → harness ToolRegistry）。远程 MCP 配置见 [MCP配置指南](mcp-config-guide.md)。
+AGT 侧打开模块 loop 后，工具仍走本仓 MCPServer（经 `MCPToolAdapter` → harness ToolRegistry → **执行回** `MCPServer.handleToolCall`）。**不**迁到 SDK `createMcpClient`（边界见 [harness-module-loop.md](harness-module-loop.md)·ADR-0002）。远程工具名 `remote-mcp.<server>.<tool>`，白名单键 `remote-mcp.<server>` 须显式列入；`XRK_TEST=1` 时跳过 `loadRemoteMCPServers`。远程 MCP 配置见 [MCP配置指南](mcp-config-guide.md)。
 
 ---
 

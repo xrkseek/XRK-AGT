@@ -1,25 +1,93 @@
-import BrowserRendererBase from "#infrastructure/renderer/browser-renderer-base.js";
+import BrowserRendererBase, {
+  type BrowserLike,
+  type BrowserRendererConfig,
+  type ScreenshotData,
+} from "#infrastructure/renderer/browser-renderer-base.js";
 import playwright from "playwright";
 import { createRequire } from "node:module";
 import RuntimeUtil from '#utils/runtime-util.js';
-import Renderer from "#infrastructure/renderer/Renderer.js";
+import Renderer, { type RendererMeta } from "#infrastructure/renderer/Renderer.js";
 import { connectPlaywrightBrowser, launchPlaywrightBrowser } from "#utils/playwright-puppeteer-compat.js";
-const { buildPlaywrightLaunchOptions, pickBrowserPath } = createRequire(import.meta.url)('#utils/system-browser.cjs');
+import { normalizeError } from "#utils/normalize-error.js";
+
+export type { BrowserLike, BrowserRendererConfig, ScreenshotData, RendererMeta };
+
+const { buildPlaywrightLaunchOptions, pickBrowserPath } = createRequire(import.meta.url)('#utils/system-browser.cjs') as {
+  buildPlaywrightLaunchOptions: (opts?: {
+    headless?: boolean;
+    args?: string[];
+    channel?: unknown;
+    configuredPath?: unknown;
+  }) => LaunchOptions;
+  pickBrowserPath: (value: unknown) => string | null;
+};
+
+type LaunchOptions = {
+  headless: boolean;
+  args: string[];
+  channel?: string;
+  executablePath?: string;
+};
+
+/** Narrow surface for connect/launch helpers (cast via unknown, never untyped). */
+type PlaywrightCompatApi = Parameters<typeof connectPlaywrightBrowser>[0];
+
+type BoundingBox = { x: number; y: number; width: number; height: number };
+
+type PwLocator = {
+  first: () => PwLocator;
+  boundingBox: () => Promise<BoundingBox>;
+  screenshot: (opts?: Record<string, unknown>) => Promise<Buffer | Uint8Array>;
+};
+
+type PwPage = {
+  setDefaultTimeout: (ms: number) => void;
+  setDefaultNavigationTimeout: (ms: number) => void;
+  goto: (url: string, opts?: Record<string, unknown>) => Promise<unknown>;
+  evaluate: {
+    (pageFunction: () => unknown | Promise<unknown>): Promise<unknown>;
+    <Arg>(pageFunction: (arg: Arg) => unknown | Promise<unknown>, arg: Arg): Promise<unknown>;
+  };
+  locator: (selector: string) => PwLocator;
+  setViewportSize: (size: { width: number; height: number }) => Promise<void>;
+  screenshot: (opts?: Record<string, unknown>) => Promise<Buffer | Uint8Array>;
+  waitForTimeout: (ms: number) => Promise<void>;
+  close: (opts?: { runBeforeUnload?: boolean }) => Promise<void>;
+};
+
+type PwContext = {
+  newPage: () => Promise<PwPage>;
+  close: () => Promise<void>;
+};
+
+type ViewportLike = {
+  width?: number;
+  height?: number;
+  deviceScaleFactor?: number;
+};
 
 /**
  * Playwright-based browser renderer for screenshot generation.
  * 配置由 RendererLoader 通过 getRendererConfig('playwright') 注入。
  */
 export default class PlaywrightRenderer extends BrowserRendererBase {
-  [key: string]: any;
-  constructor(config: any = {}) {
+  browserType = "chromium";
+  playwrightTimeout = 120000;
+  healthCheckInterval = 120000;
+  maxRetries = 3;
+  retryDelay = 2000;
+  launchOptions: LaunchOptions = { headless: true, args: [] };
+  wsEndpoint: string | null = null;
+  contextOptions: Record<string, unknown> = {};
+
+  constructor(config: BrowserRendererConfig & Record<string, unknown> = {}) {
     super({ id: "playwright", type: "image", render: "screenshot" }, config, "PlaywrightRenderer");
 
-    this.browserType = config.browserType ?? config.browser ?? "chromium";
-    this.playwrightTimeout = config.playwrightTimeout ?? 120000;
-    this.healthCheckInterval = config.healthCheckInterval ?? 120000;
-    this.maxRetries = config.maxRetries ?? 3;
-    this.retryDelay = config.retryDelay ?? 2000;
+    this.browserType = String(config.browserType ?? config.browser ?? "chromium");
+    this.playwrightTimeout = (config.playwrightTimeout as number | undefined) ?? 120000;
+    this.healthCheckInterval = (config.healthCheckInterval as number | undefined) ?? 120000;
+    this.maxRetries = (config.maxRetries as number | undefined) ?? 3;
+    this.retryDelay = (config.retryDelay as number | undefined) ?? 2000;
 
     const defaultArgs = [
       "--disable-gpu", "--disable-software-rasterizer", "--disable-dev-shm-usage",
@@ -37,15 +105,17 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
       "--disable-accelerated-video-decode",
     ];
     this.launchOptions = buildPlaywrightLaunchOptions({
-      headless: config.headless ?? true,
-      args: config.args ?? defaultArgs,
+      headless: (config.headless as boolean | undefined) ?? true,
+      args: (config.args as string[] | undefined) ?? defaultArgs,
       channel: config.channel,
       configuredPath: config.chromiumPath
     });
     this.wsEndpoint = pickBrowserPath(config.wsEndpoint ?? config.playwrightWS);
 
-    const vp = config.viewport ?? config.contextOptions?.viewport ?? {};
-    this.contextOptions = config.contextOptions ?? {
+    const vp = (config.viewport ??
+      (config.contextOptions as { viewport?: ViewportLike } | undefined)?.viewport ??
+      {}) as ViewportLike;
+    this.contextOptions = (config.contextOptions as Record<string, unknown> | undefined) ?? {
       viewport: { width: vp.width ?? 1280, height: vp.height ?? 720 },
       deviceScaleFactor: vp.deviceScaleFactor ?? 2,
       bypassCSP: true,
@@ -53,14 +123,20 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
     };
   }
 
-  async connectToExisting(wsEndpoint: any, retries: any = 0): Promise<any> {
+  async connectToExisting(wsEndpoint: string, retries = 0): Promise<BrowserLike | null> {
     const delay = this.retryDelay * Math.pow(2, retries);
-    let browser = null;
+    let browser: BrowserLike | null = null;
     try {
       RuntimeUtil.makeLog("info", `Connecting to existing ${this.browserType} instance (attempt ${retries + 1}/${this.maxRetries})`, this.logTag);
 
-      browser = (await connectPlaywrightBrowser(playwright as any, this.browserType, wsEndpoint, { timeout: 10000 })) as any;
-      const context = await browser.newContext();
+      browser = (await connectPlaywrightBrowser(
+        playwright as unknown as PlaywrightCompatApi,
+        this.browserType,
+        wsEndpoint,
+        { timeout: 10000 },
+      )) as BrowserLike | null;
+      const pwBrowser = browser as unknown as { newContext: () => Promise<PwContext> };
+      const context = await pwBrowser.newContext();
       const page = await context.newPage();
       await page.goto("about:blank", { timeout: 5000 });
       await page.close();
@@ -68,8 +144,8 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
       RuntimeUtil.makeLog("info", `Successfully connected to existing ${this.browserType} instance`, this.logTag);
       return browser;
-    } catch (e: any) {
-      RuntimeUtil.makeLog("warn", `Connection failed: ${e.message}`, this.logTag);
+    } catch (e: unknown) {
+      RuntimeUtil.makeLog("warn", `Connection failed: ${normalizeError(e).message}`, this.logTag);
       if (browser) await this.safeCloseBrowser(browser, 3000);
 
       if (retries < this.maxRetries - 1) {
@@ -84,11 +160,11 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
   async browserInit() {
     if (this.browser) {
-      const ok = await this.ensureBrowserHealthy(async (b: any) => {
+      const ok = await this.ensureBrowserHealthy(async (b: BrowserLike) => {
         if (typeof b.isConnected === "function" && !b.isConnected()) {
           throw new Error("disconnected");
         }
-        b.contexts();
+        b.contexts!();
       });
       if (ok) return this.browser;
     }
@@ -110,11 +186,15 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
       if (!this.browser) {
         RuntimeUtil.makeLog("info", `Launching new ${this.browserType} instance...`, this.logTag);
-        this.browser = await this.withTimeout(
-          launchPlaywrightBrowser(playwright as any, this.browserType, this.launchOptions),
+        this.browser = (await this.withTimeout(
+          launchPlaywrightBrowser(
+            playwright as unknown as PlaywrightCompatApi,
+            this.browserType,
+            this.launchOptions,
+          ),
           this.playwrightTimeout,
           "browser launch"
-        );
+        )) as BrowserLike | null;
 
         if (this.browser) {
           RuntimeUtil.makeLog("info", `Playwright ${this.browserType} started successfully`, this.logTag);
@@ -130,7 +210,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
         return false;
       }
 
-      this.browser.on("disconnected", () => {
+      this.browser.on!("disconnected", () => {
         RuntimeUtil.makeLog("warn", `${this.browserType} instance disconnected`, this.logTag);
         this.browser = null;
         void this.removeStoredEndpoint();
@@ -138,13 +218,14 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
       });
 
       this.startHealthCheck();
-    } catch (e: any) {
-      if (/Executable doesn't exist/i.test(e.message)) {
+    } catch (e: unknown) {
+      const msg = normalizeError(e).message;
+      if (/Executable doesn't exist/i.test(msg)) {
         RuntimeUtil.makeLog("error", "Playwright 浏览器未安装，请在启动菜单选择「Playwright 浏览器」安装，或执行: pnpm run setup:browsers", this.logTag);
       } else if (!this.launchOptions.executablePath) {
         RuntimeUtil.makeLog("error", "未找到可用浏览器：请安装系统 Chrome/Chromium，或在启动菜单安装 Playwright Chromium", this.logTag);
       }
-      RuntimeUtil.makeLog("error", `Browser initialization failed: ${e.message}`, this.logTag);
+      RuntimeUtil.makeLog("error", `Browser initialization failed: ${msg}`, this.logTag);
       this.browser = null;
     } finally {
       this.lock = false;
@@ -163,47 +244,56 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
         if (typeof this.browser.isConnected === "function" && !this.browser.isConnected()) {
           throw new Error("disconnected");
         }
-        await this.withTimeout(Promise.resolve(this.browser.contexts()), this.browserOpTimeoutMs, "health check");
-      } catch (e: any) {
-        RuntimeUtil.makeLog("warn", `Health check failed: ${e.message}, restarting...`, this.logTag);
+        await this.withTimeout(Promise.resolve(this.browser.contexts!()), this.browserOpTimeoutMs, "health check");
+      } catch (e: unknown) {
+        RuntimeUtil.makeLog("warn", `Health check failed: ${normalizeError(e).message}, restarting...`, this.logTag);
         await this.restart(true);
       }
     }, this.healthCheckInterval);
   }
 
-  async screenshot(name: any, data: any = {}) {
-    const slot = await this.acquireScreenshotSlot(name, data, this.playwrightTimeout);
+  async screenshot(name: string, data: ScreenshotData | Record<string, unknown> = {}) {
+    const shotData: ScreenshotData =
+      typeof (data as { tplFile?: unknown }).tplFile === "string"
+        ? (data as ScreenshotData)
+        : { ...data, tplFile: "" };
+
+    const slot = await this.acquireScreenshotSlot(name, shotData, this.playwrightTimeout);
     if (!slot) return false;
 
     try {
       if (!await this.browserInit()) return false;
 
-      const prepared = this.prepareScreenshotFile(name, data);
+      const prepared = this.prepareScreenshotFile(name, shotData);
       if (!prepared) return false;
 
       const { filePath, pageHeight } = prepared;
-      let ret = [];
-      let context = null;
-      let page = null;
+      let ret: Array<Buffer | Uint8Array> = [];
+      let context: PwContext | null = null;
+      let page: PwPage | null = null;
       const start = Date.now();
 
       try {
-        const sysScale = Number(data.sys?.scale);
+        const sysScale = Number(shotData.sys?.scale);
         const contextOptions = { ...this.contextOptions };
         if (Number.isFinite(sysScale) && sysScale > 0) {
           contextOptions.deviceScaleFactor = Math.min(Math.max(sysScale, 1), 4);
         }
-        context = await this.withTimeout(
-          this.browser.newContext(contextOptions),
+        const browser = this.browser as unknown as {
+          newContext: (opts?: unknown) => Promise<PwContext>;
+        };
+        const nextContext = await this.withTimeout(
+          browser.newContext(contextOptions),
           this.browserOpTimeoutMs,
           "newContext"
         );
-        page = await this.withTimeout(context.newPage(), this.browserOpTimeoutMs, "newPage");
+        context = nextContext;
+        page = await this.withTimeout(nextContext.newPage(), this.browserOpTimeoutMs, "newPage");
         if (!page) throw new Error("Failed to create page");
         page.setDefaultTimeout(this.playwrightTimeout);
         page.setDefaultNavigationTimeout(this.playwrightTimeout);
 
-        const gotoOpts = { timeout: this.playwrightTimeout, waitUntil: "load", ...data.pageGotoParams };
+        const gotoOpts = { timeout: this.playwrightTimeout, waitUntil: "load", ...shotData.pageGotoParams };
         await page.goto(Renderer.toFileUrl(filePath), gotoOpts);
         await page.evaluate(() => new Promise(r => setTimeout(r, 400)));
 
@@ -211,19 +301,19 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
         if (!body) throw new Error("Content element not found");
 
         const boundingBox = await body.boundingBox();
-        const screenshotOptions = {
-          ...this.buildScreenshotOptions(data),
-          fullPage: !data.multiPage,
+        const screenshotOptions: Record<string, unknown> = {
+          ...this.buildScreenshotOptions(shotData),
+          fullPage: !shotData.multiPage,
         };
 
         let num = 1;
-        if (data.multiPage) {
+        if (shotData.multiPage) {
           screenshotOptions.type = "jpeg";
           screenshotOptions.fullPage = false;
           num = Math.ceil(boundingBox.height / pageHeight) || 1;
         }
 
-        if (!data.multiPage) {
+        if (!shotData.multiPage) {
           const buff = await body.screenshot(screenshotOptions);
           this.renderNum++;
           const kb = (buff.length / 1024).toFixed(2) + "KB";
@@ -239,7 +329,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
 
           for (let i = 1; i <= num; i++) {
             if (i !== 1 && i === num) {
-              const remainingHeight = Math.min(parseInt(boundingBox.height) - pageHeight * (num - 1), 2000);
+              const remainingHeight = Math.min(parseInt(boundingBox.height as unknown as string) - pageHeight * (num - 1), 2000);
               await page.setViewportSize({
                 width: Math.ceil(boundingBox.width),
                 height: remainingHeight > 0 ? remainingHeight : 100,
@@ -247,7 +337,12 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
             }
 
             if (i !== 1) {
-              await page.evaluate((scrollY: any) => (globalThis as any).scrollTo(0, scrollY), pageHeight * (i - 1));
+              await page.evaluate(
+                (scrollY: number) => {
+                  (globalThis as unknown as { scrollTo: (x: number, y: number) => void }).scrollTo(0, scrollY);
+                },
+                pageHeight * (i - 1),
+              );
               await page.waitForTimeout(100);
             }
 
@@ -276,8 +371,8 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
             RuntimeUtil.makeLog("info", `[${name}] Completed in ${Date.now() - start}ms`, this.logTag);
           }
         }
-      } catch (error: any) {
-        RuntimeUtil.makeLog("error", `[${name}] Screenshot failed: ${error.message}`, this.logTag);
+      } catch (error: unknown) {
+        RuntimeUtil.makeLog("error", `[${name}] Screenshot failed: ${normalizeError(error).message}`, this.logTag);
         this.handleFatalScreenshotError(error);
         ret = [];
       } finally {
@@ -293,7 +388,7 @@ export default class PlaywrightRenderer extends BrowserRendererBase {
         }
       }
 
-      return this.finishScreenshotRun(name, ret, data);
+      return this.finishScreenshotRun(name, ret, shotData);
     } finally {
       this.releaseScreenshotSlot(slot.slotId, slot.userPriority);
     }

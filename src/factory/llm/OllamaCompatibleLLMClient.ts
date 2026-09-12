@@ -4,19 +4,86 @@ import { fetchAsBase64 } from '#utils/llm/image-utils.js';
 import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
 
 /**
- * Ollama Chat API（/api/chat）
+ * Ollama Chat API?/api/chat?
  * @see https://docs.ollama.com/api/chat
  * think: boolean | "low" | "medium" | "high" | "max"
  */
 
 const OLLAMA_THINK_LEVELS = new Set(['low', 'medium', 'high', 'max']);
 
-/**
- * @param {Record<string, unknown>} overrides
- * @param {Record<string, unknown>} config
- * @returns {boolean|string|undefined}
- */
-function resolveOllamaThink(overrides: any, config: any) {
+type LlmClientConfig = Record<string, unknown> & {
+  model?: string;
+  chatModel?: string;
+  baseUrl?: string;
+  path?: string;
+  apiKey?: string;
+  authMode?: string;
+  authHeaderName?: string;
+  headers?: Record<string, string>;
+  timeout?: number;
+  temperature?: number;
+  topP?: number;
+  top_p?: number;
+  maxTokens?: number;
+  max_tokens?: number;
+  frequencyPenalty?: number;
+  frequency_penalty?: number;
+  stop?: string | string[];
+  think?: boolean | string;
+  thinkingType?: string;
+  thinking_type?: string;
+  reasoningEffort?: string;
+  reasoning_effort?: string;
+  extraBody?: Record<string, unknown>;
+  proxy?: unknown;
+};
+
+type ChatMessage = {
+  role?: string;
+  content?: unknown;
+  [key: string]: unknown;
+};
+
+type LlmOverrides = Record<string, unknown> & {
+  headers?: Record<string, string>;
+  model?: string;
+  chatModel?: string;
+  temperature?: number;
+  topP?: number;
+  top_p?: number;
+  maxTokens?: number;
+  max_tokens?: number;
+  frequencyPenalty?: number;
+  frequency_penalty?: number;
+  stop?: string | string[];
+  think?: boolean | string;
+  thinkingType?: string;
+  thinking_type?: string;
+  reasoningEffort?: string;
+  reasoning_effort?: string;
+  extraBody?: Record<string, unknown>;
+};
+
+type OnDeltaCallback = (chunk: string, meta?: Record<string, unknown>) => void;
+
+type OllamaMessage = {
+  role: string;
+  content: string;
+  images?: string[];
+};
+
+type OllamaBody = Record<string, unknown> & {
+  model?: string;
+  messages?: OllamaMessage[];
+  stream?: boolean;
+  options?: Record<string, unknown>;
+  think?: boolean | string;
+};
+
+function resolveOllamaThink(
+  overrides: LlmOverrides,
+  config: LlmClientConfig,
+): boolean | string | undefined {
   const raw =
     overrides.think ??
     config.think ??
@@ -39,17 +106,22 @@ function resolveOllamaThink(overrides: any, config: any) {
   return true;
 }
 
+/**
+ * harness?? createOllamaAdapter?? OpenAICompatible ???
+ * ?????? Ollama ?? `/api/chat`?LLMFactory compat??
+ */
 export default class OllamaCompatibleLLMClient {
-  [key: string]: any;
+  config: LlmClientConfig;
+  endpoint: string;
   _timeout = 360000;
 
-  constructor(config: any = {}) {
+  constructor(config: LlmClientConfig = {}) {
     this.config = config;
     this.endpoint = this.normalizeEndpoint(config);
-    this._timeout = config.timeout ?? 360000;
+    this._timeout = Number(config.timeout ?? 360000);
   }
 
-  normalizeEndpoint(config: any) {
+  normalizeEndpoint(config: LlmClientConfig) {
     const base = (config.baseUrl || 'http://127.0.0.1:11434').replace(/\/+$/, '');
     const path = (config.path || '/api/chat').replace(/^\/?/, '/');
     return `${base}${path}`;
@@ -59,10 +131,10 @@ export default class OllamaCompatibleLLMClient {
     return this._timeout ?? 360000;
   }
 
-  buildHeaders(extra: any = {}) {
-    const headers = {
+  buildHeaders(extra: Record<string, string> = {}) {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...extra
+      ...extra,
     };
 
     if (this.config.apiKey) {
@@ -72,7 +144,7 @@ export default class OllamaCompatibleLLMClient {
         headers['api-key'] = apiKey;
       } else if (mode === 'header') {
         const name = String(this.config.authHeaderName ?? '').trim();
-        if (!name) throw new Error('ollama_compat: authMode=header 时必须提供 authHeaderName');
+        if (!name) throw new Error('ollama_compat: authMode=header ????? authHeaderName');
         headers[name] = apiKey;
       } else {
         headers.Authorization = `Bearer ${apiKey}`;
@@ -83,28 +155,31 @@ export default class OllamaCompatibleLLMClient {
     return headers;
   }
 
-  async transformMessages(messages: any) {
+  async transformMessages(messages: ChatMessage[]) {
     return await transformMessagesWithVision(messages, this.config, { mode: 'openai' });
   }
 
-  async toOllamaMessages(messages: any = []) {
-    const out = [];
+  async toOllamaMessages(messages: ChatMessage[] = []): Promise<OllamaMessage[]> {
+    const out: OllamaMessage[] = [];
 
     for (const m of messages) {
-      const role = (m.role || 'user').toLowerCase();
-      const item: any = {
+      const role = String(m.role || 'user').toLowerCase();
+      const item: OllamaMessage = {
         role: role === 'assistant' ? 'assistant' : role === 'system' ? 'system' : 'user',
         content: '',
-        images: undefined
       };
 
       if (typeof m.content === 'string') {
         item.content = m.content;
       } else if (Array.isArray(m.content)) {
-        const textParts = [];
-        const imageParts = [];
+        const textParts: string[] = [];
+        const imageParts: string[] = [];
 
-        for (const p of m.content) {
+        for (const p of m.content as Array<{
+          type?: string;
+          text?: string;
+          image_url?: { url?: string };
+        }>) {
           if (p?.type === 'text' && p.text) textParts.push(String(p.text));
           if (p?.type === 'image_url' && p.image_url?.url) {
             const info = await fetchAsBase64(String(p.image_url.url), { timeoutMs: this.timeout });
@@ -115,7 +190,8 @@ export default class OllamaCompatibleLLMClient {
         item.content = textParts.join('\n');
         if (imageParts.length > 0) item.images = imageParts;
       } else if (m.content && typeof m.content === 'object') {
-        item.content = String(m.content.text || m.content.content || '');
+        const c = m.content as { text?: string; content?: string };
+        item.content = String(c.text || c.content || '');
       }
 
       out.push(item);
@@ -124,13 +200,17 @@ export default class OllamaCompatibleLLMClient {
     return out;
   }
 
-  buildBody(messages: any, overrides: any = {}, stream: any = false) {
+  buildBody(messages: OllamaMessage[], overrides: LlmOverrides = {}, stream = false): OllamaBody {
     const model = overrides.model || overrides.chatModel || this.config.model || this.config.chatModel;
-    const options: any = {
+    const options: Record<string, unknown> = {
       temperature: overrides.temperature ?? this.config.temperature,
       top_p: overrides.topP ?? overrides.top_p ?? this.config.topP ?? this.config.top_p,
       num_predict: overrides.maxTokens ?? overrides.max_tokens ?? this.config.maxTokens ?? this.config.max_tokens,
-      repeat_penalty: overrides.frequencyPenalty ?? overrides.frequency_penalty ?? this.config.frequencyPenalty ?? this.config.frequency_penalty
+      repeat_penalty:
+        overrides.frequencyPenalty ??
+        overrides.frequency_penalty ??
+        this.config.frequencyPenalty ??
+        this.config.frequency_penalty,
     };
 
     const stop = overrides.stop ?? this.config.stop;
@@ -140,11 +220,11 @@ export default class OllamaCompatibleLLMClient {
 
     Object.keys(options).forEach((k) => options[k] === undefined && delete options[k]);
 
-    const body: any = {
-      model,
+    const body: OllamaBody = {
+      model: model ? String(model) : undefined,
       messages,
       stream,
-      ...(Object.keys(options).length ? { options } : {})
+      ...(Object.keys(options).length ? { options } : {}),
     };
 
     const think = resolveOllamaThink(overrides, this.config);
@@ -156,51 +236,51 @@ export default class OllamaCompatibleLLMClient {
     return body;
   }
 
-  async chat(messages: any, overrides: any = {}) {
+  async chat(messages: ChatMessage[], overrides: LlmOverrides = {}) {
     const transformed = await this.transformMessages(messages);
-    const ollamaMessages = await this.toOllamaMessages(transformed);
+    const ollamaMessages = await this.toOllamaMessages(transformed as ChatMessage[]);
 
     const resp = await fetch(
       this.endpoint,
-      (buildFetchOptionsWithProxy(this.config, {
+      buildFetchOptionsWithProxy(this.config as Parameters<typeof buildFetchOptionsWithProxy>[0], {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(this.buildBody(ollamaMessages, overrides, false)),
-        signal: AbortSignal.timeout(this.timeout)
-      }) as any)
+        signal: AbortSignal.timeout(this.timeout),
+      }) as RequestInit,
     );
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
-        `ollama_compat 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
-        { status: resp.status, headers: resp.headers as any }
+        `ollama_compat ????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        { status: resp.status, headers: resp.headers as { get?: (name: string) => string | null } },
       );
     }
 
-    const json: any = await resp.json();
+    const json = (await resp.json()) as { message?: { content?: string } };
     return json?.message?.content || '';
   }
 
-  async chatStream(messages: any, onDelta: any, overrides: any = {}) {
+  async chatStream(messages: ChatMessage[], onDelta: OnDeltaCallback, overrides: LlmOverrides = {}) {
     const transformed = await this.transformMessages(messages);
-    const ollamaMessages = await this.toOllamaMessages(transformed);
+    const ollamaMessages = await this.toOllamaMessages(transformed as ChatMessage[]);
 
     const resp = await fetch(
       this.endpoint,
-      (buildFetchOptionsWithProxy(this.config, {
+      buildFetchOptionsWithProxy(this.config as Parameters<typeof buildFetchOptionsWithProxy>[0], {
         method: 'POST',
         headers: this.buildHeaders(overrides.headers),
         body: JSON.stringify(this.buildBody(ollamaMessages, overrides, true)),
-        signal: AbortSignal.timeout(this.timeout)
-      }) as any)
+        signal: AbortSignal.timeout(this.timeout),
+      }) as RequestInit,
     );
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
-        `ollama_compat 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
-        { status: resp.status, headers: resp.headers as any }
+        `ollama_compat ??????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        { status: resp.status, headers: resp.headers as { get?: (name: string) => string | null } },
       );
     }
 
@@ -220,7 +300,7 @@ export default class OllamaCompatibleLLMClient {
         const text = line.trim();
         if (!text) continue;
         try {
-          const evt = JSON.parse(text);
+          const evt = JSON.parse(text) as { message?: { thinking?: string; content?: string } };
           const thinking = evt?.message?.thinking || '';
           if (thinking && typeof onDelta === 'function') onDelta('', { reasoning_content: thinking });
           const delta = evt?.message?.content || '';
@@ -233,7 +313,7 @@ export default class OllamaCompatibleLLMClient {
 
     if (buffer.trim()) {
       try {
-        const evt = JSON.parse(buffer.trim());
+        const evt = JSON.parse(buffer.trim()) as { message?: { thinking?: string; content?: string } };
         const thinking = evt?.message?.thinking || '';
         if (thinking && typeof onDelta === 'function') onDelta('', { reasoning_content: thinking });
         const delta = evt?.message?.content || '';

@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import paths from '#utils/paths.js';
-import { GLOBAL_CONFIGS, isServerOrFactoryConfig } from '#infrastructure/config/config-constants.js';
+import { isGlobalConfig, isServerOrFactoryConfig } from '#infrastructure/config/config-constants.js';
 
 type SeedLogger = {
   success: (message: string) => Promise<void> | void;
@@ -35,10 +35,7 @@ export async function seedPortConfigs(
       defaultFiles.map(async (file) => {
         if (!file.endsWith('.yaml') || file === 'qq.yaml') return null;
         const configName = path.basename(file, '.yaml');
-        if (
-          (GLOBAL_CONFIGS as readonly string[]).includes(configName) ||
-          !isServerOrFactoryConfig(configName)
-        ) {
+        if (isGlobalConfig(configName) || !isServerOrFactoryConfig(configName)) {
           return null;
         }
         const copied = await copyFileIfMissing(
@@ -68,7 +65,7 @@ export function seedGlobalConfigsSync(): void {
   for (const file of fsSync.readdirSync(paths.configDefault)) {
     if (!file.endsWith('.yaml')) continue;
     const configName = path.basename(file, '.yaml');
-    if (!(GLOBAL_CONFIGS as readonly string[]).includes(configName)) continue;
+    if (!isGlobalConfig(configName)) continue;
     copyFileIfMissingSync(path.join(paths.configDefault, file), path.join(targetDir, file));
   }
 }

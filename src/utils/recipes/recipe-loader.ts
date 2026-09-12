@@ -8,52 +8,71 @@ import path from 'node:path';
 import YAML from 'yaml';
 import { getProjectRoot, projectAgentsAbs, resolveAgentWorkspaceAbs } from '#utils/agent-workspace-paths.js';
 
-/**
- * @typedef {{
- *   id: string,
- *   title?: string,
- *   description?: string,
- *   instructions?: string,
- *   prompt?: string,
- *   parameters?: Array<{ name: string, description?: string, default?: string, required?: boolean }>,
- *   cron?: string,
- *   skills?: string[],
- *   path: string
- * }} Recipe
- */
+export type RecipeParameter = {
+  name: string;
+  description?: string;
+  default?: string;
+  required?: boolean;
+};
 
-function parseRecipeFile(absPath: any) {
-  let raw;
+export type Recipe = {
+  id: string;
+  title?: string;
+  description?: string;
+  instructions?: string;
+  prompt?: string;
+  parameters?: RecipeParameter[];
+  cron?: string;
+  skills?: string[];
+  path: string;
+};
+
+type RecipeFileData = Record<string, unknown>;
+
+type MaterializeRecipeResult = {
+  systemExtra: string;
+  userPrompt: string;
+  params: Record<string, string>;
+};
+
+function asRecord(value: unknown): RecipeFileData | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as RecipeFileData;
+}
+
+function parseRecipeFile(absPath: string): Recipe | null {
+  let raw: string;
   try {
     raw = fs.readFileSync(absPath, 'utf8');
   } catch {
     return null;
   }
-  let data;
+  let data: unknown;
   try {
     data = absPath.endsWith('.json') ? JSON.parse(raw) : YAML.parse(raw);
   } catch {
     return null;
   }
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
-  const id = String(data.id || data.name || path.basename(absPath, path.extname(absPath))).trim();
+  const record = asRecord(data);
+  if (!record) return null;
+  const id = String(record.id || record.name || path.basename(absPath, path.extname(absPath))).trim();
   if (!id) return null;
-  if (!data.instructions && !data.prompt) return null;
+  if (!record.instructions && !record.prompt) return null;
   return {
     id,
-    title: data.title || id,
-    description: data.description || '',
-    instructions: data.instructions || '',
-    prompt: data.prompt || '',
-    parameters: Array.isArray(data.parameters) ? data.parameters : [],
-    cron: typeof data.cron === 'string' ? data.cron.trim() : '',
-    skills: Array.isArray(data.skills) ? data.skills.map(String) : [],
+    title: String(record.title || id),
+    description: String(record.description || ''),
+    instructions: String(record.instructions || ''),
+    prompt: String(record.prompt || ''),
+    parameters: Array.isArray(record.parameters) ? record.parameters as RecipeParameter[] : [],
+    cron: typeof record.cron === 'string' ? record.cron.trim() : '',
+    skills: Array.isArray(record.skills) ? record.skills.map(String) : [],
     path: absPath
   };
 }
 
-function listRecipeFiles(dir: any, max = 80) {
-  const out: any[] = [];
+function listRecipeFiles(dir: string | null | undefined, max = 80): string[] {
+  const out: string[] = [];
   if (!dir || !fs.existsSync(dir)) return out;
   let entries;
   try {
@@ -70,15 +89,13 @@ function listRecipeFiles(dir: any, max = 80) {
   return out;
 }
 
-/** @returns {Recipe[]} */
-export function listRecipes(): any[] {
+export function listRecipes(): Recipe[] {
   const roots = [
     projectAgentsAbs(getProjectRoot(), 'recipes'),
     path.join(resolveAgentWorkspaceAbs(), 'recipes'),
     path.join(os.homedir(), '.xrk', 'recipes')
   ];
-  /** @type {Map<string, Recipe>} */
-  const map = new Map();
+  const map = new Map<string, Recipe>();
   for (const root of roots) {
     for (const file of listRecipeFiles(root)) {
       const r = parseRecipeFile(file);
@@ -89,18 +106,16 @@ export function listRecipes(): any[] {
   return [...map.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
-/** @param {string} id */
-export function getRecipe(id: any) {
+export function getRecipe(id: unknown): Recipe | null {
   const key = String(id || '').trim().toLowerCase();
   if (!key) return null;
   return listRecipes().find((r) => r.id.toLowerCase() === key) || null;
 }
 
-/**
- * @param {string} template
- * @param {Record<string, string>} params
- */
-export function renderRecipeTemplate(template: any, params: any = {}) {
+export function renderRecipeTemplate(
+  template: unknown,
+  params: Record<string, string> = {},
+): string {
   let s = String(template || '');
   for (const [k, v] of Object.entries(params)) {
     const re = new RegExp(`\\{\\{\\s*${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}\\}`, 'g');
@@ -110,13 +125,11 @@ export function renderRecipeTemplate(template: any, params: any = {}) {
   return s;
 }
 
-/**
- * @param {Recipe} recipe
- * @param {Record<string, string>} [params]
- * @returns {{ systemExtra: string, userPrompt: string }}
- */
-export function materializeRecipe(recipe: any, params: any = {}) {
-  const merged = { ...params };
+export function materializeRecipe(
+  recipe: Recipe,
+  params: Record<string, string> = {},
+): MaterializeRecipeResult {
+  const merged: Record<string, string> = { ...params };
   for (const p of recipe.parameters || []) {
     const name = String(p.name || '').trim();
     if (!name) continue;

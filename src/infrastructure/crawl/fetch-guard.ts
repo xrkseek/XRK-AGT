@@ -9,6 +9,7 @@ import {
   closeDispatcher,
   resolveSsrFPolicyForUrl
 } from './ssrf-policy.js'
+import type { SsrFPolicy } from './ssrf-policy.js'
 import { dropBodyHeaders, retainSafeHeadersForCrossOriginRedirect } from './redirect-headers.js'
 
 const DEFAULT_MAX_REDIRECTS = 3
@@ -23,11 +24,11 @@ type FetchInit = RequestInit & {
 type FetchGuardOptions = {
   maxRedirects?: number
   timeoutMs?: number
-  ssrfPolicy?: Record<string, unknown>
+  ssrfPolicy?: SsrFPolicy
   pinDns?: boolean
-  dispatcherPolicy?: Record<string, unknown>
+  dispatcherPolicy?: SsrFPolicy
   allowCrossOriginUnsafeRedirectReplay?: boolean
-  lookupFn?: (...args: any[]) => any
+  lookupFn?: (hostname: string, options: { all: true }) => Promise<Array<{ address: string; family: number }>>
 }
 
 function getRedirectVisitKey(url: string, init?: FetchInit | null): string {
@@ -160,14 +161,17 @@ export async function fetchWithSsrFGuard(
       visited.add(visitKey)
 
       try {
-        await (res.body as any)?.cancel?.()
+        const body = res.body as { cancel?: () => Promise<void> | void } | null
+        await body?.cancel?.()
       } catch {
         /* ignore */
       }
 
       currentUrl = nextUrl
     } finally {
-      if (dispatcher) await closeDispatcher(dispatcher as any)
+      if (dispatcher) {
+        await closeDispatcher(dispatcher as { close?: () => void | Promise<void>; destroy?: () => void })
+      }
     }
   }
 }

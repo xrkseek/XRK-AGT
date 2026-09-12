@@ -6,6 +6,11 @@ type MessageLike = {
   tool_calls?: unknown;
 };
 
+type ContentPart = {
+  text?: unknown;
+  content?: unknown;
+};
+
 type EstimateFn = (text: unknown) => number;
 
 /**
@@ -26,7 +31,7 @@ export function trimMessagesToTokenBudget(
     if (typeof m.content === 'string') return estimate(m.content);
     if (Array.isArray(m.content)) {
       return m.content.reduce(
-        (s: number, p: any) => s + estimate(p?.text ?? p?.content ?? ''),
+        (s: number, p: ContentPart) => s + estimate(p?.text ?? p?.content ?? ''),
         0,
       );
     }

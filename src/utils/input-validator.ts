@@ -200,5 +200,7 @@ export class InputValidator {
 }
 
 function normalizeMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return (Error as ErrorConstructor & { isError?: (e: unknown) => e is Error }).isError?.(error)
+    ? error.message
+    : String(error);
 }

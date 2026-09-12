@@ -9,7 +9,10 @@ import {
   readCachedSearchPayload,
   resolveSearchCacheTtlMs,
   resolveSearchTimeoutSeconds,
-  writeCachedSearchPayload
+  writeCachedSearchPayload,
+  type WebSearchParams,
+  type WebSearchResult,
+  type WebSearchRuntime
 } from './web-search-shared.js'
 import { callMcpTool } from './web-search-mcp-client.js'
 import {
@@ -30,8 +33,8 @@ function normalizeMcpSessionId(value: unknown) {
 }
 
 export async function runParallelFreeSearch(
-  params: Record<string, any>,
-  runtime: Record<string, any> = {}
+  params: WebSearchParams,
+  runtime: WebSearchRuntime = {}
 ) {
   const resolved = resolveParallelSearchInput(params)
   if ('error' in resolved && resolved.error) return resolved.error
@@ -43,8 +46,10 @@ export async function runParallelFreeSearch(
   const count = resolveParallelSearchCount(params.count ?? runtime.maxResults)
   const timeoutSeconds = resolveSearchTimeoutSeconds(runtime.timeoutSeconds)
   const cacheTtlMs = resolveSearchCacheTtlMs(runtime.cacheTtlMinutes)
-  const mcpUrl =
-    getWebSearchProviderScope(runtime, 'parallel-free')?.url?.trim?.() || PARALLEL_MCP_SEARCH_URL
+  const scoped = getWebSearchProviderScope(runtime, 'parallel-free') as
+    | { url?: string }
+    | undefined
+  const mcpUrl = scoped?.url?.trim?.() || PARALLEL_MCP_SEARCH_URL
 
   const sessionId = normalizeMcpSessionId(
     normalizeParallelSessionId(params.session_id, PARALLEL_FREE_SESSION_ID_MAX_LENGTH)
@@ -62,7 +67,7 @@ export async function runParallelFreeSearch(
   const cached = readCachedSearchPayload(cacheKey)
   if (cached) return cached
 
-  const toolArgs: Record<string, any> = {
+  const toolArgs: Record<string, unknown> = {
     objective: objective ?? searchQueries.join(' '),
     search_queries: [...searchQueries],
     session_id: sessionId
@@ -81,7 +86,7 @@ export async function runParallelFreeSearch(
   const allResults = Array.isArray(payload.results) ? payload.results : []
   const results = mapParallelResults({ results: allResults.slice(0, Math.max(count, 1)) })
 
-  const out: Record<string, any> = {
+  const out: WebSearchResult = {
     ...(objective ? { objective } : {}),
     searchQueries,
     provider: 'parallel-free',

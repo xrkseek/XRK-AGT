@@ -11,18 +11,49 @@ import { decodeHtmlEntitiesInUrl } from '#utils/llm/vision-content.js';
 
 export { decodeHtmlEntitiesInUrl } from '#utils/llm/vision-content.js';
 
-const DATA_URL_CACHE = new Map();
+type VisionPayload = { mimeType: string; base64: string };
+
+type CacheEntry = VisionPayload & { ts: number };
+
+type SendApiFn = (
+  action: string,
+  params: Record<string, unknown>,
+) => Promise<{ data?: Record<string, unknown> } | null | undefined>;
+
+type VisionFetchOptions = {
+  timeoutMs?: number;
+  sendApi?: SendApiFn;
+};
+
+type ChatMessagePart = {
+  type?: string;
+  image_url?: { url?: string };
+  [key: string]: unknown;
+};
+
+type ChatMessage = {
+  role?: string;
+  content?: unknown;
+  [key: string]: unknown;
+};
+
+type AgentRuntimeGlobal = {
+  url?: string;
+};
+
+const DATA_URL_CACHE = new Map<string, CacheEntry>();
 
 function getServerPublicUrl(): string {
   try {
-    const base = (globalThis as any).AgentRuntime?.url;
+    const base = (globalThis as typeof globalThis & { AgentRuntime?: AgentRuntimeGlobal }).AgentRuntime
+      ?.url;
     return base ? String(base).replace(/\/+$/, '') : '';
   } catch {
     return '';
   }
 }
 
-function normalizeToAbsoluteUrl(url: any) {
+function normalizeToAbsoluteUrl(url: unknown): string {
   const u = decodeHtmlEntitiesInUrl(url);
   if (!u) return '';
   if (u.startsWith('data:')) return u;
@@ -33,29 +64,32 @@ function normalizeToAbsoluteUrl(url: any) {
   return u;
 }
 
-function parseDataUrl(dataUrl: any) {
+function parseDataUrl(dataUrl: unknown): VisionPayload | null {
   const raw = String(dataUrl ?? '').trim();
   const m = raw.match(/^data:([^;]+);base64,(.*)$/i);
   if (!m) return null;
-  return { mimeType: m[1], base64: m[2] };
+  return { mimeType: m[1]!, base64: m[2]! };
 }
 
-function resolveVisionSendApi(options: any = {}) {
+function resolveVisionSendApi(options: VisionFetchOptions = {}): SendApiFn | null {
   if (typeof options.sendApi === 'function') return options.sendApi;
-  const e: any = getWorkflowRequestContext()?.e;
+  const ctx = getWorkflowRequestContext() as
+    | { e?: { bot?: { sendApi?: SendApiFn } } }
+    | null
+    | undefined;
+  const e = ctx?.e;
   if (e?.bot && typeof e.bot.sendApi === 'function') {
-    return (action: any, params: any) => e.bot.sendApi(action, params);
+    return (action, params) => e.bot!.sendApi!(action, params);
   }
   return null;
 }
 
-function bufferToVisionPayload(buf: any, fallbackMime = 'image/png') {
+function bufferToVisionPayload(buf: unknown, fallbackMime = 'image/png'): VisionPayload | null {
   if (!Buffer.isBuffer(buf) || !buf.length) return null;
   const mimeType = fallbackMime || 'image/png';
-  const b = buf as Buffer & { toBase64?: () => string };
   return {
     mimeType,
-    base64: typeof b.toBase64 === 'function' ? b.toBase64() : buf.toString('base64'),
+    base64: (buf as Buffer & { toBase64: () => string }).toBase64(),
   };
 }
 
@@ -65,7 +99,10 @@ function bufferToVisionPayload(buf: any, fallbackMime = 'image/png') {
  * - http(s)：原生 fetch
  * - QQ file 哈希 / 本地路径 / CDN：readImageBuffer + 可选 get_image
  */
-export async function fetchAsBase64(url: any, { timeoutMs = 30000, sendApi }: any = {}) {
+export async function fetchAsBase64(
+  url: unknown,
+  { timeoutMs = 30000, sendApi }: VisionFetchOptions = {},
+): Promise<VisionPayload | null> {
   const raw = decodeHtmlEntitiesInUrl(url);
   if (!raw) return null;
 
@@ -87,7 +124,7 @@ export async function fetchAsBase64(url: any, { timeoutMs = 30000, sendApi }: an
       if (resp.ok) {
         const mimeType = resp.headers.get('content-type') || 'image/png';
         const u8 = new Uint8Array(await resp.arrayBuffer());
-        const base64 = Buffer.from(u8).toString('base64');
+        const base64 = (Buffer.from(u8) as Buffer & { toBase64: () => string }).toBase64();
         DATA_URL_CACHE.set(abs, { ts: now, mimeType, base64 });
         return { mimeType, base64 };
       }
@@ -99,23 +136,25 @@ export async function fetchAsBase64(url: any, { timeoutMs = 30000, sendApi }: an
   const api = resolveVisionSendApi({ sendApi });
   const buf = await readImageBuffer({ file: raw, url: abs || raw }, api, {
     fetchTimeout: timeoutMs,
-    getImageTimeout: timeoutMs
+    getImageTimeout: timeoutMs,
   });
   return bufferToVisionPayload(buf);
 }
 
 /**
  * 在 OpenAI 风格 messages 上，把 user 消息中的 image_url.url 统一转成 data URL
- * @param {Array} messages - OpenAI Chat Completions 风格的 messages
  */
-export async function ensureMessagesImagesDataUrl(messages: any, { timeoutMs = 30000, sendApi }: any = {}) {
+export async function ensureMessagesImagesDataUrl(
+  messages: ChatMessage[] | unknown,
+  { timeoutMs = 30000, sendApi }: VisionFetchOptions = {},
+): Promise<void> {
   if (!Array.isArray(messages)) return;
 
-  for (const msg of messages) {
+  for (const msg of messages as ChatMessage[]) {
     if (!msg || msg.role !== 'user') continue;
     if (!Array.isArray(msg.content)) continue;
 
-    for (const part of msg.content) {
+    for (const part of msg.content as ChatMessagePart[]) {
       if (!part || part.type !== 'image_url' || !part.image_url?.url) continue;
 
       const info = await fetchAsBase64(part.image_url.url, { timeoutMs, sendApi });

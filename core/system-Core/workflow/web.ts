@@ -211,7 +211,7 @@ export default class WebStream extends AiWorkflow {
             firecrawlProxy: rt.firecrawlProxy,
             firecrawlStoreInCache: rt.firecrawlStoreInCache,
             firecrawlTimeoutSeconds: rt.firecrawlTimeoutSeconds
-          });
+          } as any);
           return { success: true, data: result };
         } catch (e: any) {
           return { success: false, error: e.message || String(e) };

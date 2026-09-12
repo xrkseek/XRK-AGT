@@ -12,9 +12,11 @@
  */
 import path from 'node:path';
 import fsSync from 'node:fs';
+import type { Dirent } from 'node:fs';
 import { spawn } from 'node:child_process';
 import RuntimeUtil from '#utils/runtime-util.js';
 import paths from '#utils/paths.js';
+import { normalizeError } from '#utils/normalize-error.js';
 import {
   getPnpmInstallHint,
   resolveCommandSpawn,
@@ -22,6 +24,8 @@ import {
 import {
   resolveWwwAppMount,
   resolveWwwStaticRoot,
+  type WwwSign,
+  type WwwStaticResolved,
 } from '#infrastructure/http/www-app-resolve.js';
 
 const BUILD_WALK_SKIP = new Set([
@@ -35,7 +39,20 @@ const BUILD_WALK_SKIP = new Set([
   'dist-ssr',
 ]);
 
-function wwwBuildLog(level: any, message: any) {
+type WwwBuildSpec = {
+  command: string;
+  args: string[];
+  cwd: string;
+  env: Record<string, string>;
+};
+
+type SpawnFailError = Error & { stdout?: string; stderr?: string; code?: number | null };
+
+function rec(v: unknown): Record<string, unknown> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
+function wwwBuildLog(level: string, message: string) {
   RuntimeUtil.makeLog(level, message, 'AgentRuntime');
 }
 
@@ -44,16 +61,17 @@ function wwwBuildLog(level: any, message: any) {
  * @param {string} appDir
  * @returns {{ command: string, args: string[], cwd: string, env: Record<string, string> } | null}
  */
-export function normalizeWwwBuildSpec(raw: any, appDir: any) {
+export function normalizeWwwBuildSpec(raw: unknown, appDir: string): WwwBuildSpec | null {
   if (!raw || typeof raw !== 'object') return null;
-  const command = raw.command != null ? String(raw.command).trim() : '';
+  const spec = rec(raw);
+  const command = spec.command != null ? String(spec.command).trim() : '';
   if (!command) return null;
-  const args = Array.isArray(raw.args) ? raw.args.map((a: any) => String(a)) : [];
-  const cwd = raw.cwd ? path.resolve(appDir, String(raw.cwd)) : appDir;
+  const args = Array.isArray(spec.args) ? spec.args.map((a) => String(a)) : [];
+  const cwd = spec.cwd ? path.resolve(appDir, String(spec.cwd)) : appDir;
   const env =
-    raw.env && typeof raw.env === 'object' && !Array.isArray(raw.env)
+    spec.env && typeof spec.env === 'object' && !Array.isArray(spec.env)
       ? Object.fromEntries(
-          Object.entries(raw.env).map(([k, v]: any) => [String(k), v == null ? '' : String(v)]),
+          Object.entries(rec(spec.env)).map(([k, v]) => [String(k), v == null ? '' : String(v)]),
         )
       : {};
   return { command, args, cwd, env };
@@ -61,11 +79,8 @@ export function normalizeWwwBuildSpec(raw: any, appDir: any) {
 
 /**
  * 静态模式用的 build 命令：`sign.build`，否则有 package.json 时默认 `pnpm build`。
- *
- * @param {object} sign
- * @param {string} appDir
  */
-export function resolveSignedStaticBuildSpec(sign: any, appDir: any) {
+export function resolveSignedStaticBuildSpec(sign: WwwSign | null | undefined, appDir: string) {
   const fromSign = normalizeWwwBuildSpec(sign?.build, appDir);
   if (fromSign) return fromSign;
   if (fsSync.existsSync(path.join(appDir, 'package.json'))) {
@@ -80,13 +95,12 @@ export function resolveSignedStaticBuildSpec(sign: any, appDir: any) {
  * @param {{ maxFiles?: number }} [opts]
  * @returns {number} 0 表示不可用
  */
-export function maxMtimeMs(target: any, opts: any = {}) {
+export function maxMtimeMs(target: string, opts: { maxFiles?: number } = {}) {
   const maxFiles = opts.maxFiles ?? 8000;
   let newest = 0;
   let seen = 0;
 
-  /** @param {string} abs */
-  function visit(abs: any) {
+  function visit(abs: string) {
     if (seen >= maxFiles) return;
     let st;
     try {
@@ -124,7 +138,7 @@ export function maxMtimeMs(target: any, opts: any = {}) {
  * @param {string} appDir
  * @returns {number}
  */
-export function maxWwwSourceMtimeMs(appDir: any) {
+export function maxWwwSourceMtimeMs(appDir: string) {
   const files = [
     'package.json',
     'pnpm-lock.yaml',
@@ -167,13 +181,17 @@ export function maxWwwSourceMtimeMs(appDir: any) {
  * @param {object} sign
  * @param {{ root?: string, via?: string } | null | undefined} [resolved]
  */
-export function resolveSignedStaticOutDir(appDir: any, sign: any, resolved: any) {
+export function resolveSignedStaticOutDir(
+  appDir: string,
+  sign: WwwSign | null | undefined,
+  resolved: WwwStaticResolved | null | undefined,
+) {
   if (resolved?.via && resolved.via !== '.' && resolved.root) {
     return resolved.root;
   }
   const rel =
-    (sign?.staticRoot && String(sign.staticRoot).trim()) ||
-    (sign?.outDir && String(sign.outDir).trim()) ||
+    (sign?.staticRoot != null ? String(sign.staticRoot).trim() : '') ||
+    (sign?.outDir != null ? String(sign.outDir).trim() : '') ||
     'dist';
   return path.resolve(appDir, rel);
 }
@@ -184,7 +202,11 @@ export function resolveSignedStaticOutDir(appDir: any, sign: any, resolved: any)
  * @param {object} sign
  * @param {{ root?: string, via?: string } | null | undefined} [resolved]
  */
-export function isSignedStaticBuildStale(appDir: any, sign: any, resolved: any) {
+export function isSignedStaticBuildStale(
+  appDir: string,
+  sign: WwwSign | null | undefined,
+  resolved: WwwStaticResolved | null | undefined,
+) {
   if (!appDir) return true;
   const outDir = resolveSignedStaticOutDir(appDir, sign, resolved);
   const indexHtml = path.join(outDir, 'index.html');
@@ -212,7 +234,11 @@ export function isSignedStaticBuildStale(appDir: any, sign: any, resolved: any) 
  * @param {{ cwd: string, env?: Record<string, string> }} opts
  * @returns {Promise<{ stdout: string, stderr: string, code: number }>}
  */
-function runResolvedCommand(command: any, args: any, opts: any) {
+function runResolvedCommand(
+  command: string,
+  args: string[],
+  opts: { cwd: string; env?: Record<string, string> },
+): Promise<{ stdout: string; stderr: string; code: number }> {
   let spawnSpec;
   try {
     spawnSpec = resolveCommandSpawn(command, args, opts.cwd);
@@ -220,7 +246,7 @@ function runResolvedCommand(command: any, args: any, opts: any) {
     return Promise.reject(err);
   }
 
-  return new Promise((resolve: any, reject: any) => {
+  return new Promise((resolve, reject) => {
     const child = spawn(spawnSpec.command, spawnSpec.args, {
       cwd: opts.cwd,
       env: { ...process.env, ...opts.env, BROWSER: 'none' },
@@ -233,14 +259,14 @@ function runResolvedCommand(command: any, args: any, opts: any) {
     let stderr = '';
     child.stdout?.setEncoding('utf8');
     child.stderr?.setEncoding('utf8');
-    child.stdout?.on('data', (chunk: any) => {
+    child.stdout?.on('data', (chunk: string) => {
       stdout += chunk;
     });
-    child.stderr?.on('data', (chunk: any) => {
+    child.stderr?.on('data', (chunk: string) => {
       stderr += chunk;
     });
 
-    child.on('error', (err: any) => {
+    child.on('error', (err: NodeJS.ErrnoException) => {
       if (err?.code === 'ENOENT' || err?.code === 'EINVAL') {
         const hint = command === 'pnpm' ? `，请执行: ${getPnpmInstallHint()}` : '';
         reject(new Error(`${command} 未安装或不在 PATH 中${hint}`));
@@ -249,13 +275,13 @@ function runResolvedCommand(command: any, args: any, opts: any) {
       reject(err);
     });
 
-    child.on('close', (code: any) => {
+    child.on('close', (code: number | null) => {
       if (code === 0) {
         resolve({ stdout, stderr, code: 0 });
         return;
       }
       const detail = (stderr || stdout || '').trim().slice(0, 800);
-      const err: any = new Error(
+      const err: SpawnFailError = new Error(
         `${command} ${args.join(' ')} 退出码 ${code ?? 'unknown'}${detail ? ` — ${detail}` : ''}`,
       );
       err.stdout = stdout;
@@ -266,12 +292,11 @@ function runResolvedCommand(command: any, args: any, opts: any) {
   });
 }
 
-/**
- * @param {string} appDir
- * @param {object} sign
- * @param {string} [label]
- */
-export async function runSignedStaticBuild(appDir: any, sign: any, label: any = appDir) {
+export async function runSignedStaticBuild(
+  appDir: string,
+  sign: WwwSign | null | undefined,
+  label: string = appDir,
+) {
   const spec = resolveSignedStaticBuildSpec(sign, appDir);
   if (!spec) {
     wwwBuildLog('warn', `${label}: 静态模式无法 build（需 package.json 或 sign.build）`);
@@ -282,10 +307,10 @@ export async function runSignedStaticBuild(appDir: any, sign: any, label: any = 
   wwwBuildLog('info', `前端工程静态模式：构建产物（不启进程）: ${label} (${display})`);
 
   try {
-    const { stdout, stderr } = (await runResolvedCommand(spec.command, spec.args, {
+    const { stdout, stderr } = await runResolvedCommand(spec.command, spec.args, {
       cwd: spec.cwd,
       env: spec.env,
-    })) as { stdout?: string; stderr?: string };
+    });
     if (stdout?.trim()) {
       wwwBuildLog('debug', `build stdout (${label}): ${stdout.trim().slice(-800)}`);
     }
@@ -294,8 +319,9 @@ export async function runSignedStaticBuild(appDir: any, sign: any, label: any = 
     }
     wwwBuildLog('info', `前端工程构建完成: ${label}`);
     return true;
-  } catch (err: any) {
-    const msg = err?.stderr || err?.message || String(err);
+  } catch (err: unknown) {
+    const fail = err as SpawnFailError;
+    const msg = fail.stderr || fail.message || normalizeError(err).message;
     wwwBuildLog(
       'error',
       `前端工程构建失败: ${label} — ${String(msg).trim().slice(0, 500)}`,
@@ -311,27 +337,29 @@ export async function runSignedStaticBuild(appDir: any, sign: any, label: any = 
  * @param {{ log?: (level: string, msg: string) => void }} [opts]
  * @returns {Promise<{ skipped: boolean, built: string[], failed: string[] }>}
  */
-export async function buildSignedStaticWwwBeforeRuntime(opts: any = {}) {
+export async function buildSignedStaticWwwBeforeRuntime(
+  opts: { log?: (level: string, msg: string) => void } = {},
+) {
   if (process.env.XRK_SKIP_WWW_BUILD === '1') {
-    return { skipped: true, built: [], failed: [] };
+    return { skipped: true, built: [] as string[], failed: [] as string[] };
   }
 
   const log =
     typeof opts.log === 'function'
       ? opts.log
-      : (level: any, msg: any) => wwwBuildLog(level, msg);
+      : (level: string, msg: string) => wwwBuildLog(level, msg);
 
-  const built = [];
-  const failed = [];
+  const built: string[] = [];
+  const failed: string[] = [];
   const coreDirs = await paths.getCoreDirs();
 
   for (const coreDir of coreDirs) {
     const coreName = path.basename(coreDir);
     const wwwDir = path.join(paths.coreSource, coreName, 'www');
     if (!fsSync.existsSync(wwwDir)) continue;
-    let entries = [];
+    let entries: Dirent[] = [];
     try {
-      entries = fsSync.readdirSync(wwwDir, { withFileTypes: true }).filter((e: any) => e.isDirectory());
+      entries = fsSync.readdirSync(wwwDir, { withFileTypes: true }).filter((e) => e.isDirectory());
     } catch {
       continue;
     }

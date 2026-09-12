@@ -20,7 +20,7 @@
 
 ## 技术栈摘要
 
-- **运行时**：Node.js 26+，Express，全局 `AgentRuntime`（`src/agent-runtime.js`）
+- **运行时**：Node.js 26+，Express，全局 `AgentRuntime`（源码 `src/agent-runtime.ts` → 运行 `dist/src/agent-runtime.js`）
 - **数据**：Redis（框架内置，启动必需）
 - **AI**：`AiWorkflow` 工作流 + LLM/ASR/TTS 工厂 + MCP
 - **接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker
@@ -86,7 +86,7 @@ XRK-AGT/
 
 ## system-Core 规模（索引）
 
-开箱即用模块数量以代码与 [docs/system-core.md](docs/system-core.md) 为准（约 **11 HTTP / 7 工作流 / 15 插件 / 4 Tasker / 4 events**；Web 控制台 `/xrk/`）。MCP 工具数以 `registerMCPTool` 为准（当前 **80**）。
+开箱即用模块数量以代码与 [docs/system-core.md](docs/system-core.md) 为准（**11 HTTP / 7 工作流 / 18 插件 / 4 Tasker / 4 events**；Web 控制台 `/xrk/`）。MCP 工具数以 `registerMCPTool` 为准（当前 **95**）。
 
 ---
 
@@ -99,4 +99,4 @@ XRK-AGT/
 
 ---
 
-*最后更新：2026-08-07*
+*最后更新：2026-09-12*

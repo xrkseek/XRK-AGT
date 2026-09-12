@@ -3,6 +3,7 @@ import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import LLMFactory from '#factory/llm/LLMFactory.js';
 import { pickFirstDefined, pickTrimmed, pickNonEmptyUrl, shallowMergePlain } from '#utils/coerce-pick.js';
 import { resolveProviderVariantPatch } from '#utils/llm/provider-variant.js';
+import { asPlainDoc } from '#utils/plain-doc.js';
 
 /**
  * 工作流运行时 LLM 配置分层合并（非 request body 组装）。
@@ -38,8 +39,8 @@ export function resolveStreamLLMConfig(stream: any, apiConfig: any = {}) {
     RuntimeUtil.makeLog('warn', `[AiWorkflow] 不支持的 LLM 提供商: ${providerRaw}`, 'AiWorkflow');
   }
 
-  const providerConfig = LLMFactory.getProviderConfig(provider) || {};
-  const runtimeConfig = stream.config || {};
+  const providerConfig = asPlainDoc(LLMFactory.getProviderConfig(provider));
+  const runtimeConfig = asPlainDoc(stream.config);
 
   const apiKey = pickTrimmed(
     apiConfig.apiKey,

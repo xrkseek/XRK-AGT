@@ -58,13 +58,11 @@ export class WelfordAccumulator {
  */
 export class ReservoirSampler {
   capacity: number;
-  samples: number[];
-  seen: number;
+  samples: number[] = [];
+  seen = 0;
 
   constructor(capacity = 10_000) {
     this.capacity = Math.max(1, Math.floor(capacity));
-    this.samples = [];
-    this.seen = 0;
   }
 
   push(x: number, rng: () => number = Math.random): void {
@@ -150,18 +148,18 @@ export type LatencySummary = {
  * `summary()` 产出 p50/p90/p95/p99、rps、errorRate 等。
  */
 export class LatencyHistogram {
-  _reservoir: ReservoirSampler | null;
-  samples: number[];
-  ok: number;
-  fail: number;
-  statusCounts: Record<string | number, number>;
-  bytesIn: number;
-  startMs: number;
-  endMs: number;
-  welford: WelfordAccumulator;
-  sliding: SlidingErrorWindow | null;
-  minMs: number;
-  maxMs: number;
+  _reservoir: ReservoirSampler | null = null;
+  samples: number[] = [];
+  ok = 0;
+  fail = 0;
+  statusCounts: Record<string | number, number> = Object.create(null);
+  bytesIn = 0;
+  startMs = 0;
+  endMs = 0;
+  welford = new WelfordAccumulator();
+  sliding: SlidingErrorWindow | null = null;
+  minMs = Infinity;
+  maxMs = -Infinity;
 
   /**
    * @param opts.reservoirSize 为 null/0 时全量保留 samples
@@ -170,20 +168,10 @@ export class LatencyHistogram {
     const rs = opts.reservoirSize;
     this._reservoir =
       rs == null || rs === 0 ? null : new ReservoirSampler(Number(rs) || 10_000);
-    this.samples = [];
-    this.ok = 0;
-    this.fail = 0;
-    this.statusCounts = Object.create(null) as Record<string | number, number>;
-    this.bytesIn = 0;
-    this.startMs = 0;
-    this.endMs = 0;
-    this.welford = new WelfordAccumulator();
     this.sliding =
       opts.slidingWindow != null && opts.slidingWindow > 0
         ? new SlidingErrorWindow(opts.slidingWindow)
         : null;
-    this.minMs = Infinity;
-    this.maxMs = -Infinity;
   }
 
   begin(): void {

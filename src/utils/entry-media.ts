@@ -18,15 +18,6 @@ type AgentRuntimeLike = {
   }>;
 };
 
-type RuntimeUtilLoose = {
-  fileExists: (p: string) => Promise<boolean>;
-  Buffer: (url: string, opts?: Record<string, unknown>) => Promise<unknown>;
-  mkdir: (dir: string) => Promise<unknown>;
-  writeFile: (filePath: string, data: Buffer) => Promise<unknown>;
-};
-
-const RU = RuntimeUtil as unknown as RuntimeUtilLoose;
-
 function getAgentRuntime(): AgentRuntimeLike | undefined {
   return (globalThis as { AgentRuntime?: AgentRuntimeLike }).AgentRuntime;
 }
@@ -74,7 +65,7 @@ async function readLocalBuffer(ref: unknown): Promise<Buffer | null> {
   if (inline) return inline;
   const p = String(ref ?? '').replace(/^file:\/\//, '').trim();
   if (!p || isHttpRef(p) || !isPathLike(p)) return null;
-  if (!(await RU.fileExists(p))) return null;
+  if (!(await RuntimeUtil.fileExists(p))) return null;
   try {
     const buf = await fs.readFile(p);
     return buf?.length ? buf : null;
@@ -86,7 +77,7 @@ async function readLocalBuffer(ref: unknown): Promise<Buffer | null> {
 async function fetchRefBuffer(ref: unknown, timeoutMs: number): Promise<Buffer | null> {
   const url = String(ref ?? '').replace(/&amp;/gi, '&').trim();
   if (!url || !isHttpRef(url)) return null;
-  const fetched = await RU.Buffer(url, { http: false, timeout: timeoutMs });
+  const fetched = await RuntimeUtil.Buffer(url, { http: false, timeout: timeoutMs });
   return Buffer.isBuffer(fetched) && fetched.length ? fetched : null;
 }
 
@@ -107,15 +98,15 @@ async function getViaApi(
         }),
       ])
       : await api;
-    if (d.file && isPathLike(d.file) && await RU.fileExists(String(d.file))) {
+    if (d.file && isPathLike(d.file) && await RuntimeUtil.fileExists(String(d.file))) {
       return readLocalBuffer(`file://${path.resolve(String(d.file))}`);
     }
-    if (d.path && isPathLike(d.path) && await RU.fileExists(String(d.path))) {
+    if (d.path && isPathLike(d.path) && await RuntimeUtil.fileExists(String(d.path))) {
       return readLocalBuffer(`file://${path.resolve(String(d.path))}`);
     }
     if (d.base64) {
       const raw = String(d.base64).replace(/^base64:\/\//, '');
-      return raw ? Buffer.from(raw, 'base64') : null;
+      return raw ? Buffer.from(Uint8Array.fromBase64(raw)) : null;
     }
   } catch (err) {
     const message = (err as { message?: string })?.message ?? String(err);
@@ -146,7 +137,7 @@ export async function readMediaBuffer(
 
   for (const ref of [file, url]) {
     if (ref?.startsWith('base64://')) {
-      return Buffer.from(ref.slice(9), 'base64');
+      return Buffer.from(Uint8Array.fromBase64(ref.slice(9)));
     }
   }
 
@@ -223,12 +214,12 @@ export async function persistEntryMedia(
     if (!ref || isHttpRef(ref) || ref.startsWith('base64://')) continue;
     if (isEntryMediaRelPath(ref)) {
       const existing = path.join(baseDir, ref);
-      if (await RU.fileExists(existing)) return ref;
+      if (await RuntimeUtil.fileExists(existing)) return ref;
     }
-    if (isPathLike(ref) && await RU.fileExists(ref)) {
+    if (isPathLike(ref) && await RuntimeUtil.fileExists(ref)) {
       const rel = `${groupId}/${mediaType}/${path.basename(ref)}`;
       const dest = path.join(baseDir, rel);
-      await RU.mkdir(path.dirname(dest));
+      await RuntimeUtil.mkdir(path.dirname(dest));
       await fs.copyFile(ref, dest);
       return rel;
     }
@@ -242,7 +233,7 @@ export async function persistEntryMedia(
 
   file.name = `${groupId}/${mediaType}/${file.name}`;
   file.path = path.join(baseDir, file.name!);
-  await RU.mkdir(path.dirname(file.path));
-  await RU.writeFile(file.path, file.buffer);
+  await RuntimeUtil.mkdir(path.dirname(file.path));
+  await RuntimeUtil.writeFile(file.path, file.buffer);
   return file.name!;
 }

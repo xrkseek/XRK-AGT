@@ -46,7 +46,7 @@ flowchart TD
 | 入口 | 行为 |
 |------|------|
 | `node dist/app.js`（菜单） | 仅环境验证（Node ≥ 26、目录预热），尽快进菜单 |
-| `node dist/app.js server`（含 Ctrl+C 热重启子进程） | 完整依赖检查后再加载 `start.js` |
+| `node dist/app.js server`（含 Ctrl+C 热重启子进程） | 完整依赖检查后再加载 `dist/start.js`（源码 `start.ts`） |
 
 **server 依赖步骤**（`src/utils/bootstrap-deps.ts`，跨平台见 `src/utils/command-spawn.ts`）：
 
@@ -59,7 +59,7 @@ flowchart TD
 
 ---
 
-## start.js 与 AgentRuntime
+## start.ts / `dist/start.js` 与 AgentRuntime
 
 - **交互菜单**：选端口、启停服务、Playwright 浏览器安装、`pnpm run setup:browsers` 等价入口。
 - **server 模式**：子进程跑 `dist/app.js` → AgentRuntime，便于开发热重启。
@@ -110,6 +110,7 @@ pnpm debug                 # build && node dist/debug.js
 
 ## 进一步阅读
 
+- [上线底层检查单.md](上线底层检查单.md) — 发版次日真机冒烟（dist · 探活 · harness · `/xrk/` · 日志）  
 - [app-dev.md](app-dev.md) — Web 控制台、前后端协作、runtimeConfig 用法  
 - [agent-runtime.md](agent-runtime.md) — AgentRuntime 生命周期、中间件、关闭流程  
 - [database.md](database.md) — Redis（含 `scripts/ensure-redis.mjs` 探测/拉起）  
@@ -117,4 +118,4 @@ pnpm debug                 # build && node dist/debug.js
 
 ---
 
-*最后更新：2026-09-06*
+*最后更新：2026-09-12*

@@ -18,7 +18,41 @@ import { throwWebSearchApiError, withTrustedWebSearchEndpoint } from './web-sear
 const MINIMAX_SEARCH_ENDPOINT_GLOBAL = 'https://api.minimax.io/v1/coding_plan/search'
 const MINIMAX_SEARCH_ENDPOINT_CN = 'https://api.minimaxi.com/v1/coding_plan/search'
 
-function resolveMiniMaxApiKey(runtime: Record<string, any>) {
+type MiniMaxRuntime = {
+  minimax?: {
+    apiKey?: string
+    region?: string
+    apiHost?: string
+    baseUrl?: string
+  }
+  maxResults?: number
+  timeoutSeconds?: number
+  cacheTtlMinutes?: number
+}
+
+type MiniMaxSearchParams = {
+  query?: string
+  count?: number
+}
+
+type MiniMaxOrganicEntry = {
+  title?: string
+  link?: string
+  snippet?: string
+  date?: string
+}
+
+type MiniMaxRelatedSearch = {
+  query?: unknown
+}
+
+type MiniMaxSearchResponse = {
+  base_resp?: { status_code?: number; status_msg?: string }
+  organic?: MiniMaxOrganicEntry[]
+  related_searches?: MiniMaxRelatedSearch[]
+}
+
+function resolveMiniMaxApiKey(runtime: MiniMaxRuntime) {
   return runtime?.minimax?.apiKey?.trim?.() || ''
 }
 
@@ -31,7 +65,7 @@ function isMiniMaxCnHost(value: unknown) {
   }
 }
 
-function resolveMiniMaxRegion(runtime: Record<string, any>) {
+function resolveMiniMaxRegion(runtime: MiniMaxRuntime) {
   const configured = runtime?.minimax?.region?.trim?.()?.toLowerCase?.()
   if (configured === 'cn' || configured === 'global') return configured
   if (isMiniMaxCnHost(runtime?.minimax?.apiHost)) return 'cn'
@@ -39,7 +73,7 @@ function resolveMiniMaxRegion(runtime: Record<string, any>) {
   return 'global'
 }
 
-function resolveMiniMaxEndpoint(runtime: Record<string, any>) {
+function resolveMiniMaxEndpoint(runtime: MiniMaxRuntime) {
   return resolveMiniMaxRegion(runtime) === 'cn'
     ? MINIMAX_SEARCH_ENDPOINT_CN
     : MINIMAX_SEARCH_ENDPOINT_GLOBAL
@@ -54,8 +88,8 @@ export function missingMiniMaxApiKeyPayload() {
 }
 
 export async function runMiniMaxSearch(
-  params: Record<string, any>,
-  runtime: Record<string, any> = {}
+  params: MiniMaxSearchParams,
+  runtime: MiniMaxRuntime = {}
 ) {
   const apiKey = resolveMiniMaxApiKey(runtime)
   if (!apiKey) return missingMiniMaxApiKeyPayload()
@@ -73,7 +107,7 @@ export async function runMiniMaxSearch(
   if (cached) return cached
 
   const start = Date.now()
-  const data = (await withTrustedWebSearchEndpoint(
+  const data = await withTrustedWebSearchEndpoint(
     {
       url: endpoint,
       timeoutSeconds,
@@ -89,16 +123,16 @@ export async function runMiniMaxSearch(
     },
     async (res: Response) => {
       if (!res.ok) await throwWebSearchApiError(res, 'MiniMax Search')
-      return res.json()
+      return res.json() as Promise<MiniMaxSearchResponse>
     }
-  )) as any
+  )
 
   if (data.base_resp?.status_code && data.base_resp.status_code !== 0) {
     throw new Error(`MiniMax Search API error: ${data.base_resp.status_msg || 'unknown'}`)
   }
 
   const organic = Array.isArray(data.organic) ? data.organic : []
-  const results = organic.slice(0, Math.min(count, MAX_SEARCH_COUNT)).map((entry: any) => {
+  const results = organic.slice(0, Math.min(count, MAX_SEARCH_COUNT)).map((entry) => {
     const title = entry.title ?? ''
     const url = entry.link ?? ''
     const snippet = entry.snippet ?? ''
@@ -113,9 +147,9 @@ export async function runMiniMaxSearch(
 
   const relatedSearches = Array.isArray(data.related_searches)
     ? data.related_searches
-        .map((r: any) => r.query)
-        .filter((q: unknown) => typeof q === 'string' && (q as string).length > 0)
-        .map((q: string) => wrapWebContent(q, 'web_search'))
+        .map((r) => r.query)
+        .filter((q): q is string => typeof q === 'string' && q.length > 0)
+        .map((q) => wrapWebContent(q, 'web_search'))
     : undefined
 
   const payload = {

@@ -8,7 +8,7 @@ description: 当你需要开发/调试 AiWorkflow 工作流、出站裁剪、策
 ## 文档与代码
 
 - 契约：[docs/agent-context.md](../../../docs/agent-context.md) · [docs/ai-workflow.md](../../../docs/ai-workflow.md) · [docs/harness-module-loop.md](../../../docs/harness-module-loop.md)
-- 代码：`src/infrastructure/ai-workflow/ai-workflow.js` · `harness-module-loop.js` · `loader.js` · `chat-pipeline.js`
+- 代码：`src/infrastructure/ai-workflow/ai-workflow.ts` · `harness-module-loop.ts` · `loader.ts` · `chat-pipeline.ts`
 
 ## 工作流
 
@@ -16,8 +16,9 @@ description: 当你需要开发/调试 AiWorkflow 工作流、出站裁剪、策
 - 配置：`data/server_bots/{port}/ai-workflow.yaml`；schema `commonconfig/system/system-ai-workflow.js`
 - 工具：`registerMCPTool` → `this.mcpTools`；远程挂载：`export function getMcpServers()` 或 yaml `mcp.remote`
 - **Tool 环**：`callAI` / `/v1`+workflows → `@xrkseek/harness`（`runHarnessModuleLoop`）
+- **MCP 执行**：`MCPToolAdapter` → `MCPServer.handleToolCall`；**禁止**迁到 SDK `createMcpClient`（见 [harness-module-loop.md](../../../docs/harness-module-loop.md)「MCP 执行边界」· ADR-0002）
 - **工厂**：仅单次 `chat`/`chatStream`（无 MCP 多轮）
-- **出站**：`prepareOutboundMessages` = contextWindow trim
+- **出站**：`prepareOutboundMessages` = contextWindow **硬裁**；harness `resolveHarnessCompaction` = 同源 budget **软压**（见 [agent-context.md](../../../docs/agent-context.md) §5.1）
 - **策略/安全**：`policies[]` · `security.toolScan` · `security.approval`；执行门禁在 `MCPServer.handleToolCall`
 - **斜杠**：`slash-commands.js`（`/recipe`）；microagents：`trigger-microagents.js`
 - Shell：`#utils/exec-async.js`；禁止 `promisify(exec)`（skill **`xrk-node-runtime`**）

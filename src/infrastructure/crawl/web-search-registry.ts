@@ -15,6 +15,11 @@ import { runMiniMaxSearch } from './web-search-minimax.js'
 import { runFirecrawlSearch } from './web-search-firecrawl.js'
 import { runSearxngSearch } from './web-search-searxng.js'
 import { runOllamaSearch } from './web-search-ollama.js'
+import type {
+  WebSearchParams,
+  WebSearchResult,
+  WebSearchRuntime
+} from './web-search-shared.js'
 
 export type WebSearchProviderEntry = {
   id: string
@@ -23,7 +28,10 @@ export type WebSearchProviderEntry = {
   requiresCredential: boolean
   credentialField?: string
   autoDetectOrder: number
-  run: (...args: any[]) => any
+  run: (
+    params: WebSearchParams,
+    runtime?: WebSearchRuntime
+  ) => Promise<WebSearchResult> | WebSearchResult
 }
 
 export const WEB_SEARCH_PROVIDERS: WebSearchProviderEntry[] = [
@@ -49,7 +57,8 @@ export const WEB_SEARCH_PROVIDERS: WebSearchProviderEntry[] = [
     hint: 'ai-workflow.crawl.webSearch.exa.apiKey',
     requiresCredential: true,
     autoDetectOrder: 56,
-    run: runExaSearch
+    // Exa 入参类型更窄；编排层统一 WebSearchParams / WebSearchRuntime
+    run: runExaSearch as WebSearchProviderEntry['run']
   },
   {
     id: 'tavily',
@@ -142,10 +151,12 @@ export function getWebSearchProvider(id: unknown) {
 
 export function isWebSearchProviderConfigured(
   provider: WebSearchProviderEntry,
-  runtime: Record<string, any> = {}
+  runtime: WebSearchRuntime = {}
 ) {
   if (!provider.requiresCredential) return true
-  const scoped = getWebSearchProviderScope(runtime, provider.id)
+  const scoped = getWebSearchProviderScope(runtime, provider.id) as
+    | { apiKey?: string; baseUrl?: string }
+    | undefined
   if (provider.credentialField === 'baseUrl') {
     return Boolean(scoped?.baseUrl?.trim?.())
   }
@@ -153,8 +164,8 @@ export function isWebSearchProviderConfigured(
 }
 
 /** 有凭据的提供商优先，keyless 最后 */
-export function resolveAutoDetectProviderId(runtime: Record<string, any> = {}) {
-  const explicit = runtime.provider?.trim?.() || ''
+export function resolveAutoDetectProviderId(runtime: WebSearchRuntime = {}) {
+  const explicit = typeof runtime.provider === 'string' ? runtime.provider.trim() : ''
   if (explicit && getWebSearchProvider(explicit)) return explicit
 
   const sorted = [...WEB_SEARCH_PROVIDERS].sort((a, b) => a.autoDetectOrder - b.autoDetectOrder)
@@ -168,7 +179,7 @@ export function resolveAutoDetectProviderId(runtime: Record<string, any> = {}) {
   return 'parallel-free'
 }
 
-export function listWebSearchProviderMeta(runtime: Record<string, any> = {}) {
+export function listWebSearchProviderMeta(runtime: WebSearchRuntime = {}) {
   return WEB_SEARCH_PROVIDERS.map((p) => ({
     id: p.id,
     label: p.label,

@@ -163,8 +163,11 @@ function loadAgentCatalog(
     const got = readTextFileUnderWorkspaceRootCached(c.root, c.abs, 512 * 1024);
     if (!got.ok) continue;
     try {
-      const data: any = c.abs.endsWith('.json') ? JSON.parse(got.content) : YAML.parse(got.content);
-      const list = data?.agents || data?.subagents || (Array.isArray(data) ? data : null);
+      const data: unknown = c.abs.endsWith('.json') ? JSON.parse(got.content) : YAML.parse(got.content);
+      const record = data && typeof data === 'object' && !Array.isArray(data)
+        ? data as Record<string, unknown>
+        : null;
+      const list = record?.agents ?? record?.subagents ?? (Array.isArray(data) ? data : null);
       if (!Array.isArray(list) || list.length === 0) continue;
       return { list: list as AgentCatalogItem[], sourceRel: c.rel };
     } catch {
@@ -270,7 +273,7 @@ function collectMergedRulesText(
   return acc.trim();
 }
 
-function sliceWorkspaceCfg(aiWorkflowCfg: Record<string, any> | null | undefined): AgentWorkspaceCfg {
+function sliceWorkspaceCfg(aiWorkflowCfg: Record<string, unknown> | null | undefined): AgentWorkspaceCfg {
   return (aiWorkflowCfg?.agentWorkspace ?? {}) as AgentWorkspaceCfg;
 }
 
@@ -548,7 +551,7 @@ export async function buildAgentWorkspaceSection(
 
 export async function appendAgentWorkspaceToPrompt(
   basePrompt: unknown,
-  aiWorkflowCfg: Record<string, any> = {},
+  aiWorkflowCfg: Record<string, unknown> = {},
   streamName = '',
   opts: BuildWorkspaceOpts = {},
 ): Promise<unknown> {
@@ -560,7 +563,7 @@ export async function appendAgentWorkspaceToPrompt(
 
 export async function mergeAgentWorkspaceIntoMessages(
   messages: ChatMessage[] | unknown,
-  aiWorkflowCfg: Record<string, any> = {},
+  aiWorkflowCfg: Record<string, unknown> = {},
   streamName = '',
 ): Promise<ChatMessage[] | unknown> {
   if (!Array.isArray(messages)) return messages;

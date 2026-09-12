@@ -101,6 +101,8 @@ __pycache__/
 # TypeScript
 *.tsbuildinfo
 *.d.ts
+!src/types/
+!src/types/**/*.d.ts
 
 # Coverage
 coverage/
@@ -125,15 +127,25 @@ trash/
 
 # Framework tests 已入库（pnpm test / test:fast）；勿再 ignore
 
-# 本地运维脚本默认不入库；Redis 引导必须随仓
+# 本地运维脚本默认不入库；Redis 引导 / any-heat / 资源拷贝必须随仓
 scripts/*
 !scripts/ensure-redis.mjs
 !scripts/ensure-redis.cmd
 !scripts/copy-runtime-assets.mjs
+!scripts/any-heat.mjs
 *.reg
 
 # 本地 Windows 注册表/卸载项清理备份（scripts/clean-empty-shell-uninstall.ps1）
 xrk-uninstall-backup-*.reg
+
+# 控制台本地备份（大改前快照，勿入库）
+.backup-xrk-console-*/
+.pull-backup-*/
+
+# 根目录临时探针 / 实验页（勿入库）
+/extract_check.js
+/td_extract.js
+/tower-defense.html
 
 # 办事助手：种子 agents/ 入库；运行时 data/ai-workspace/{id}/ 见 data/.gitignore
 .agents/

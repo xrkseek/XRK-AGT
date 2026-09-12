@@ -10,13 +10,42 @@ import RuntimeUtil from '#utils/runtime-util.js'
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js'
 import { getWorkflowRequestContext } from '#infrastructure/ai-workflow/workflow-request-context.js'
 import { normalizeStringArray } from '#utils/string-array-utils.js'
+import { normalizeError } from '#utils/normalize-error.js'
 
 export const CHAT_FRAMEWORK_TOOL_WORKFLOWS = ['web', 'browser']
 
-export function isChatToolSurface(stream: any) {
+type ToolSurfaceStream = {
+  name?: string
+  primaryStream?: string
+  frameworkToolSurface?: boolean
+  _mergedStreams?: Array<{ name?: string } | null | undefined>
+  buildSystemPrompt?: (context: Record<string, unknown>) => unknown
+}
+
+type WorkflowLoaderLike = {
+  workflows: Map<string, ToolSurfaceStream>
+  getWorkflow: (name: string) => ToolSurfaceStream | null
+}
+
+/** AiWorkflowLoader 单例已具备 workflows / getWorkflow；包装为最小面，避免双重断言 */
+function asLoader(): WorkflowLoaderLike {
+  return {
+    get workflows() {
+      return AiWorkflowLoader.workflows as Map<string, ToolSurfaceStream>
+    },
+    getWorkflow(name: string) {
+      return AiWorkflowLoader.getWorkflow(name) as ToolSurfaceStream | null
+    },
+  }
+}
+
+export function isChatToolSurface(stream: ToolSurfaceStream | null | undefined) {
   if (!stream) return false
   if (stream.name === 'chat' || stream.primaryStream === 'chat') return true
-  if (Array.isArray(stream._mergedStreams) && stream._mergedStreams.some((s: any) => s?.name === 'chat')) {
+  if (
+    Array.isArray(stream._mergedStreams) &&
+    stream._mergedStreams.some((s) => s?.name === 'chat')
+  ) {
     return true
   }
   return (
@@ -43,15 +72,15 @@ export function partitionToolStreamNames(names: unknown) {
 export function getFrameworkToolWorkflowNames() {
   const fromMeta: string[] = []
   try {
-    for (const s of (AiWorkflowLoader as any).workflows.values()) {
+    for (const s of asLoader().workflows.values()) {
       if (!s?.frameworkToolSurface || !s.name) continue
       if (Array.isArray(s._mergedStreams) && s._mergedStreams.length > 0) continue
       if (!fromMeta.includes(s.name)) fromMeta.push(s.name)
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     RuntimeUtil.makeLog(
       'debug',
-      `扫描 frameworkToolSurface 失败: ${err?.message || err}`,
+      `扫描 frameworkToolSurface 失败: ${normalizeError(err).message}`,
       'ChatToolStreams'
     )
   }
@@ -67,15 +96,15 @@ export function expandChatToolWorkflowWhitelist(baseNames: unknown) {
   return names
 }
 
-function streamOwnNames(stream: any) {
+function streamOwnNames(stream: ToolSurfaceStream | null | undefined) {
   if (Array.isArray(stream?._mergedStreams) && stream._mergedStreams.length > 0) {
-    return stream._mergedStreams.map((s: any) => s.name).filter(Boolean)
+    return stream._mergedStreams.map((s) => s?.name).filter((n): n is string => Boolean(n))
   }
-  return [stream?.name].filter(Boolean)
+  return [stream?.name].filter((n): n is string => Boolean(n))
 }
 
 /** 供 AiWorkflow / 副提示解析工具流名单（先读 ALS，避免单例缓存串请求） */
-export function resolveToolStreamNames(stream: any) {
+export function resolveToolStreamNames(stream: ToolSurfaceStream | null | undefined) {
   const ctx = getWorkflowRequestContext()
   if (Array.isArray(ctx?.toolStreamNames)) {
     return normalizeStringArray(ctx.toolStreamNames)
@@ -83,7 +112,7 @@ export function resolveToolStreamNames(stream: any) {
 
   const own = streamOwnNames(stream)
   if (!isChatToolSurface(stream)) return own
-  if (Array.isArray(stream._mergedStreams) && stream._mergedStreams.length > 0) return own
+  if (Array.isArray(stream?._mergedStreams) && stream._mergedStreams.length > 0) return own
   return expandChatToolWorkflowWhitelist(own)
 }
 
@@ -91,15 +120,18 @@ export function resolveToolStreamNames(stream: any) {
  * 收集已并入 chat 工具面的副流 `buildSystemPrompt`，拼成 system「可用能力」段。
  * 例如 merge 含 `tools` 时注入 `### tools` + 文件工具使用约定（含 apply_edit / repo_map 等）。
  */
-export function collectAuxiliaryStreamPrompts(stream: any, context: Record<string, any> = {}) {
+export function collectAuxiliaryStreamPrompts(
+  stream: ToolSurfaceStream | null | undefined,
+  context: Record<string, unknown> = {}
+) {
   if (!stream || !isChatToolSurface(stream)) return ''
   const names = resolveToolStreamNames(stream)
-  const skip = new Set(['chat', stream.name].filter(Boolean))
+  const skip = new Set(['chat', stream.name].filter(Boolean) as string[])
   const parts: string[] = []
 
   for (const name of names) {
     if (skip.has(name) || isRemoteMcpStreamName(name) || name.startsWith('chat-')) continue
-    const aux = (AiWorkflowLoader as any).getWorkflow(name)
+    const aux = asLoader().getWorkflow(name)
     if (!aux || typeof aux.buildSystemPrompt !== 'function') continue
     try {
       const out = aux.buildSystemPrompt(context)

@@ -15,7 +15,125 @@ import AzureOpenAICompatibleLLMClient from './AzureOpenAICompatibleLLMClient.js'
 import runtimeConfig from '#infrastructure/config/config.js';
 import { assertProviderAllowed } from '#utils/runtime-policy.js';
 
-type ClientFactory = (config: any) => any;
+type LlmClientConfig = Record<string, unknown>;
+type ClientFactory = (config: LlmClientConfig) => unknown;
+type CompatClientClass = new (config: LlmClientConfig) => unknown;
+
+type FactoryType = 'builtin' | 'compat';
+
+type FactoryRegistryEntry = {
+  configKey: string;
+  factoryType: FactoryType;
+  protocol?: string;
+  defaultProtocol?: string;
+  displayName: string;
+  clientClass?: CompatClientClass;
+};
+
+type ProviderYamlEntry = Record<string, unknown> & {
+  key?: unknown;
+  provider?: unknown;
+  protocol?: unknown;
+  label?: unknown;
+  model?: unknown;
+  chatModel?: unknown;
+  deployment?: unknown;
+  baseUrl?: unknown;
+  maxTokens?: unknown;
+  max_tokens?: unknown;
+  temperature?: unknown;
+  apiKey?: unknown;
+  enableStream?: unknown;
+  enableTools?: unknown;
+};
+
+type ProviderEntry = {
+  key: string;
+  protocol: string;
+  factory: FactoryRegistryEntry;
+  entry: ProviderYamlEntry;
+};
+
+type ModelProfile = {
+  key: string;
+  factory: string;
+  factoryConfigKey: string;
+  factoryDisplayName: string;
+  factoryType: FactoryType;
+  protocol: string;
+  label: string;
+  description: string;
+  tags: string[];
+  model: unknown;
+  baseUrl: unknown;
+  maxTokens: unknown;
+  temperature: unknown;
+  hasApiKey: boolean;
+  capabilities: string[];
+  source: string;
+};
+
+type ModelProfileFilter = {
+  protocol?: string | string[];
+  hasApiKey?: boolean;
+  capability?: string;
+  factory?: string | string[];
+};
+
+type FactoryListItem = {
+  configKey: string;
+  id: string;
+  displayName: string;
+  factoryType: FactoryType;
+  protocol: string | null;
+};
+
+type VendorEndpoint = {
+  key: string;
+  label: string;
+  model: unknown;
+  baseUrl: unknown;
+  protocol: string;
+  hasApiKey: boolean;
+  capabilities: string[];
+};
+
+type VendorBucket = {
+  id: string;
+  label: string;
+  configKey: string;
+  factoryType: FactoryType;
+  protocol: string | null;
+  endpoints: VendorEndpoint[];
+};
+
+type ResolveProviderInput = {
+  provider?: unknown;
+  model?: unknown;
+  llm?: unknown;
+  profile?: unknown;
+  defaultProvider?: unknown;
+};
+
+type ResolveProviderOptions = {
+  allowDefaultAliases?: boolean;
+  useAistreamDefault?: boolean;
+};
+
+type CreateClientConfig = ResolveProviderInput &
+  Record<string, unknown> & {
+    useAistreamDefault?: boolean;
+    allowDefaultAliases?: boolean;
+    protocol?: unknown;
+  };
+
+type ProviderResolvedConfig = ProviderYamlEntry & {
+  provider: string;
+  protocol: string;
+  factoryType: FactoryType;
+  factory: string;
+  _clientClass: CompatClientClass | null;
+};
 
 const builtinClientFactories = new Map<string, ClientFactory>([
   // builtin：各厂商官方 SDK/文档路径，禁止与 openai_compat 混用
@@ -29,7 +147,7 @@ const builtinClientFactories = new Map<string, ClientFactory>([
 ]);
 
 /** configKey → 侧栏工厂 id（anthropic_compat_llm → anthropic_compat，anthropic_llm → anthropic） */
-export function resolveFactoryId(configKey: any = ''): string {
+export function resolveFactoryId(configKey: unknown = ''): string {
   const key = String(configKey || '').trim();
   if (!key) return '';
   if (key.endsWith('_llm')) return key.slice(0, -4);
@@ -37,13 +155,14 @@ export function resolveFactoryId(configKey: any = ''): string {
 }
 
 /** 读取工厂 YAML（须走 runtimeConfig.getConfig； bracket 访问对多数 *_compat_llm 无效） */
-function readFactoryCfg(configKey: any): any {
-  if (!configKey || typeof (runtimeConfig as any)?.getConfig !== 'function') return {};
-  return (runtimeConfig as any).getConfig(configKey) || {};
+function readFactoryCfg(configKey: unknown): Record<string, unknown> {
+  if (!configKey || typeof runtimeConfig?.getConfig !== 'function') return {};
+  const cfg = runtimeConfig.getConfig(String(configKey));
+  return cfg && typeof cfg === 'object' ? cfg : {};
 }
 
-/** 所有 LLM 工厂统一从 providers[] 解析；YAML 默认仅 providers: [] */
-const factoryRegistry: any[] = [
+/** 所有 LLM 工厂统一从 providers[] 解析；YAML 默认仅 providers: []（顺序与原版一致） */
+const factoryRegistry: FactoryRegistryEntry[] = [
   { configKey: 'volcengine_llm', factoryType: 'builtin', protocol: 'volcengine', displayName: '火山引擎（官方）' },
   { configKey: 'deepseek_llm', factoryType: 'builtin', protocol: 'deepseek', displayName: 'DeepSeek（官方）' },
   { configKey: 'xiaomimimo_llm', factoryType: 'builtin', protocol: 'xiaomimimo', displayName: '小米 MiMo（官方）' },
@@ -61,30 +180,31 @@ const factoryRegistry: any[] = [
   { configKey: 'azure_openai_compat_llm', factoryType: 'compat', defaultProtocol: 'azure-openai', displayName: 'Azure OpenAI 兼容', clientClass: AzureOpenAICompatibleLLMClient },
 ];
 
-function normalizeProviderKey(name: any): string {
+function normalizeProviderKey(name: unknown): string {
   return (name || '').toString().trim().toLowerCase();
 }
 
 function resolveDefaultProvider(): string {
-  return normalizeProviderKey(
-    (runtimeConfig as any)?.aiWorkflow?.llm?.Provider || (runtimeConfig as any)?.aiWorkflow?.llm?.provider,
-  );
+  const llm = (runtimeConfig.aiWorkflow?.llm ?? {}) as Record<string, unknown>;
+  return normalizeProviderKey(llm.Provider ?? llm.provider);
 }
 
-function normalizeProtocol(value: any): string {
+function normalizeProtocol(value: unknown): string {
   const protocol = normalizeProviderKey(value);
   if (protocol === 'openai-responses') return 'openai-response';
   return protocol;
 }
 
-function getProviderEntries(): any[] {
-  const entries: any[] = [];
+function getProviderEntries(): ProviderEntry[] {
+  const entries: ProviderEntry[] = [];
 
   for (const factory of factoryRegistry) {
     const factoryCfg = readFactoryCfg(factory.configKey);
     const providerList = Array.isArray(factoryCfg.providers) ? factoryCfg.providers : [];
 
-    for (const providerEntry of providerList) {
+    for (const raw of providerList) {
+      if (!raw || typeof raw !== 'object') continue;
+      const providerEntry = raw as ProviderYamlEntry;
       const key = normalizeProviderKey(providerEntry.key || providerEntry.provider);
       if (!key) continue;
 
@@ -105,7 +225,7 @@ function getProviderEntries(): any[] {
 }
 
 export default class LLMFactory {
-  static registerProvider(name: any, factoryFn: ClientFactory): void {
+  static registerProvider(name: unknown, factoryFn: ClientFactory): void {
     builtinClientFactories.set(String(name).toLowerCase(), factoryFn);
   }
 
@@ -113,7 +233,7 @@ export default class LLMFactory {
     return getProviderEntries().map((x) => x.key);
   }
 
-  static listFactories(): any[] {
+  static listFactories(): FactoryListItem[] {
     return factoryRegistry.map((factory) => ({
       configKey: factory.configKey,
       id: resolveFactoryId(factory.configKey),
@@ -124,17 +244,17 @@ export default class LLMFactory {
   }
 
   /** 控制台 /api/ai/models 用的 profile 列表（含 capabilities 等运行时字段） */
-  static listModelProfiles(filter: any = {}): any[] {
-    const rows = getProviderEntries().map(({ key, protocol, factory, entry }) => ({
+  static listModelProfiles(filter: ModelProfileFilter = {}): ModelProfile[] {
+    const rows = getProviderEntries().map(({ key, protocol, factory, entry }): ModelProfile => ({
       key,
       factory: resolveFactoryId(factory.configKey),
       factoryConfigKey: factory.configKey,
       factoryDisplayName: factory.displayName || resolveFactoryId(factory.configKey),
       factoryType: factory.factoryType,
       protocol,
-      label: entry.label || key,
+      label: String(entry.label || key),
       description: `配置来源: ${factory.configKey}.providers[]`,
-      tags: [] as string[],
+      tags: [],
       model: entry.model || entry.chatModel || entry.deployment || null,
       baseUrl: entry.baseUrl || null,
       maxTokens: entry.maxTokens ?? entry.max_tokens ?? null,
@@ -150,27 +270,28 @@ export default class LLMFactory {
     let result = rows;
     if (filter.protocol) {
       const protos = Array.isArray(filter.protocol) ? filter.protocol : [filter.protocol];
-      const set = new Set(protos.map((p: any) => normalizeProtocol(p)));
+      const set = new Set(protos.map((p) => normalizeProtocol(p)));
       result = result.filter((row) => set.has(normalizeProtocol(row.protocol)));
     }
     if (filter.hasApiKey === true) {
       result = result.filter((row) => row.hasApiKey);
     }
     if (filter.capability) {
-      result = result.filter((row) => row.capabilities?.includes(filter.capability));
+      const capability = filter.capability
+      result = result.filter((row) => row.capabilities?.includes(capability));
     }
     if (filter.factory) {
       const factories = Array.isArray(filter.factory) ? filter.factory : [filter.factory];
-      const set = new Set(factories.map((f: any) => normalizeProviderKey(f)));
+      const set = new Set(factories.map((f) => normalizeProviderKey(f)));
       result = result.filter((row) => set.has(normalizeProviderKey(row.factory)));
     }
     return result;
   }
 
   /** 侧栏 LLM 工厂 → 端点分组（与 listFactories 顺序一致） */
-  static listVendors(profiles: any = null): any[] {
+  static listVendors(profiles: ModelProfile[] | null = null): VendorBucket[] {
     const rows = profiles ?? this.listModelProfiles();
-    const vendorMap = new Map(
+    const vendorMap = new Map<string, VendorBucket>(
       this.listFactories().map((factory) => [
         factory.id,
         {
@@ -179,7 +300,7 @@ export default class LLMFactory {
           configKey: factory.configKey,
           factoryType: factory.factoryType,
           protocol: factory.protocol,
-          endpoints: [] as any[],
+          endpoints: [],
         },
       ]),
     );
@@ -204,19 +325,22 @@ export default class LLMFactory {
     );
   }
 
-  static hasProvider(name: any): boolean {
+  static hasProvider(name: unknown): boolean {
     return !!this.getProviderConfig(name);
   }
 
-  static resolveProvider(input: any = {}, options: any = {}): string | null {
+  static resolveProvider(
+    input: ResolveProviderInput = {},
+    options: ResolveProviderOptions = {},
+  ): string | null {
     const allowDefaultAliases = options.allowDefaultAliases !== false;
     const useAistreamDefault = options.useAistreamDefault !== false;
-    const isDefaultAlias = (v: any) => {
+    const isDefaultAlias = (v: unknown) => {
       const s = normalizeProviderKey(v);
       return s === 'default' || s === 'auto';
     };
 
-    const candidates = [
+    const candidates: unknown[] = [
       input.provider,
       input.model,
       input.llm,
@@ -237,7 +361,7 @@ export default class LLMFactory {
     return null;
   }
 
-  static getProviderConfig(providerName: any): any {
+  static getProviderConfig(providerName: unknown): ProviderResolvedConfig | null {
     const key = normalizeProviderKey(providerName);
     if (!key) return null;
 
@@ -256,7 +380,7 @@ export default class LLMFactory {
     };
   }
 
-  static createClient(config: any = {}): any {
+  static createClient(config: CreateClientConfig = {}): unknown {
     const useAistreamDefault = config.useAistreamDefault !== false;
     const provider = this.resolveProvider(config, {
       allowDefaultAliases: config.allowDefaultAliases !== false,
@@ -276,14 +400,14 @@ export default class LLMFactory {
       throw new Error(`不支持的 LLM 提供商: ${provider}`);
     }
 
-    const sanitizedConfig: any = {};
+    const sanitizedConfig: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(config || {})) {
       if (value !== undefined) {
         sanitizedConfig[key] = value;
       }
     }
 
-    const clientConfig: any = {
+    const clientConfig: ProviderResolvedConfig & Record<string, unknown> = {
       ...resolved,
       ...sanitizedConfig,
       provider,
@@ -296,11 +420,11 @@ export default class LLMFactory {
       return new _clientClass(rest);
     }
 
-    const builtinFactory = builtinClientFactories.get(rest.protocol);
+    const builtinFactory = builtinClientFactories.get(String(rest.protocol));
     if (builtinFactory) {
       return builtinFactory(rest);
     }
 
-    return new (_clientClass || OpenAICompatibleLLMClient)(rest);
+    return new (_clientClass || OpenAICompatibleLLMClient)(rest as any);
   }
 }

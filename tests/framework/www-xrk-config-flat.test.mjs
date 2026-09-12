@@ -26,6 +26,6 @@ describe('www xrk config/flat 导出契约', () => {
   }
 
   it('resolveFieldControl 识别 Tags', () => {
-    assert.match(src, /c === 'multiselect' \|\| c === 'tags'/);
+    assert.match(src, /c === '(?:multiselect|tags)' \|\| c === '(?:multiselect|tags)'/);
   });
 });

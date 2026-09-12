@@ -5,7 +5,10 @@ import {
   DEFAULT_SEARCH_COUNT,
   buildSearchCacheKey,
   resolveSiteName,
-  wrapWebContent
+  wrapWebContent,
+  type WebSearchHit,
+  type WebSearchParams,
+  type WebSearchResult
 } from './web-search-shared.js'
 
 export const PARALLEL_MAX_SEARCH_COUNT = 40
@@ -66,36 +69,38 @@ export function invalidSearchQueriesPayload() {
   }
 }
 
-export function mapParallelResults(response: { results?: unknown } | null | undefined) {
-  const raw = Array.isArray(response?.results) ? response.results : []
-  return raw
-    .filter((entry) => entry && typeof entry === 'object' && !Array.isArray(entry))
-    .map((entry: any) => {
-      const title = typeof entry.title === 'string' ? entry.title : ''
-      const url = typeof entry.url === 'string' ? entry.url : ''
-      const published =
-        typeof entry.publish_date === 'string' && entry.publish_date
-          ? entry.publish_date
-          : undefined
-      const excerpts = Array.isArray(entry.excerpts)
-        ? entry.excerpts
-            .filter((e: unknown) => typeof e === 'string')
-            .map((e: string) => wrapWebContent(e, 'web_search'))
-        : []
-      const description = excerpts.join('\n\n')
-      return {
-        title: title ? wrapWebContent(title, 'web_search') : '',
-        url,
-        description,
-        snippet: description,
-        siteName: resolveSiteName(url) || undefined,
-        ...(published ? { published } : {}),
-        ...(excerpts.length ? { excerpts } : {})
-      }
-    })
+function isParallelResultEntry(entry: unknown): entry is Record<string, unknown> {
+  return Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry)
 }
 
-export function stripParallelGeneratedSessionId(payload: Record<string, any>) {
+export function mapParallelResults(response: { results?: unknown } | null | undefined): WebSearchHit[] {
+  const raw = Array.isArray(response?.results) ? response.results : []
+  return raw.filter(isParallelResultEntry).map((entry) => {
+    const title = typeof entry.title === 'string' ? entry.title : ''
+    const url = typeof entry.url === 'string' ? entry.url : ''
+    const published =
+      typeof entry.publish_date === 'string' && entry.publish_date
+        ? entry.publish_date
+        : undefined
+    const excerpts = Array.isArray(entry.excerpts)
+      ? entry.excerpts
+          .filter((e: unknown): e is string => typeof e === 'string')
+          .map((e) => wrapWebContent(e, 'web_search'))
+      : []
+    const description = excerpts.join('\n\n')
+    return {
+      title: title ? wrapWebContent(title, 'web_search') : '',
+      url,
+      description,
+      snippet: description,
+      siteName: resolveSiteName(url) || undefined,
+      ...(published ? { published } : {}),
+      ...(excerpts.length ? { excerpts } : {})
+    }
+  })
+}
+
+export function stripParallelGeneratedSessionId(payload: WebSearchResult): WebSearchResult {
   if (!('sessionId' in payload)) return payload
   const { sessionId: _omit, ...rest } = payload
   return rest
@@ -122,7 +127,7 @@ export function buildParallelCacheKey(params: {
 }
 
 /** 从 query / search_queries 解析 Parallel 通用入参 */
-export function resolveParallelSearchInput(params: Record<string, any>) {
+export function resolveParallelSearchInput(params: WebSearchParams) {
   const objective = normalizeParallelObjective(params.objective)
   const cliQuery = normalizeParallelObjective(params.query)
   let searchQueries = normalizeParallelSearchQueries(params.search_queries)

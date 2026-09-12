@@ -8,15 +8,43 @@ import runtimeConfig from '#infrastructure/config/config.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import RuntimeUtil from '#utils/runtime-util.js';
 import MonitorService from '#infrastructure/ai-workflow/monitor-service.js';
+import { normalizeError } from '#utils/normalize-error.js';
 
-/** @type {Map<string, { resolve: Function, meta: object, timer: any }>} */
-const pending = new Map();
+type ApprovalDecision = 'allow' | 'deny';
 
-function cfg(): any {
-  const raw = getAiWorkflowConfigOptional()?.security?.approval ?? {};
+type ApprovalMeta = {
+  toolName: string;
+  args: Record<string, unknown>;
+  reason: string;
+  findings?: unknown[];
+  id?: string;
+};
+
+type PendingEntry = {
+  resolve: (decision: ApprovalDecision) => void;
+  meta: ApprovalMeta & { id: string };
+  timer: ReturnType<typeof setTimeout>;
+};
+
+/** 模块级队列：勿放进 class constructor */
+const pending = new Map<string, PendingEntry>();
+
+type ApprovalCfg = {
+  enabled: boolean;
+  timeoutMs: number;
+};
+
+function cfg(): ApprovalCfg {
+  const raw =
+    (
+      getAiWorkflowConfigOptional() as
+        | { security?: { approval?: Record<string, unknown> } }
+        | null
+        | undefined
+    )?.security?.approval ?? {};
   return {
     enabled: raw.enabled === true,
-    timeoutMs: typeof raw.timeoutMs === 'number' ? Math.max(5000, raw.timeoutMs) : 180_000
+    timeoutMs: typeof raw.timeoutMs === 'number' ? Math.max(5000, raw.timeoutMs) : 180_000,
   };
 }
 
@@ -25,9 +53,18 @@ export function isToolApprovalEnabled(): boolean {
   return cfg().enabled;
 }
 
-async function notifyMasters(text: any) {
-  const masters = (runtimeConfig.masterQQ || []).map(String).filter(Boolean);
-  const botIds = (Array.isArray((globalThis as any).AgentRuntime?.uin) ? [...(globalThis as any).AgentRuntime.uin] : [])
+type AgentRuntimeGlobal = {
+  uin?: Iterable<unknown> | unknown[];
+  sendFriendMsg?: (botId: string, qq: string, text: string) => Promise<unknown> | unknown;
+};
+
+async function notifyMasters(text: string): Promise<boolean> {
+  const masters = ((runtimeConfig as { masterQQ?: unknown[] }).masterQQ || [])
+    .map(String)
+    .filter(Boolean);
+  const runtime = (globalThis as typeof globalThis & { AgentRuntime?: AgentRuntimeGlobal })
+    .AgentRuntime;
+  const botIds = (Array.isArray(runtime?.uin) ? [...runtime.uin] : [])
     .map(String)
     .filter((id) => id && id !== 'stdin');
   if (!masters.length || !botIds.length) return false;
@@ -35,13 +72,13 @@ async function notifyMasters(text: any) {
   for (const botId of botIds) {
     for (const qq of masters) {
       try {
-        await (globalThis as any).AgentRuntime.sendFriendMsg(botId, qq, text);
+        await runtime?.sendFriendMsg?.(botId, qq, text);
         sent = true;
-      } catch (err) {
+      } catch (err: unknown) {
         RuntimeUtil.makeLog(
           'warn',
-          `[tool-approval] 通知主人失败 ${botId}/${qq}: ${(err as any)?.message || err}`,
-          'ToolApproval'
+          `[tool-approval] 通知主人失败 ${botId}/${qq}: ${normalizeError(err).message}`,
+          'ToolApproval',
         );
       }
     }
@@ -51,11 +88,11 @@ async function notifyMasters(text: any) {
 
 /**
  * 从主人消息解析编号。支持：`#批准` / `#批准ab12` / `#批准 ab12` / `#approve ab12`
- * @param {string} msg
- * @param {'allow'|'deny'} decision
- * @returns {{ decision: 'allow'|'deny', id: string } | null}
  */
-export function parseApprovalCommand(msg: any, decision: any) {
+export function parseApprovalCommand(
+  msg: unknown,
+  decision: ApprovalDecision,
+): { decision: ApprovalDecision; id: string } | null {
   const s = String(msg || '').trim();
   const allowRe = /^#(批准|approve)\s*([A-Za-z0-9_-]*)\s*$/i;
   const denyRe = /^#(拒绝|deny)\s*([A-Za-z0-9_-]*)\s*$/i;
@@ -64,11 +101,7 @@ export function parseApprovalCommand(msg: any, decision: any) {
   return { decision, id: String(m[2] || '').trim() };
 }
 
-/**
- * @param {{ toolName: string, args: object, reason: string, findings?: object[] }} meta
- * @returns {Promise<'allow'|'deny'>}
- */
-export async function requestToolApproval(meta: any) {
+export async function requestToolApproval(meta: ApprovalMeta): Promise<ApprovalDecision> {
   const { enabled, timeoutMs } = cfg();
   if (!enabled) return 'deny';
 
@@ -90,7 +123,7 @@ export async function requestToolApproval(meta: any) {
     `参数：${argPreview}`,
     '',
     `批准：#批准${id}  或  #批准 ${id}  或仅一条时发 #批准`,
-    `拒绝：#拒绝${id}  或  #拒绝 ${id}`
+    `拒绝：#拒绝${id}  或  #拒绝 ${id}`,
   ].join('\n');
 
   MonitorService.emit('tool:approval_requested', { id, ...meta });
@@ -109,26 +142,27 @@ export async function requestToolApproval(meta: any) {
       resolve('deny');
     }, timeoutMs);
     pending.set(id, {
-      resolve: (decision: any) => {
+      resolve: (decision: ApprovalDecision) => {
         clearTimeout(timer);
         pending.delete(id);
         MonitorService.emit('tool:approval_resolved', { id, decision });
         resolve(decision);
       },
       meta: { ...meta, id },
-      timer
+      timer,
     });
   });
 }
 
 /**
- * @param {string} [id] 空=仅当队列恰好 1 条时批/拒该条
- * @param {'allow'|'deny'} decision
- * @returns {{ ok: boolean, id?: string, error?: string }}
+ * @param id 空=仅当队列恰好 1 条时批/拒该条
  */
-export function resolveToolApproval(id: any, decision: any) {
+export function resolveToolApproval(
+  id: unknown,
+  decision: ApprovalDecision,
+): { ok: boolean; id?: string; error?: string } {
   const key = String(id || '').trim();
-  let entry;
+  let entry: PendingEntry | undefined;
   let resolvedId = key;
 
   if (key) {
@@ -139,12 +173,12 @@ export function resolveToolApproval(id: any, decision: any) {
     if (pending.size > 1) {
       return {
         ok: false,
-        error: `有 ${pending.size} 条待审批，请带编号：#批准<编号>`
+        error: `有 ${pending.size} 条待审批，请带编号：#批准<编号>`,
       };
     }
     const [[onlyId, onlyEntry]] = pending.entries();
     entry = onlyEntry;
-    resolvedId = onlyId;
+    resolvedId = onlyId!;
   }
 
   clearTimeout(entry.timer);
@@ -152,7 +186,6 @@ export function resolveToolApproval(id: any, decision: any) {
   return { ok: true, id: resolvedId };
 }
 
-/** @returns {Array<object>} */
-export function listPendingApprovals(): any[] {
+export function listPendingApprovals(): Array<ApprovalMeta & { id: string }> {
   return [...pending.values()].map((p) => p.meta);
 }

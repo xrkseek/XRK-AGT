@@ -7,7 +7,7 @@ import runtimeConfig from '#infrastructure/config/config.js';
 import CommonConfigRegistry from '#infrastructure/commonconfig/loader.js';
 import { HttpResponse } from '#utils/http-utils.js';
 
-const getConfig = (name: any) => CommonConfigRegistry?.get(name);
+const getConfig = (name: any): any => CommonConfigRegistry?.get(name);
 
 /** 多文件配置：system / llm_factories 等（有 configFiles + getConfigInstance） */
 function isMultiFileConfig(config: any) {
@@ -23,7 +23,7 @@ function invalidateRuntimeCfgCache(configName: any) {
 }
 
 const resolveConfigInstance = (name: any, keyPath: any) => {
-  const config = getConfig(name);
+  const config: any = getConfig(name);
   if (!config) return { error: `配置 ${name} 不存在` };
   if (isMultiFileConfig(config)) {
     if (!keyPath) return { error: `${config.displayName || name} 需要提供 path（子配置名称）` };

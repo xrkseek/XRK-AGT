@@ -1,11 +1,13 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const helper = path.join(root, 'tests/helpers/test-server.mjs');
+const API_KEY_FILE = path.join(root, 'config/server_config/api_key.json');
 
 function pickPort() {
   return 19000 + Math.floor(Math.random() * 800);
@@ -37,6 +39,18 @@ function waitForReady(child, timeoutMs = 120000) {
   });
 }
 
+/** server.auth.loopbackExempt 默认 false；/api/* 须带 X-API-Key（与生产一致） */
+function loadApiKey() {
+  const raw = JSON.parse(fs.readFileSync(API_KEY_FILE, 'utf8'));
+  const key = typeof raw?.key === 'string' ? raw.key.trim() : '';
+  if (!key) throw new Error(`empty API key in ${API_KEY_FILE}`);
+  return key;
+}
+
+function apiHeaders() {
+  return { 'X-API-Key': loadApiKey() };
+}
+
 describe('HTTP 端到端（真实启动 AgentRuntime）', () => {
   /** @type {import('node:child_process').ChildProcessWithoutNullStreams} */
   let child;
@@ -46,11 +60,13 @@ describe('HTTP 端到端（真实启动 AgentRuntime）', () => {
     port = pickPort();
     child = spawn(process.execPath, [helper], {
       cwd: root,
-      env: { ...process.env, XRK_TEST_PORT: String(port) },
-      stdio: ['ignore', 'pipe', 'pipe']
+      env: { ...process.env, XRK_TEST: '1', XRK_TEST_PORT: String(port) },
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
     let errBuf = '';
-    child.stderr?.on('data', (c) => { errBuf += c.toString(); });
+    child.stderr?.on('data', (c) => {
+      errBuf += c.toString();
+    });
     try {
       await waitForReady(child);
     } catch (e) {
@@ -73,8 +89,10 @@ describe('HTTP 端到端（真实启动 AgentRuntime）', () => {
     });
   });
 
-  it('GET /api/plugins/summary 200（127 免 Key）', async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/api/plugins/summary`);
+  it('GET /api/plugins/summary 200（X-API-Key）', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/plugins/summary`, {
+      headers: apiHeaders(),
+    });
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.success, true);
@@ -90,7 +108,9 @@ describe('HTTP 端到端（真实启动 AgentRuntime）', () => {
   });
 
   it('GET /api/plugins/tasks 200', async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/api/plugins/tasks`);
+    const res = await fetch(`http://127.0.0.1:${port}/api/plugins/tasks`, {
+      headers: apiHeaders(),
+    });
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.equal(body.success, true);
@@ -122,8 +142,10 @@ describe('HTTP 端到端（真实启动 AgentRuntime）', () => {
   });
 
   it('GET /api/health 就绪面（200 或 503）', async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/api/health`);
-    assert.ok(res.status === 200 || res.status === 503);
+    const res = await fetch(`http://127.0.0.1:${port}/api/health`, {
+      headers: apiHeaders(),
+    });
+    assert.ok(res.status === 200 || res.status === 503, `status=${res.status}`);
     const body = await res.json();
     assert.equal(body.success, true);
     assert.ok(body.services);

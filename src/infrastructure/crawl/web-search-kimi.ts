@@ -16,19 +16,50 @@ const DEFAULT_KIMI_MODEL = 'moonshot-v1-8k'
 const KIMI_WEB_SEARCH_TOOL = { type: 'builtin_function', function: { name: '$web_search' } }
 const KIMI_THINKING_MODELS = new Set(['kimi-k2.6', 'kimi-k2.5'])
 
-function resolveKimiApiKey(runtime: Record<string, any>) {
+type KimiRuntime = {
+  kimi?: { apiKey?: string; baseUrl?: string; model?: string }
+  timeoutSeconds?: number
+  cacheTtlMinutes?: number
+}
+
+type KimiSearchParams = {
+  query?: string
+}
+
+type KimiToolCall = {
+  id?: string
+  function?: { name?: string; arguments?: string }
+}
+
+type KimiMessage = {
+  role: string
+  content?: string
+  reasoning_content?: string
+  tool_call_id?: string
+  tool_calls?: KimiToolCall[]
+}
+
+type KimiChatResponse = {
+  search_results?: Array<{ url?: unknown }>
+  choices?: Array<{
+    finish_reason?: string
+    message?: KimiMessage
+  }>
+}
+
+function resolveKimiApiKey(runtime: KimiRuntime) {
   return runtime?.kimi?.apiKey?.trim?.() || ''
 }
 
-function resolveKimiBaseUrl(runtime: Record<string, any>) {
+function resolveKimiBaseUrl(runtime: KimiRuntime) {
   return (runtime?.kimi?.baseUrl?.trim?.() || DEFAULT_KIMI_BASE_URL).replace(/\/+$/, '')
 }
 
-function resolveKimiModel(runtime: Record<string, any>) {
+function resolveKimiModel(runtime: KimiRuntime) {
   return runtime?.kimi?.model?.trim?.() || DEFAULT_KIMI_MODEL
 }
 
-function extractKimiCitations(data: any) {
+function extractKimiCitations(data: KimiChatResponse) {
   const citations: string[] = []
   for (const entry of data.search_results ?? []) {
     if (entry?.url && typeof entry.url === 'string') citations.push(entry.url.trim())
@@ -38,7 +69,10 @@ function extractKimiCitations(data: any) {
     const raw = toolCall?.function?.arguments
     if (typeof raw !== 'string' || !raw) continue
     try {
-      const parsed = JSON.parse(raw)
+      const parsed = JSON.parse(raw) as {
+        url?: unknown
+        search_results?: Array<{ url?: unknown }>
+      }
       if (parsed.url) citations.push(String(parsed.url))
       for (const r of parsed.search_results ?? []) {
         if (r?.url) citations.push(String(r.url))
@@ -58,7 +92,7 @@ export function missingKimiApiKeyPayload() {
   }
 }
 
-export async function runKimiSearch(params: Record<string, any>, runtime: Record<string, any> = {}) {
+export async function runKimiSearch(params: KimiSearchParams, runtime: KimiRuntime = {}) {
   const apiKey = resolveKimiApiKey(runtime)
   if (!apiKey) return missingKimiApiKeyPayload()
 
@@ -75,13 +109,13 @@ export async function runKimiSearch(params: Record<string, any>, runtime: Record
   if (cached) return cached
 
   const endpoint = `${baseUrl}/chat/completions`
-  const messages: any[] = [{ role: 'user', content: query }]
+  const messages: KimiMessage[] = [{ role: 'user', content: query }]
   const collectedCitations = new Set<string>()
   let content = ''
   const start = Date.now()
 
   for (let round = 0; round < 3; round += 1) {
-    const data = (await withTrustedWebSearchEndpoint(
+    const data = await withTrustedWebSearchEndpoint(
       {
         url: endpoint,
         timeoutSeconds,
@@ -101,9 +135,9 @@ export async function runKimiSearch(params: Record<string, any>, runtime: Record
       },
       async (res: Response) => {
         if (!res.ok) await throwWebSearchApiError(res, 'Kimi API')
-        return res.json()
+        return res.json() as Promise<KimiChatResponse>
       }
-    )) as any
+    )
 
     for (const c of extractKimiCitations(data)) collectedCitations.add(c)
 
@@ -117,7 +151,7 @@ export async function runKimiSearch(params: Record<string, any>, runtime: Record
       break
     }
 
-    messages.push(message)
+    if (message) messages.push(message)
     for (const toolCall of toolCalls) {
       messages.push({
         role: 'tool',

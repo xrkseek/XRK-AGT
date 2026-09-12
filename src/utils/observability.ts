@@ -5,6 +5,7 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import RuntimeUtil from '#utils/runtime-util.js';
+import { normalizeError } from '#utils/normalize-error.js';
 
 type RequestContext = {
   requestId?: string;
@@ -12,16 +13,8 @@ type RequestContext = {
   method?: string;
 };
 
-type ErrorConstructorWithIsError = ErrorConstructor & {
-  isError?: (value: unknown) => value is Error;
-};
-
 function errMessage(err: unknown): string {
-  const Ctor = Error as ErrorConstructorWithIsError;
-  if (typeof Ctor.isError === 'function' ? Ctor.isError(err) : err instanceof Error) {
-    return (err as Error).message;
-  }
-  return String(err ?? 'unknown');
+  return normalizeError(err ?? 'unknown').message;
 }
 
 const requestAls = new AsyncLocalStorage<RequestContext>();
@@ -114,20 +107,14 @@ export async function probeSubserverHealth(
       ids.map(async (id) => {
         try {
           const { baseUrl } = getSubserverConfig(id) as { baseUrl: string };
-          const ctrl = new AbortController();
-          const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-          try {
-            const res = await fetchImpl(`${baseUrl}/health`, {
-              method: 'GET',
-              signal: ctrl.signal,
-            });
-            out[id] = {
-              status: res.ok ? 'operational' : 'degraded',
-              httpStatus: res.status,
-            };
-          } finally {
-            clearTimeout(timer);
-          }
+          const res = await fetchImpl(`${baseUrl}/health`, {
+            method: 'GET',
+            signal: AbortSignal.timeout(timeoutMs),
+          });
+          out[id] = {
+            status: res.ok ? 'operational' : 'degraded',
+            httpStatus: res.status,
+          };
         } catch (err) {
           out[id] = {
             status: 'unavailable',
@@ -274,10 +261,53 @@ export async function buildReadinessSnapshot(
   };
 }
 
+type PrometheusMemoryMetrics = {
+  heapUsed?: number;
+  heapTotal?: number;
+  rss?: number;
+  external?: number;
+  arrayBuffers?: number;
+};
+
+type PrometheusCpuMetrics = {
+  user?: number;
+  system?: number;
+};
+
+type PrometheusWorkflowMetrics = {
+  traces?: { total?: number; failed?: number };
+  avgDurationMs?: number;
+};
+
+type PrometheusHttpLatency = {
+  avg?: number;
+  p50?: number;
+  p95?: number;
+  p99?: number;
+  max?: number;
+};
+
+type PrometheusHttpMetrics = {
+  total?: number;
+  fail?: number;
+  errorRate?: number;
+  slidingErrorRate?: number;
+  rps?: number;
+  latencyMs?: PrometheusHttpLatency;
+};
+
+export type PrometheusMetricsInput = {
+  uptime?: number;
+  memory?: PrometheusMemoryMetrics;
+  cpu?: PrometheusCpuMetrics;
+  workflow?: PrometheusWorkflowMetrics | null;
+  http?: PrometheusHttpMetrics | null;
+};
+
 /**
  * 将进程指标转为 Prometheus exposition（text/plain）
  */
-export function formatPrometheusMetrics(metrics: Record<string, any>): string {
+export function formatPrometheusMetrics(metrics: PrometheusMetricsInput): string {
   const lines: string[] = [];
   const mem = metrics.memory || {};
   const cpu = metrics.cpu || {};
@@ -330,15 +360,31 @@ export function buildProcessMetrics(
     actualPort?: number;
     actualHttpsPort?: number;
     proxyEnabled?: boolean;
-    workflow?: unknown;
-    http?: unknown;
+    workflow?: PrometheusWorkflowMetrics | null;
+    http?: PrometheusHttpMetrics | null;
   } = {},
-): Record<string, unknown> {
+): PrometheusMetricsInput & {
+  timestamp: number;
+  requestId: string | null;
+  websocket: unknown;
+  server: {
+    httpPort?: number;
+    httpsPort?: number;
+    actualPort?: number;
+    actualHttpsPort?: number;
+    proxyEnabled?: boolean;
+  };
+  platform: {
+    node: string;
+    platform: NodeJS.Platform;
+    arch: NodeJS.Architecture;
+  };
+} {
   const memUsage = process.memoryUsage();
   const cpuUsage = process.cpuUsage();
   const workflow =
     typeof runtime.getTraceSummary === 'function'
-      ? runtime.getTraceSummary()
+      ? (runtime.getTraceSummary() as PrometheusWorkflowMetrics | null)
       : (runtime.workflow ?? null);
 
   return {
