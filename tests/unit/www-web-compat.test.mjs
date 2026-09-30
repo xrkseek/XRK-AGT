@@ -125,6 +125,15 @@ describe('web-compat 扫描（xrk-www-compat）', () => {
     }
     assert.ok(wwwRoots.length >= 1, '应至少有一个 core/*/www');
 
+    /** 非浏览器运行时目录：课件/题库内容（markdown 模板串里的教学示例）、
+     * 构建脚本（Node 端，本就允许 AbortSignal.timeout）、工具脚本等。
+     * 这些不属于「浏览器产品页加载的源码」，扫描时应跳过。 */
+    const SKIP_REL_DIR = [
+      '/src/data/',      // 课件内容库（lessons/*.js = markdown 模板串，quiz/sets = 题库数据）
+      '/scripts/',       // Node 构建/拉取脚本
+      '/tools/',         // 开发者工具脚本
+    ];
+
     /** 权威/内联兼容层：允许内部带降级地调用原生 API */
     const allowCompat = (rel) => {
       const n = rel.replace(/\\/g, '/');
@@ -178,8 +187,10 @@ describe('web-compat 扫描（xrk-www-compat）', () => {
       for (const file of files) {
         const rel = path.relative(root, file);
         if (allowCompat(rel)) continue;
+        const relNorm = rel.replace(/\\/g, '/');
+        if (SKIP_REL_DIR.some((seg) => relNorm.includes(seg))) continue;
         const text = stripComments(fs.readFileSync(file, 'utf8'));
-        hits.push(...bareHitsInText(text, rel.replace(/\\/g, '/')));
+        hits.push(...bareHitsInText(text, relNorm));
       }
     }
     assert.deepEqual(hits, [], hits.join('\n'));

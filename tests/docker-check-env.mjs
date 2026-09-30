@@ -33,7 +33,7 @@ if (ver.error?.code === 'ENOENT') {
 }
 
 console.log('\n=== 静态烟测 (entrypoint × Node26) ===\n');
-const testFile = path.join(root, 'tests/framework/docker-entrypoint-node26.test.mjs');
+const testFile = path.join(root, 'tests/unit/docker-entrypoint-node26.test.mjs');
 const t = spawnSync(process.execPath, ['--test', testFile], {
   cwd: root,
   stdio: 'inherit',

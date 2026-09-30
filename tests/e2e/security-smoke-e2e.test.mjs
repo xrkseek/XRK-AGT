@@ -1,7 +1,7 @@
 /**
  * E2E 安全烟测：鉴权拒绝/放行、上传文件名、路径穿越拒绝。
  * 穿越样例复用 input-path-fuzz；鉴权对真实 /api 探活。
- * @see docs/AUTH.md · tests/framework/input-path-fuzz.test.mjs · docs/框架测试指南.md
+ * @see docs/AUTH.md · tests/unit/input-path-fuzz.test.mjs · docs/框架测试指南.md
  */
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';

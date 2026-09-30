@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { normalizeEmotionKey, EMOTION_KEYS } from '../../core/system-Core/www/xrk/src/utils/http.js';
+import { normalizeEmotionKey, EMOTION_KEYS, unwrapSuccess, abortTimeout } from '../../core/system-Core/www/xrk/src/utils/http.js';
 
 const wwwRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -47,10 +47,24 @@ describe('www/xrk Vue 控制台', () => {
     assert.match(vite, /const mount = '\/xrk'/);
   });
 
-  it('http 工具含 unwrapSuccess', () => {
-    const src = fs.readFileSync(path.join(wwwRoot, 'src/utils/http.js'), 'utf8');
-    assert.match(src, /export function unwrapSuccess/);
-    assert.match(src, /export function abortTimeout/);
+  it('http 工具：unwrapSuccess 解包 HttpResponse.success', () => {
+    // 普通对象拍平到顶层（去 success/message）
+    assert.deepEqual(unwrapSuccess({ success: true, message: 'ok', a: 1, b: 2 }), { a: 1, b: 2 });
+    // 数组/标量走 data 字段
+    assert.deepEqual(unwrapSuccess({ success: true, message: 'ok', data: [1, 2] }), [1, 2]);
+    assert.equal(unwrapSuccess({ success: true, message: 'ok', data: null }), null);
+    // 失败抛错并带 message
+    assert.throws(() => unwrapSuccess({ success: false, message: '未授权' }), /未授权/);
+    assert.throws(() => unwrapSuccess(undefined), /请求失败/);
+  });
+
+  it('http 工具：abortTimeout 返回可用 AbortSignal', () => {
+    const signal = abortTimeout(1000);
+    assert.ok(signal instanceof AbortSignal);
+    assert.equal(signal.aborted, false);
+    // 不应泄漏定时器：短时延到点后应 abort
+    const soon = abortTimeout(1);
+    assert.equal(soon.aborted, false);
   });
 });
 

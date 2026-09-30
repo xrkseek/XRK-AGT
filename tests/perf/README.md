@@ -66,7 +66,7 @@ node tests/perf/run-perf.mjs load --self --target health \
   --max-p99-ms 100 --max-error-rate 0.01 --min-rps 200 --json data/temp/perf-load.json
 ```
 
-**cigate 基线**：`tests/baselines/perf-cigate-baseline.json`（同机对照；硬门槛见 `profiles.mjs` `cigate.slo`）。契约测：`tests/framework/perf-cigate-baseline.test.mjs`。
+**cigate 基线**：`tests/baselines/perf-cigate-baseline.json`（同机对照；硬门槛见 `profiles.mjs` `cigate.slo`）。契约测：`tests/unit/perf-cigate-baseline.test.mjs`。
 
 ## 生产注意
 
@@ -74,6 +74,6 @@ node tests/perf/run-perf.mjs load --self --target health \
 2. `/api/health` 依赖 Redis；测就绪面时先确保 Redis。
 3. 勿对写接口做无差别加压。
 4. soak ≥30m 才宜作为泄漏/连接稳定性验收；默认 10m 为开发冒烟。
-5. 引擎单测：`tests/framework/perf-engine.test.mjs`（已入 `test:fast`）。
-6. 泄漏/句柄轻量面：`pnpm test:perf:smoke` + `tests/framework/load-stress-light.test.mjs`（含 Disposables 高频 dispose）+ `disposables-concurrency.test.mjs`（逆序清理 / ALS 并发）。
+5. 引擎单测：`tests/unit/perf-engine.test.mjs`（已入 `test:fast`）。
+6. 泄漏/句柄轻量面：`pnpm test:perf:smoke` + `tests/unit/load-stress-light.test.mjs`（含 Disposables 高频 dispose）+ `tests/unit/disposables-concurrency.test.mjs`（逆序清理 / ALS 并发）。
 7. 服务端混沌：`pnpm test:chaos -- --self --chaos-mode server --chaos-error-rate 0.2`（需 `XRK_CHAOS_ENABLED`，仅测试实例）。

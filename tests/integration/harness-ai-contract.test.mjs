@@ -42,17 +42,18 @@ describe('harness-ai test import contract', () => {
     );
   });
 
+  const HARNESS_LINT_RE = /(harness|agt-ai|agt-loop|^ai|loop|sse|callai|v1-(path-split|live-sse))/i;
+
   it('key harness/ai framework tests no longer hardcode ../../dist/src ai-workflow paths', () => {
-    const files = [
-      'tests/framework/harness-module-loop.test.mjs',
-      'tests/framework/agt-loop-cleanup.test.mjs',
-      'tests/framework/agt-ai-surfaces.test.mjs',
-      'tests/framework/sse-openai-live-bridge.test.mjs',
-      'tests/framework/callai-harness-e2e.test.mjs',
-      'tests/framework/v1-path-split-e2e.test.mjs',
-      'tests/framework/v1-live-sse-e2e.test.mjs',
-      'tests/framework/mcp-workflows-harness-e2e.test.mjs',
-    ];
+    // 目录扫描而非死清单：unit/integration 下 harness/ai/loop/sse 相关测试
+    // （与 run.mjs「目录即事实源」一致，新增/搬迁自动生效）
+    const files = ['unit', 'integration'].flatMap((lane) =>
+      fs
+        .readdirSync(path.join(root, 'tests', lane))
+        .filter((f) => f.endsWith('.test.mjs') && HARNESS_LINT_RE.test(f))
+        .map((f) => path.join('tests', lane, f)),
+    );
+    assert.ok(files.length >= 8, `应至少扫到 8 个测试，实际 ${files.length}`);
     for (const rel of files) {
       const text = fs.readFileSync(path.join(root, rel), 'utf8');
       assert.doesNotMatch(

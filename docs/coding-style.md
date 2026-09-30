@@ -201,7 +201,7 @@ export default {
 1. 类字段存 Map / 缓存  
 2. `FileLoader.getCoreSubDirFiles(subDir)` 扫描  
 3. `importFresh` + `forEachBatch`  
-4. **无文件热重载**；改插件/配置/模板后重启。`hot-reload-base` **有意删除**，由 `tests/framework/no-hot-reload.test.mjs`（`pnpm test:fast`）锁定，勿默默加回。见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md) · [infrastructure-shared.md](infrastructure-shared.md)
+4. **无文件热重载**；改插件/配置/模板后重启。`hot-reload-base` **有意删除**，由 `tests/unit/no-hot-reload.test.mjs`（`pnpm test:fast`）锁定，勿默默加回。见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md) · [infrastructure-shared.md](infrastructure-shared.md)
 
 挂载面见 [runtime-surface.md](runtime-surface.md)。
 

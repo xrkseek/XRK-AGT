@@ -275,5 +275,5 @@ mountCoreWwwStatic()       → 零配置静态 + 有 sign 的静态（只挂产�
 
 ## 测试
 
-- `tests/framework/mount-core-www.test.mjs`
-- `tests/framework/paths-core-dirs.test.mjs`
+- `tests/unit/mount-core-www.test.mjs`
+- `tests/unit/paths-core-dirs.test.mjs`

@@ -64,7 +64,7 @@ POST /v1/* 无 workflows 但有 body.tools
 
 出站：`prepareOutboundMessages` 先按 `contextWindow` **硬裁**（`resolveInputTokenBudget` + `trimMessagesToTokenBudget`）；harness 再按同源 budget 的 `CompactionOptions`（`maxRequestTokens` / `keepTokens` / `auto`）做 session **软压**。两层叠加语义见 [agent-context.md](agent-context.md) §5.1。群聊笔录：`context.chatHistory`。
 
-跨 turn：`sessionKey`（`callAI` 用会话键；`/v1` 用 `xrk_session_id` / `conversation_id` / workspace）→ `createPersistentSessionStore`（默认 `data/harness-sessions`；可用 `XRK_HARNESS_SESSIONS_DIR` 改目录）。同键复用 session，**不再**整段 seed 客户端 history；同 session + 同 workflows 复用 ToolRegistry/Pipeline（有 `registerTools` 钩子则每轮重建）。测：`tests/framework/harness-session-persist.test.mjs`（隔离临时目录落盘，测完清理）。
+跨 turn：`sessionKey`（`callAI` 用会话键；`/v1` 用 `xrk_session_id` / `conversation_id` / workspace）→ `createPersistentSessionStore`（默认 `data/harness-sessions`；可用 `XRK_HARNESS_SESSIONS_DIR` 改目录）。同键复用 session，**不再**整段 seed 客户端 history；同 session + 同 workflows 复用 ToolRegistry/Pipeline（有 `registerTools` 钩子则每轮重建）。测：`tests/integration/harness-session-persist.test.mjs`（隔离临时目录落盘，测完清理）。
 
 `/v1` + OpenAI `stream=true`：订阅 `assistant/chunk` / `tool/call` / `tool/result` 写 live SSE（`mcp_tools` 含 arguments + result），turn 结束后 finish + `[DONE]`。映射集中在 `createHarnessLiveSessionEventHandler`（`#utils/sse-openai`）；Anthropic / Responses 仍整段 JSON。
 
@@ -91,7 +91,7 @@ POST /v1/* 无 workflows 但有 body.tools
 | `ToolPipeline` 自动批准 | IM / bot：`setApprovalHandler(() => ({ approved: true }))`，不阻塞交互式审批 |
 | `createPolicyToolCallGuard` | `denyTools` / `denyToolNames` → Guard（硬拒绝）。**不用** `createPolicyToolPre` 替 denylist：Pre 面向 `ask`，叠自动批准会放行 |
 
-测：`tests/framework/harness-module-loop.test.mjs` · `harness replay multi-step tool turns`（replay：只读并行 settle + `denyTools` 拦 execute + `chat.reply` `concludesTurn`）。
+测：`tests/integration/harness-module-loop.test.mjs` · `harness replay multi-step tool turns`（replay：只读并行 settle + `denyTools` 拦 execute + `chat.reply` `concludesTurn`）。
 | `assertToolCallsSettled` | dangling settle 后再校验；失败仅 warn |
 | `listDanglingToolCalls` | settle 前 warn 悬挂工具名 |
 | `beforeUserMessage` / `prepareUserContent` / `assemble` | apiConfig 或 `stream.harnessBeforeUserMessage` 等 |

@@ -7,8 +7,13 @@
     "src/**/*",
     "core/**/*.ts",
     "core/**/*.mts",
-    "tests/framework/**/*.ts",
-    "tests/framework/**/*.mjs"
+    "tests/unit/**/*.ts",
+    "tests/unit/**/*.mjs",
+    "tests/integration/**/*.ts",
+    "tests/integration/**/*.mjs",
+    "tests/e2e/**/*.ts",
+    "tests/e2e/**/*.mjs",
+    "tests/helpers/**/*.mjs"
   ],
   "exclude": ["node_modules", "**/dist/**", "**/www/**", "**/site/**"],
   "compilerOptions": {

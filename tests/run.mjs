@@ -2,12 +2,23 @@
  * 统一测试入口（package.json 各 test:* 脚本只调此文件）
  *
  * 用法: node tests/run.mjs <suite>
- *   fast         — 无 Bootstrap、无真实 HTTP 起服（默认 CI 快路径）
- *   smoke        — fast 子集 + 质量金字塔轻量门禁（冒烟/浸泡/混沌雏形）
- *   unit         — 除 e2e 外全部单元/集成测
- *   integration  — 仅 Loader 集成
- *   e2e          — 真实启动 AgentRuntime
- *   all          — framework 下全部 *.test.mjs
+ *   fast         — unit + integration（无真实起服，默认 CI 快路径）
+ *   smoke        — fast 子集 + 质量金字塔轻量门禁
+ *   unit         — 纯逻辑单元（不含 integration）
+ *   integration  — 进程内集成/mock 链路（含 harness 契约直测）
+ *   e2e          — 真实启动 AgentRuntime / 全量 Loader 集成
+ *   all          — 三 lane 全部 *.test.mjs
+ *   coverage     — unit + integration + 覆盖率门禁（Node 内置 c8，无新增依赖）
+ *
+ * 【为什么 lane 用目录而非清单】
+ * 历史上 fast 是一份 55 条手工清单、smoke/e2e 各有名单，新增测试默认落不进
+ * 默认路径，形成「单文件本地绿、CI 从不跑」的隐性盲区。harness 侧的做法是
+ * include glob（新增即入 lane），此处同构：suite → 目录，目录即事实源。
+ * 按「运行性质」分层（而非被测对象）：
+ *   - unit/       毫秒级纯逻辑，进程内直调 dist 编译产物
+ *   - integration/进程内 mock/组装，无需真实端口/Redis/起服
+ *   - e2e/        真起 AgentRuntime / 全量 Loader 扫描，秒级
+ * 新测试按性质放进对应目录即自动入 lane，无需改本文件。
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -15,108 +26,102 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const frameworkDir = path.join(root, 'tests/framework');
+const testsDir = path.join(root, 'tests');
 
-/** @type {Record<string, string[]>} */
-const SUITES = {
-  fast: [
-    'auth-loopback.test.mjs',
-    'config-alignment.test.mjs',
-    'module-inventory.test.mjs',
-    'module-import-error.test.mjs',
-    'onebot-atbot.test.mjs',
-    'event-deal-loopback.test.mjs',
-    'channel-stdin-deal-reply-e2e.test.mjs',
-    'agent-layout.test.mjs',
-    'harness-module-loop.test.mjs',
-    'harness-ai-contract.test.mjs',
-    'harness-session-persist.test.mjs',
-    'callai-harness-e2e.test.mjs',
-    'v1-path-split-e2e.test.mjs',
-    'v1-live-sse-e2e.test.mjs',
-    'mcp-workflows-harness-e2e.test.mjs',
-    'mcp-remote-adapter.test.mjs',
-    'tool-security.test.mjs',
-    'security-checklist.test.mjs',
-    'module-ext.test.mjs',
-    'agt-loop-cleanup.test.mjs',
-    'no-hot-reload.test.mjs',
-    'ts-cast-hygiene.test.mjs',
-    'agt-ai-surfaces.test.mjs',
-    'sse-openai-live-bridge.test.mjs',
-    'safe-os-network.test.mjs',
-    'monitor-safety.test.mjs',
-    'observability.test.mjs',
-    'input-validator.test.mjs',
-    'input-path-fuzz.test.mjs',
-    'vision-fuzz.test.mjs',
-    'vision-content.test.mjs',
-    'chat-user-visible-ack.test.mjs',
-    'token-estimate.test.mjs',
-    'metrics-stats.test.mjs',
-    'http-request-metrics.test.mjs',
-    'persistence-registry.test.mjs',
-    'sqlite-runtime.test.mjs',
-    'levenshtein.test.mjs',
-    'load-stress-light.test.mjs',
-    'quality-pyramid-light.test.mjs',
-    'perf-engine.test.mjs',
-    'perf-cigate-baseline.test.mjs',
-    'disposables-concurrency.test.mjs',
-    'stream-request-context.test.mjs',
-    'runtime-polish.test.mjs',
-    'runtime-net.test.mjs',
-    'www-xrk.test.mjs',
-    'www-web-compat.test.mjs',
-    'mount-core-www.test.mjs',
-    'http-api-structure.test.mjs',
-    'http-init-hook.test.mjs',
-    'bootstrap-deps.test.mjs',
-    'bootstrap-test-env.test.mjs',
-    'renderer-lazy.test.mjs',
-    'process-signals.test.mjs',
-  ],
-  smoke: [
-    'quality-pyramid-light.test.mjs',
-    'load-stress-light.test.mjs',
-    'vision-content.test.mjs',
-    'input-path-fuzz.test.mjs',
-    'observability.test.mjs',
-    'auth-loopback.test.mjs',
-  ],
-  integration: ['loaders-integration.test.mjs'],
-  e2e: ['server-e2e.test.mjs', 'security-smoke-e2e.test.mjs'],
+const LANES = {
+  unit: ['unit'],
+  integration: ['integration'],
+  e2e: ['e2e'],
 };
 
-function unitTests() {
-  const e2e = new Set(SUITES.e2e);
+/**
+ * 显式套件（跨 lane 精选子集；路径相对 tests/，含 lane 目录）。
+ * 与 lane 推导不同：smoke 是「质量金字塔轻量门禁」的固定精选，新增测试不自动入。
+ */
+const SUITES = {
+  smoke: [
+    'unit/quality-pyramid-light.test.mjs',
+    'unit/load-stress-light.test.mjs',
+    'unit/vision-content.test.mjs',
+    'unit/input-path-fuzz.test.mjs',
+    'unit/observability.test.mjs',
+    'integration/auth-loopback.test.mjs',
+  ],
+};
+
+/** lane 目录下全部 *.test.mjs（唯一事实源，新增即入） */
+function laneTests(lane) {
+  const dir = path.join(testsDir, lane);
+  if (!fs.existsSync(dir)) return [];
   return fs
-    .readdirSync(frameworkDir)
-    .filter((f) => f.endsWith('.test.mjs') && !e2e.has(f))
-    .sort();
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.test.mjs'))
+    .sort()
+    .map((f) => path.join(lane, f));
+}
+
+/** fast：unit + integration（新增测试自动入内） */
+function fastTests() {
+  return [...laneTests('unit'), ...laneTests('integration')];
+}
+
+/** all：三 lane 全量 */
+function allTests() {
+  return [...laneTests('unit'), ...laneTests('integration'), ...laneTests('e2e')];
 }
 
 function resolveFiles(mode) {
-  if (mode === 'all') {
-    return fs.readdirSync(frameworkDir).filter((f) => f.endsWith('.test.mjs')).sort();
-  }
-  if (mode === 'unit') return unitTests();
+  if (mode === 'all') return allTests();
+  if (mode === 'fast') return fastTests();
+  if (mode === 'unit') return laneTests('unit');
+  if (mode === 'integration') return laneTests('integration');
+  if (mode === 'e2e') return laneTests('e2e');
   const list = SUITES[mode];
   if (!list) return null;
-  return list;
+  return list.slice();
+}
+
+/**
+ * 自校验：显式套件引用的文件必须真实存在。
+ * lane 推导由目录保证，不会出现「清单写了但文件没了」。
+ * @param {string[]} files
+ */
+function assertFilesExist(files) {
+  const missing = files.filter((f) => !fs.existsSync(path.join(testsDir, f)));
+  if (missing.length) {
+    console.error(`缺少测试文件: ${missing.join(', ')}`);
+    process.exit(2);
+  }
 }
 
 const mode = process.argv[2] || 'unit';
+if (mode === 'coverage') {
+  // 覆盖率门禁是独立真源（tests/coverage-gate.mjs），这里只转发
+  const gate = spawnSync(
+    process.execPath,
+    [path.join('tests', 'coverage-gate.mjs')],
+    { cwd: root, stdio: 'inherit' },
+  );
+  process.exit(gate.status ?? 1);
+}
 const files = resolveFiles(mode);
 if (!files?.length) {
-  console.error(`未知 suite: ${mode}；可用: fast | smoke | unit | integration | e2e | all`);
+  console.error(
+    `未知 suite: ${mode}；可用: fast | smoke | unit | integration | e2e | all | coverage`,
+  );
   process.exit(2);
 }
 
-const missing = files.filter((f) => !fs.existsSync(path.join(frameworkDir, f)));
-if (missing.length) {
-  console.error(`缺少测试文件: ${missing.join(', ')}`);
-  process.exit(2);
+assertFilesExist(files);
+
+/** 覆盖度日志：新增测试漏跑时能一眼看出（仅 lane 模式，smoke 是精选子集不算覆盖） */
+if (['fast', 'all', 'unit', 'integration', 'e2e'].includes(mode)) {
+  const total = allTests().length;
+  const skipped = total - files.length;
+  console.log(`[tests] suite=${mode} 选中 ${files.length}/${total} 个（未选 ${skipped}）`);
+  if (skipped > 0) {
+    console.log(`[tests] 未选: ${allTests().filter((f) => !files.includes(f)).join(', ')}`);
+  }
 }
 
 /** `#` imports 指向 dist；无产物时先构建 */
@@ -131,7 +136,7 @@ const testArgs = [
   '--experimental-strip-types',
   '--test',
   '--test-force-exit',
-  ...files.map((f) => path.join('tests/framework', f)),
+  ...files.map((f) => path.join('tests', f)),
 ];
 
 const result = spawnSync(process.execPath, testArgs, { cwd: root, stdio: 'inherit' });

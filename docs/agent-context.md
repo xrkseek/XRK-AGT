@@ -176,7 +176,7 @@ slash 展开（/recipe · /recipes …）
 | 交互审批 | `security.approval`（默认 **false**） | 主人私聊 `#批准` / `#批准id`；关则 ask=拒绝（主人可 bypass） |
 | 执行门禁 | — | **统一**在 `MCPServer.handleToolCall`（LLM / HTTP / WS / JSON-RPC） |
 
-顺序（`inspectToolCallSecurity`）：`tool.call` policy（allow|deny|ask）→ `toolScan` 模式匹配 → ask 时主人旁路或 `security.approval`。测：`tests/framework/tool-security.test.mjs`。
+顺序（`inspectToolCallSecurity`）：`tool.call` policy（allow|deny|ask）→ `toolScan` 模式匹配 → ask 时主人旁路或 `security.approval`。测：`tests/unit/tool-security.test.mjs`。
 
 ### 5.3 斜杠与配方
 

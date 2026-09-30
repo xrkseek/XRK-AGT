@@ -108,7 +108,9 @@
     "test:stress": "node tests/perf/run-perf.mjs stress",
     "test:soak": "node tests/perf/run-perf.mjs soak",
     "test:bench": "node tests/perf/run-perf.mjs bench",
-    "test:chaos": "node tests/perf/run-perf.mjs chaos"
+    "test:chaos": "node tests/perf/run-perf.mjs chaos",
+    "test:coverage": "node tests/run.mjs coverage",
+    "coverage:gate": "node tests/coverage-gate.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

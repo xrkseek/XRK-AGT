@@ -8,7 +8,7 @@ description: 当你需要使用 Docker/Docker Compose 部署 XRK-AGT（含 Pytho
 - 文档：`docs/docker.md`（含「本机前置与烟测」「Node 26 与 entrypoint」）
 - 配置：`docker-compose.yml`、`Dockerfile`、`docker-entrypoint.sh`
 - 子服务端目录：`subserver/pyserver/`
-- 静态烟测：`pnpm docker:check` → `tests/docker-check-env.mjs` + `tests/framework/docker-entrypoint-node26.test.mjs`
+  - 静态烟测：`pnpm docker:check` → `tests/docker-check-env.mjs` + `tests/unit/docker-entrypoint-node26.test.mjs`
 
 ## 你要掌握的要点
 

@@ -5,7 +5,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   GLOBAL_CONFIGS,
-  SERVER_CONFIGS
+  SERVER_CONFIGS,
+  FACTORY_CONFIG_PATTERNS,
+  CHATBOT_FIXED_ROOT_KEYS,
+  isFactoryConfig,
+  isGlobalConfig,
+  isServerConfig,
+  isChatbotFixedRootKey,
+  isServerOrFactoryConfig,
 } from '../../dist/src/infrastructure/config/config-constants.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -47,4 +54,41 @@ describe('配置三件套：默认模板与 system.js schema', () => {
       assert.ok(ok, `system 分域 schema 中未找到 ${name} 段`);
     });
   }
+});
+
+describe('config-constants type-guard 函数', () => {
+  it('isGlobalConfig：全局配置列表内为真，其余为假', () => {
+    for (const name of GLOBAL_CONFIGS) assert.equal(isGlobalConfig(name), true);
+    assert.equal(isGlobalConfig('server'), false);
+    assert.equal(isGlobalConfig('chatbot'), false);
+    assert.equal(isGlobalConfig('openai_foo'), false);
+  });
+
+  it('isServerConfig：服务器配置列表内为真，全局/工厂/未知为假', () => {
+    for (const name of SERVER_CONFIGS) assert.equal(isServerConfig(name), true);
+    assert.equal(isServerConfig('agt'), false);
+    assert.equal(isServerConfig('deepseek_x'), false);
+  });
+
+  it('isFactoryConfig：匹配任一工厂前缀为真，其余为假', () => {
+    for (const pattern of FACTORY_CONFIG_PATTERNS) {
+      assert.equal(isFactoryConfig(`${pattern}main`), true, `${pattern}main 应命中`);
+    }
+    // 前缀必须真含于名称（不是字符串任意位置）
+    assert.equal(isFactoryConfig('agent'), false);
+    assert.equal(isFactoryConfig(''), false);
+  });
+
+  it('isChatbotFixedRootKey：固定根级键为真，群号覆盖为假', () => {
+    for (const key of CHATBOT_FIXED_ROOT_KEYS) assert.equal(isChatbotFixedRootKey(key), true);
+    assert.equal(isChatbotFixedRootKey('123456789'), false, '群号不是固定键');
+    assert.equal(isChatbotFixedRootKey('master2'), false);
+  });
+
+  it('isServerOrFactoryConfig：服务器或工厂配置为真，全局为假', () => {
+    assert.equal(isServerOrFactoryConfig('server'), true);
+    assert.equal(isServerOrFactoryConfig('deepseek_main'), true);
+    assert.equal(isServerOrFactoryConfig('agt'), false);
+    assert.equal(isServerOrFactoryConfig('random'), false);
+  });
 });
