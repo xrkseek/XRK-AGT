@@ -23,16 +23,10 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { LANES, ROOT, TESTS_DIR, laneTests, testsFor } from './lanes.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const testsDir = path.join(root, 'tests');
-
-const LANES = {
-  unit: ['unit'],
-  integration: ['integration'],
-  e2e: ['e2e'],
-};
+const root = ROOT;
+const testsDir = TESTS_DIR;
 
 /**
  * 显式套件（跨 lane 精选子集；路径相对 tests/，含 lane 目录）。
@@ -49,25 +43,16 @@ const SUITES = {
   ],
 };
 
-/** lane 目录下全部 *.test.mjs（唯一事实源，新增即入） */
-function laneTests(lane) {
-  const dir = path.join(testsDir, lane);
-  if (!fs.existsSync(dir)) return [];
-  return fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith('.test.mjs'))
-    .sort()
-    .map((f) => path.join(lane, f));
-}
+/** lane 目录下全部 *.test.mjs（唯一事实源，新增即入）；实现见 tests/lanes.mjs */
 
 /** fast：unit + integration（新增测试自动入内） */
 function fastTests() {
-  return [...laneTests('unit'), ...laneTests('integration')];
+  return testsFor(['unit', 'integration']);
 }
 
 /** all：三 lane 全量 */
 function allTests() {
-  return [...laneTests('unit'), ...laneTests('integration'), ...laneTests('e2e')];
+  return testsFor(LANES);
 }
 
 function resolveFiles(mode) {
@@ -115,12 +100,13 @@ if (!files?.length) {
 assertFilesExist(files);
 
 /** 覆盖度日志：新增测试漏跑时能一眼看出（仅 lane 模式，smoke 是精选子集不算覆盖） */
-if (['fast', 'all', 'unit', 'integration', 'e2e'].includes(mode)) {
-  const total = allTests().length;
-  const skipped = total - files.length;
-  console.log(`[tests] suite=${mode} 选中 ${files.length}/${total} 个（未选 ${skipped}）`);
-  if (skipped > 0) {
-    console.log(`[tests] 未选: ${allTests().filter((f) => !files.includes(f)).join(', ')}`);
+if (mode === 'fast' || mode === 'all' || LANES.includes(mode)) {
+  const every = allTests();
+  const picked = new Set(files);
+  const missing = every.filter((f) => !picked.has(f));
+  console.log(`[tests] suite=${mode} 选中 ${files.length}/${every.length} 个（未选 ${missing.length}）`);
+  if (missing.length) {
+    console.log(`[tests] 未选: ${missing.join(', ')}`);
   }
 }
 

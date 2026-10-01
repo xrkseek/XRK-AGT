@@ -8,6 +8,9 @@ on:
 jobs:
   test-fast:
     runs-on: ubuntu-latest
+    # test:coverage = 跑一遍 fast（unit+integration）并对 13 个纯逻辑模块做行覆盖门禁，
+    # 与 test:fast 跑的是同一批文件，故只跑它一次，不再叠一遍 test:fast。
+    # 本机实测 test:coverage 约 5 s，15 min 主要留给 pnpm install。
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -18,20 +21,15 @@ jobs:
           node-version: '26'
       - name: Install
         run: pnpm install
-      - name: Test (fast)
-        run: pnpm test:fast
-      - name: Syntax-check runtime facade
+      - name: Typecheck（全项目类型检查，tsc 语法+类型）
+        run: pnpm typecheck
+      - name: ESLint 门禁
+        run: pnpm lint:gate
+      # 门禁只对框架自身（src/ + app/start/debug）生效：core/ 的 express handler
+      # req/app 与回调占位参数位置必需，属约定豁免。自测先行，防门禁本身被改坏。
+      - name: 未使用声明门禁
         run: |
-          node --check src/agent-runtime.js
-          node --check src/infrastructure/http/runtime-auth.js
-          node --check src/infrastructure/http/runtime-listen.js
-          node --check src/infrastructure/http/runtime-ws.js
-          node --check src/infrastructure/http/runtime-proxy.js
-          node --check src/infrastructure/http/runtime-middleware.js
-          node --check src/infrastructure/http/runtime-static.js
-          node --check src/infrastructure/http/runtime-observability.js
-          node --check src/infrastructure/http/runtime-chaos.js
-          node --check src/infrastructure/http/runtime-boot.js
-          node --check src/infrastructure/http/runtime-net.js
-          node --check src/infrastructure/plugins/loader.js
-          node --check src/infrastructure/ai-workflow/loader.js
+          pnpm lint:unused:self-test
+          pnpm lint:unused
+      - name: Test (fast) + 覆盖率门禁
+        run: pnpm test:coverage

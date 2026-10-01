@@ -4,7 +4,8 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// 本文件在 tests/checks/ 下，仓库根要上跳两级
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 function docker(args) {
   return spawnSync('docker', args, {

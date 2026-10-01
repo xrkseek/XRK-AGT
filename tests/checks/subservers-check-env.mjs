@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** 本机子服工具与端口检查（本地 tests/，不入库） */
+/** 本机子服工具与端口检查（环境探针，属 checks/ 而非 lane） */
 import { spawnSync } from 'node:child_process';
 import net from 'node:net';
 import os from 'node:os';

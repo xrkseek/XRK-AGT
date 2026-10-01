@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** 子服连通性冒烟（本地 tests/，不入库） */
+/** 子服连通性冒烟（需各子服真在监听，故属 checks/ 而非 lane） */
 import { SUBSERVER_RUNTIME_CATALOG } from '#utils/subserver-runtimes.js';
 
 const args = process.argv.slice(2);
