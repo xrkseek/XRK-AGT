@@ -164,3 +164,61 @@ describe('flat.js 脏标记/默认值/合并', () => {
     assert.deepEqual(out.tags, []);
   });
 });
+
+describe('canonicalize* 的 schema 规范化', () => {
+  it('canonicalizeObjectByFields 非对象入参按空对象处理，但已知键仍补零值', () => {
+    assert.deepEqual(canonicalizeObjectByFields(null), {});
+    // 数组/字符串都被当作空对象；但 schema 里声明的键照样走 canonicalizeFieldValue
+    assert.deepEqual(canonicalizeObjectByFields([1, 2], { a: { type: 'string' } }), { a: '' });
+    assert.deepEqual(canonicalizeObjectByFields(undefined, { n: { type: 'number' } }), { n: null });
+  });
+
+  it('canonicalizeObjectByFields 按 schema 规范化已知键', () => {
+    const out = canonicalizeObjectByFields(
+      { n: '42', sw: 'yes', tags: 'x', bad: 'zz' },
+      { n: { type: 'number' }, sw: { component: 'switch' }, tags: { component: 'tags' }, bad: { type: 'number' } },
+    );
+    // bad: 'zz' → Number('zz') 非有限，原值回落，不丢用户输入
+    // tags: 'x' → canonicalizeFieldValue 内部先调 castFieldValue，字符串按逗号切分
+    assert.deepEqual(out, { n: 42, sw: true, tags: ['x'], bad: 'zz' });
+    assert.deepEqual(
+      canonicalizeObjectByFields({ tags: 'a, b ,c' }, { tags: { component: 'tags' } }),
+      { tags: ['a', 'b', 'c'] },
+    );
+  });
+
+  it('canonicalizeObjectByFields 保留 schema 外的自定义键，且是深拷贝', () => {
+    const src = { known: 'a', custom: { deep: 1 } };
+    const out = canonicalizeObjectByFields(src, { known: { type: 'string' } });
+    assert.deepEqual(out, { known: 'a', custom: { deep: 1 } });
+    out.custom.deep = 2;
+    assert.equal(src.custom.deep, 1, '未知键必须深拷贝，不能与入参共享引用');
+  });
+
+  it('canonicalizeObjectByFields 递归 subform，非对象的 schema 条目跳过', () => {
+    const out = canonicalizeObjectByFields(
+      { sub: { inner: '7' } },
+      { sub: { type: 'object', fields: { inner: { type: 'number' } } }, broken: null },
+    );
+    assert.deepEqual(out, { sub: { inner: 7 } });
+  });
+
+  it('canonicalizeArrayObjectValue 非数组回退空数组', () => {
+    assert.deepEqual(canonicalizeArrayObjectValue('x'), []);
+    assert.deepEqual(canonicalizeArrayObjectValue(null), []);
+  });
+
+  it('canonicalizeArrayObjectValue 无 itemFields 时逐项深拷贝，非对象项回退空对象', () => {
+    const src = [{ a: 1 }];
+    const out = canonicalizeArrayObjectValue(src);
+    assert.deepEqual(out, [{ a: 1 }]);
+    out[0].a = 2;
+    assert.equal(src[0].a, 1, '应深拷贝，不共享引用');
+    assert.deepEqual(canonicalizeArrayObjectValue(['junk']), [{}]);
+  });
+
+  it('canonicalizeArrayObjectValue 有 itemFields 时逐项走 schema 规范化', () => {
+    const out = canonicalizeArrayObjectValue([{ n: '3' }, 'junk'], { n: { type: 'number' } });
+    assert.deepEqual(out, [{ n: 3 }, { n: null }]);
+  });
+});

@@ -626,7 +626,7 @@ export function isSameValue(a, b) {
 export function canonicalizeFieldValue(value, type, component) {
   const c = String(component || '').toLowerCase();
   const t = String(type || '').toLowerCase();
-  let v = castFieldValue(value, type, component);
+  const v = castFieldValue(value, type, component);
   if (t === 'number' || c === 'inputnumber' || c === 'number' || c === 'slider' || c === 'range') {
     if (v === '' || v === undefined) return null;
     return v;

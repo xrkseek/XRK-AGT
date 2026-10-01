@@ -8,7 +8,7 @@ describe('HttpApi initHook 绑定', () => {
     const api = new HttpApi({
       name: 'hook-test',
       routes: [],
-      init(app, bot) {
+      init(_app, _bot) {
         capturedThis = this;
         assert.equal(typeof this.wrapHandler, 'function');
       }
@@ -26,7 +26,7 @@ describe('HttpApi initHook 绑定', () => {
     await api.init(
       {
         use() {},
-        get(...args) {
+        get(..._args) {
           getThis = this;
           return this;
         },

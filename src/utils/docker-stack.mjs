@@ -110,7 +110,7 @@ async function status() {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
       console.log(`  ${name.padEnd(4)} ${res.ok ? 'OK' : `HTTP ${res.status}`}  ${url}`);
-    } catch (e) {
+    } catch {
       console.log(`  ${name.padEnd(4)} FAIL  ${url}`);
     }
   }
