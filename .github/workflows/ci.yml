@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     # test:coverage = 跑一遍 fast（unit+integration）并对 13 个纯逻辑模块做行覆盖门禁，
     # 与 test:fast 跑的是同一批文件，故只跑它一次，不再叠一遍 test:fast。
-    # 本机实测 test:coverage 约 5 s，15 min 主要留给 pnpm install。
-    timeout-minutes: 15
+    # 本机实测 test:coverage 约 12 s，超时主要留给 pnpm install + build。
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       # 版本以 package.json#packageManager 为准，勿再写 version（会与 action-setup 冲突）
@@ -21,6 +21,11 @@ jobs:
           node-version: '26'
       - name: Install
         run: pnpm install
+      # 测试走编译产物：tests/helpers/bootstrap.mjs 硬依赖 dist/src/bootstrap-globals.js，
+      # 而下面的 typecheck 是 --noEmit，不产出 dist。缺这一步 → 依赖 dist 的测试整片红
+      # （151 tests / 64 fail / 覆盖率报告近乎空白），且症状伪装成「覆盖率不达标」。
+      - name: Build（测试 import dist/ 产物，必须先编译）
+        run: pnpm build
       - name: Typecheck（全项目类型检查，tsc 语法+类型）
         run: pnpm typecheck
       - name: ESLint 门禁

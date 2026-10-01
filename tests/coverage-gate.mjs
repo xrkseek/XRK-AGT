@@ -59,12 +59,21 @@ const result = spawnSync(
 const testStatus = result.status;
 if (testStatus !== 0) {
   // 原始输出已随 stdio 之外捕获在 result 中，向上抛前补印关键行，避免静默
-  const tail = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
-    .split(/\r?\n/)
-    .filter((l) => /^ℹ (tests|pass|fail|skipped) /.test(l) || l.includes('not ok'))
-    .slice(0, 20);
+  const lines = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.split(/\r?\n/);
+  const counts = lines.filter((l) => /^ℹ (tests|pass|fail|skipped) /.test(l));
+  // node:test 在非 TTY（CI）下用 spec reporter，失败行是 `✖ 名字`，不是 tap 的 `not ok`。
+  // 只认 not ok 会让 CI 日志只剩一个 fail 数字，排查时完全黑盒——两种标记都要认。
+  // spec reporter 末尾的 `failing tests:` 汇总段会把同一批失败再列一遍，按它截断，
+  // 否则前 20 条会被重复项占满，真正的新失败反而被挤出去。
+  const tailStart = lines.findIndex((l) => /failing tests/.test(l));
+  const body = tailStart === -1 ? lines : lines.slice(0, tailStart);
+  const failed = body.filter((l) => /^\s*(?:not ok\b|[✖✘])/.test(l));
   console.error('[coverage-gate] ❌ 测试本身未全绿，先修测试再谈覆盖率：');
-  for (const l of tail) console.error(`  ${l.trim()}`);
+  for (const l of counts) console.error(`  ${l.trim()}`);
+  for (const l of failed.slice(0, 20)) console.error(`  ${l.trim()}`);
+  if (failed.length > 20) {
+    console.error(`  …另有 ${failed.length - 20} 条失败，跑 \`pnpm test:fast\` 看全量`);
+  }
 }
 
 const report = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
