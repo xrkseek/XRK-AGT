@@ -50,6 +50,16 @@ describe('HTTP 鉴权：127 回环判定', () => {
     assert.equal(isLoopbackHost('localhost'), true);
     assert.equal(isLoopbackHost('115.190.181.211:11451'), false);
     assert.equal(isLoopbackHost('example.com'), false);
+
+    // 127.0.0.0/8 整个回环段都算本机（旧 Redis 版只认 127.0.0.1，窄了一档）
+    assert.equal(isLoopbackHost('127.0.0.2'), true);
+    assert.equal(isLoopbackHost('::ffff:127.0.0.1'), true, 'IPv4-mapped IPv6 归一后应识别为回环');
+
+    // 0.0.0.0 是「未指定地址」，只在配置语义下算本机（Redis host），
+    // Host 头出现它属异常输入，安全判定侧不认。
+    assert.equal(isLoopbackHost('0.0.0.0'), false);
+    assert.equal(isLoopbackHost('0.0.0.0', { allowUnspecified: true }), true);
+    assert.equal(isLoopbackHost(''), false);
   });
 });
 
@@ -136,6 +146,31 @@ describe('HTTP 鉴权：默认强制 Key / loopbackExempt', () => {
     );
   });
 
+  it('原始白名单条目的危险判定与编译结果一致（启动横幅不再漏报）', () => {
+    // 尾斜杠归一：/api/ 与 /api 等价
+    assert.equal(runtimeAuth.isDangerousWhitelistEntry('/api/'), true);
+    assert.equal(runtimeAuth.isDangerousWhitelistEntry('/'), true);
+    // 通配形式（compileAuthWhitelistRule 会先剥离星号再判前缀）
+    assert.equal(runtimeAuth.isDangerousWhitelistEntry('/api*'), true);
+    // 普通路径不算危险
+    assert.equal(runtimeAuth.isDangerousWhitelistEntry('/public/'), false);
+    assert.equal(runtimeAuth.isDangerousWhitelistEntry('/api/public*'), false);
+    assert.equal(runtimeAuth.isDangerousWhitelistEntry(''), false);
+
+    // 一致性：凡被原始判定标为危险的条目，编译结果必须为 null。
+    // 此前 runtime-boot 的启动横幅手写判定且不做尾斜杠归一，
+    // 白名单写 `/api/` 时横幅不警告、实际却被静默忽略——两边判定分叉。
+    for (const entry of ['/', '/api', '/api/', '/api*', '/public', '/x*', '']) {
+      if (runtimeAuth.isDangerousWhitelistEntry(entry)) {
+        assert.equal(
+          runtimeAuth.compileAuthWhitelistRule(entry),
+          null,
+          `「${entry}」判定为危险，编译结果却非 null：横幅与实际行为分叉`,
+        );
+      }
+    }
+  });
+
   it('白名单「/」「/api」编译为 null；普通路径可匹配', () => {
     assert.equal(runtimeAuth.isDangerousAuthWhitelistPrefix('/'), true);
     assert.equal(runtimeAuth.isDangerousAuthWhitelistPrefix('/api'), true);
@@ -151,8 +186,7 @@ describe('HTTP 鉴权：默认强制 Key / loopbackExempt', () => {
 
     const pub = runtimeAuth.compileAuthWhitelistRule('/api/public*');
     assert.equal(pub?.type, 'prefix');
-    assert.equal(runtimeAuth.matchWhitelistRule(pub, '/api/public/x'), true);
-    assert.equal(runtimeAuth.matchWhitelistRule(pub, '/api/system/overview'), false);
+    assert.equal(runtimeAuth.matchWhitelistRule(pub, '/api/public/x'), true);    assert.equal(runtimeAuth.matchWhitelistRule(pub, '/api/system/overview'), false);
   });
 
   it('错误 Key（如 111）拒绝', () => {

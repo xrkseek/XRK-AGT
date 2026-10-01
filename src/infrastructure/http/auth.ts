@@ -28,10 +28,21 @@ export function isLoopback127Connection(address: unknown): boolean {
   return /^127\./.test(normalizeIpOrHost(address));
 }
 
-/** Host 是否本机（localhost / ::1 / 127.*） */
-export function isLoopbackHost(hostHeader: unknown): boolean {
+/**
+ * Host 是否本机。
+ *
+ * 默认口径：localhost / ::1 / 整个 127.0.0.0/8。
+ * `allowUnspecified` 用于**配置**侧语义（如 Redis host 写 0.0.0.0 表示「监听所有网卡」，
+ * 连它就是连本机）；安全判定侧不要开——Host 头出现 0.0.0.0 属异常输入。
+ */
+export function isLoopbackHost(
+  hostHeader: unknown,
+  opts?: { allowUnspecified?: boolean },
+): boolean {
   const host = normalizeIpOrHost(String(hostHeader || '').split(',')[0]);
-  return Boolean(host) && (host === 'localhost' || host === '::1' || isLoopback127Connection(host));
+  if (!host) return false;
+  if (opts?.allowUnspecified && host === '0.0.0.0') return true;
+  return host === 'localhost' || host === '::1' || isLoopback127Connection(host);
 }
 
 function isNonLoopbackClientIp(ip: unknown): boolean {

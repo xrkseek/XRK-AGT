@@ -13,7 +13,7 @@
  * @module #utils/monitor-safety
  */
 import path from 'node:path';
-import fs from 'node:fs/promises';
+import { isPathInsideAsync } from '#utils/path-guards.js';
 
 /** 规范化后的监控配置（字段齐全、副作用项为布尔真值）。 */
 export type NormalizedMonitorConfig = {
@@ -181,22 +181,8 @@ export async function isPathInsideAllowedRoots(
   filePath: string,
   allowedRoots: string[],
 ): Promise<boolean> {
-  let resolvedFile: string;
-  try {
-    resolvedFile = await fs.realpath(filePath);
-  } catch {
-    resolvedFile = path.resolve(filePath);
-  }
   for (const root of allowedRoots) {
-    let resolvedRoot: string;
-    try {
-      resolvedRoot = await fs.realpath(root);
-    } catch {
-      resolvedRoot = path.resolve(root);
-    }
-    const rel = path.relative(resolvedRoot, resolvedFile);
-    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return true;
-    if (rel === '') return true;
+    if (await isPathInsideAsync(root, filePath)) return true;
   }
   return false;
 }

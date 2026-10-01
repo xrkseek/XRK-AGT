@@ -22,6 +22,7 @@
 import path from 'node:path';
 import fsSync from 'node:fs';
 import { normalizeError } from '#utils/normalize-error.js';
+import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
 
 /** 前端工程静态产物相对路径候选（相对 www/<app>/；仅 signed 使用） */
 export const WWW_BUILD_OUT_CANDIDATES = [
@@ -166,24 +167,13 @@ export function looksLikeFrontendSourceTree(appDir: string) {
  * @returns {boolean}
  */
 function isInsideAppDir(appDir: string, candidateAbs: string) {
-  let base;
-  let target;
-  try {
-    base = fsSync.realpathSync(appDir);
-  } catch {
-    base = path.resolve(appDir);
-  }
-  try {
-    target = fsSync.existsSync(candidateAbs)
-      ? fsSync.realpathSync(candidateAbs)
-      : path.resolve(candidateAbs);
-  } catch {
-    target = path.resolve(candidateAbs);
-  }
-  const rel = path.relative(base, target);
-  if (!rel || rel === '') return true;
-  if (path.isAbsolute(rel)) return false;
-  return !rel.split(path.sep).includes('..');
+  // 先 realpath 解析 junction/symlink（这一步 isPathInside 本身不做，是本处的关键防线），
+  // 再交给 isPathInside 做 Windows 归一（大小写不敏感 + \\?\ / UNC 前缀）。
+  const base = realpathSyncOrResolve(appDir);
+  const target = fsSync.existsSync(candidateAbs)
+    ? realpathSyncOrResolve(candidateAbs)
+    : path.resolve(candidateAbs);
+  return isPathInside(base, target);
 }
 
 /**

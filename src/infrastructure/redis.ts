@@ -1,5 +1,6 @@
 import runtimeConfig from './config/config.js'
 import common, { normalizeHost } from '#utils/common.js'
+import { isLoopbackHost as authIsLoopbackHost } from '#infrastructure/http/auth.js'
 import { normalizeError } from '#utils/normalize-error.js'
 import { connectWithRetry } from '#utils/db-connect-utils.js'
 import RuntimeUtil from '#utils/runtime-util.js'
@@ -137,11 +138,11 @@ function getOptimalPoolSize() {
   return finalSize
 }
 
+// Redis host 指向本机的判定：复用 auth 的口径，并显式承认 0.0.0.0
+// （配置语义：0.0.0.0 = 监听所有网卡，连它就是连本机）。
+// 顺带修正旧实现只认 127.0.0.1、不认整个 127.0.0.0/8 的窄口径。
 function isLoopbackHost(host: unknown) {
-  const h = String(host || '')
-    .trim()
-    .toLowerCase()
-  return h === '127.0.0.1' || h === 'localhost' || h === '::1' || h === '0.0.0.0'
+  return authIsLoopbackHost(host, { allowUnspecified: true })
 }
 
 async function attemptRedisStart(retryCount: number) {
