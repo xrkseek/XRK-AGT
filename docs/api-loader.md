@@ -320,7 +320,7 @@ export default {
 ## 相关文档
 
 - **[HTTP API 基类](http-api.md)** - HttpApi 基类完整说明
-- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含 **11 个** HTTP API 模块的实际示例 ⭐
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含 **11 个** HTTP API 模块的实际示例
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 
 ---

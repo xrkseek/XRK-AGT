@@ -63,7 +63,7 @@ flowchart TD
 
 - **交互菜单**：选端口、启停服务、Playwright 浏览器安装、`pnpm run setup:browsers` 等价入口。
 - **server 模式**：子进程跑 `dist/app.js` → AgentRuntime，便于开发热重启。
-- **信号**：Ctrl+C 在服务端 **1 次重启 / 3 次回菜单**（`src/utils/process-signals.ts`），详见 [agent-runtime.md](bot.md#关闭流程与-ctrlc)。
+- **信号**：Ctrl+C 在服务端 **1 次重启 / 3 次回菜单**（`src/utils/process-signals.ts`），详见 [agent-runtime.md](agent-runtime.md#关闭流程与-ctrlc)。
 - **Windows UTF-8**：`src/utils/win-utf8.ts`（菜单与日志共用）。
 
 `AgentRuntime.run()` 内大致顺序：读配置 → `initDatabases`（见 [database.md](database.md)）→ 加载 Tasker / 监听器 / 插件 / HTTP / 工作流 → 监听 HTTP/WS → 触发 `online`。

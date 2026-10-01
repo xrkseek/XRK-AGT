@@ -467,7 +467,7 @@ routes: [
 ## 相关文档
 
 - **[API加载器](api-loader.md)** - API 自动加载和热重载机制
-- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含 **11 个** HTTP API 模块的实际示例 ⭐
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含 **11 个** HTTP API 模块的实际示例
 - **[鉴权与认证（AUTH）](AUTH.md)** - 系统级 API Key 与各层职责划分
 - **[HTTP业务层](http-business-layer.md)** - 重定向、CDN、反向代理增强功能
 - **[Server服务器架构](server.md)** - 完整的服务器架构说明

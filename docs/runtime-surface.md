@@ -247,7 +247,7 @@ export default class MyStream extends AiWorkflow {
 
 - [coding-style.md](coding-style.md) — 写法与性能速查  
 - [base-classes.md](base-classes.md) — 各基类 export 形状  
-- [bot.md](bot.md) — AgentRuntime 生命周期、HTTP/WS、关闭流程  
+\
 - [startup.md](startup.md) — 启动链  
 - [config-base.md](config-base.md) — `runtimeConfig` 与 ConfigBase  
 

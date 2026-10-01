@@ -798,7 +798,7 @@ flowchart TB
 - **[startup.md](startup.md)**：引导链与环境变量
 - **[底层架构设计](底层架构设计.md)**：分层边界
 - **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)**：目录树
-- **[system-Core 特性](system-core.md)**：Web 控制台与内置 API/工作流 ⭐
+- **[system-Core 特性](system-core.md)**：Web 控制台与内置 API/工作流
 - **[框架可扩展性指南](框架可扩展性指南.md)**：扩展点与 Core 开发
 - **[ai-workflow.md](ai-workflow.md)** · **[plugin-base.md](plugin-base.md)** · **[agent-runtime.md](agent-runtime.md)** · **[http-api.md](http-api.md)** · **[config-base.md](config-base.md)** · **[renderer.md](renderer.md)**
 
