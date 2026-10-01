@@ -86,6 +86,8 @@ export default class BrowserRendererBase extends Renderer {
   browserInitWaitMs = 60000;
   /** close / 健康探测超时 */
   browserOpTimeoutMs = 8000;
+  /** 健康检查轮询间隔（子类默认相同，config 可覆盖） */
+  healthCheckInterval = 120000;
   healthCheckTimer: ReturnType<typeof setInterval> | null = null;
   _unregisterShutdownHook: (() => void) | null = null;
   _restarting = false;
@@ -386,6 +388,36 @@ export default class BrowserRendererBase extends Renderer {
     if (!this.healthCheckTimer) return;
     clearInterval(this.healthCheckTimer);
     this.healthCheckTimer = null;
+  }
+
+  /**
+   * 浏览器存活探测：返回一个 Promise，探活失败会 reject（走 restart 流程）。
+   * 子类各自实现（playwright 用 browser.contexts()，puppeteer 用 browser.version()）。
+   */
+  protected async healthProbe(): Promise<unknown> {
+    throw new Error('healthProbe not implemented');
+  }
+
+  /**
+   * 启动健康检查轮询：浏览器空闲且未在重启时探测，失败则重启。
+   * 两套渲染器的实现原本逐行重复，已上提到基类，仅保留 healthProbe 差异。
+   */
+  startHealthCheck() {
+    if (this.healthCheckTimer) return;
+
+    this.healthCheckTimer = setInterval(async () => {
+      if (!this.browser || this.activeSlotCount() > 0 || this._restarting) return;
+
+      try {
+        if (typeof this.browser.isConnected === 'function' && !this.browser.isConnected()) {
+          throw new Error('disconnected');
+        }
+        await this.withTimeout(Promise.resolve(this.healthProbe()), this.browserOpTimeoutMs, 'health check');
+      } catch (e: unknown) {
+        RuntimeUtil.makeLog('warn', `Health check failed: ${normalizeError(e).message}, restarting...`, this.logTag);
+        await this.restart(true);
+      }
+    }, this.healthCheckInterval);
   }
 
   /** launch 时去掉 connect 专用字段，避免脏参数 */

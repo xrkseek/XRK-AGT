@@ -190,22 +190,9 @@ export default class PuppeteerRenderer extends BrowserRendererBase {
     return this.browser;
   }
 
-  startHealthCheck() {
-    if (this.healthCheckTimer) return;
-
-    this.healthCheckTimer = setInterval(async () => {
-      if (!this.browser || this.activeSlotCount() > 0 || this._restarting) return;
-
-      try {
-        if (typeof this.browser.isConnected === "function" && !this.browser.isConnected()) {
-          throw new Error("disconnected");
-        }
-        await this.withTimeout(Promise.resolve(this.browser.version!()), this.browserOpTimeoutMs, "health check");
-      } catch (e: unknown) {
-        RuntimeUtil.makeLog("warn", `Health check failed: ${normalizeError(e).message}, restarting...`, this.logTag);
-        await this.restart(true);
-      }
-    }, this.healthCheckInterval);
+  protected async healthProbe(): Promise<unknown> {
+    // 基类 startHealthCheck 已保证 this.browser 非空才进入本钩子
+    return this.browser!.version!();
   }
 
   async screenshot(name: string, data: ScreenshotData | Record<string, unknown> = {}) {
