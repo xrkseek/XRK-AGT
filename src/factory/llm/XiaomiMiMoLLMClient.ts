@@ -85,15 +85,15 @@ type StreamCollector = {
 };
 
 /**
- * ?? MiMo LLM ???
+ * 小米 MiMo LLM 客户端
  * @see https://mimo.mi.com/docs/en-US/api/chat/openai-api
  *
- * - baseUrl: https://api.xiaomimimo.com/v1 � path: /chat/completions
- * - ???`api-key`????? `authMode: bearer` ? Authorization
- * - ?? `thinking: { type }`??? `max_completion_tokens`
- * - ??????????? text_only ??
+ * - baseUrl: https://api.xiaomimimo.com/v1 · path: /chat/completions
+ * - 认证：`api-key`（默认）或 `authMode: bearer` → Authorization
+ * - 可选 `thinking: { type }`；出站 `max_completion_tokens`
+ * - 纯文本模型：图片由上游 text_only 占位
  *
- * harness???? createXiaomiAdapter?? OpenAICompatible ???????? Chat Completions ?????
+ * harness 无 `createXiaomiAdapter`；`OpenAICompatible` 不透传 Chat Completions 原生字段
  */
 export default class XiaomiMiMoLLMClient {
   config: LlmClientConfig;
@@ -198,7 +198,7 @@ export default class XiaomiMiMoLLMClient {
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
-        `XiaomiMiMoLLMClient ????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        `XiaomiMiMoLLMClient 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
         { status: resp.status, headers: resp.headers as { get?: (name: string) => string | null } },
       );
     }
@@ -210,7 +210,7 @@ export default class XiaomiMiMoLLMClient {
     if (message?.tool_calls?.length) {
       RuntimeUtil.makeLog(
         'info',
-        `[XiaomiMiMoLLMClient] ????? tool_calls�${message.tool_calls.length}???????????`,
+        `[XiaomiMiMoLLMClient] 单次补全含 tool_calls×${message.tool_calls.length}（本客户端不执行工具）`,
         'LLMFactory',
       );
       return { content, tool_calls: message.tool_calls };
@@ -233,7 +233,7 @@ export default class XiaomiMiMoLLMClient {
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`XiaomiMiMoLLMClient ??????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw new Error(`XiaomiMiMoLLMClient 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
 
     const collector: StreamCollector = { toolCalls: [], content: '', reasoningContent: '', finishReason: null };
@@ -241,7 +241,7 @@ export default class XiaomiMiMoLLMClient {
     if (collector.toolCalls.length) {
       RuntimeUtil.makeLog(
         'info',
-        `[XiaomiMiMoLLMClient] ??????? tool_calls�${collector.toolCalls.length}???????????`,
+        `[XiaomiMiMoLLMClient] 流式单次补全含 tool_calls×${collector.toolCalls.length}（本客户端不执行工具）`,
         'LLMFactory',
       );
     }

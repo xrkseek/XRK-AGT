@@ -1,5 +1,6 @@
 import RuntimeUtil from '#utils/runtime-util.js'
 import { HttpResponse } from '#utils/http-utils.js'
+import { defaultApiInfo, type ApiInfo } from './utils/helpers.js';
 import { normalizeError } from '#utils/normalize-error.js'
 import { ensureSystemCoreAuth } from './auth.js'
 
@@ -281,24 +282,8 @@ export default class HttpApi {
     this._wsDisposers = []
   }
 
-  getInfo(): {
-    name: string
-    dsc: string
-    priority: number
-    routes: number
-    ws?: number
-    enable: boolean
-    createTime: number
-  } {
-    return {
-      name: this.name,
-      dsc: this.dsc,
-      priority: this.priority,
-      routes: this.routes ? this.routes.length : 0,
-      ws: this.wsHandlers ? Object.keys(this.wsHandlers).length : 0,
-      enable: this.enable,
-      createTime: this.createTime
-    }
+  getInfo(): ApiInfo {
+    return defaultApiInfo(this, this.createTime)
   }
 
   start() {

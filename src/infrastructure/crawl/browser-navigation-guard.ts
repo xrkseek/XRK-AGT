@@ -81,19 +81,6 @@ export function didCrossDocumentUrlChange(page: { url: () => string }, previousU
   }
 }
 
-export function isHashOnlyNavigation(currentUrl: string, previousUrl: string) {
-  if (currentUrl === previousUrl) return false
-  try {
-    const prev = new URL(previousUrl)
-    const curr = new URL(currentUrl)
-    return (
-      prev.origin === curr.origin && prev.pathname === curr.pathname && prev.search === curr.search
-    )
-  } catch {
-    return false
-  }
-}
-
 type LookupFn = (
   hostname: string,
   options: { all: true }

@@ -48,10 +48,6 @@ export type DisplaySegment = {
 
 export type OutboundSegment = string | DisplaySegment | unknown;
 
-/** Markdown 剥离时需保护的协议片段 */
-export const PROTOCOL_MARKER_RE =
-  /(\[at:\d{5,10}\]|(?:\[图片内容:[^\]]+\])|(?:\[回复:(?:ID:)?\d+\])|(?:\[CQ:[^\]]+\]))/gi;
-
 /** 把 [CQ:at,qq=…] 收成 [at:QQ]，避免模型被教错协议后 @ 失效 */
 export function normalizeReplyAtMarkers(text: unknown): string {
   return String(text ?? '').replace(CQ_AT_RE, '[at:$1]');

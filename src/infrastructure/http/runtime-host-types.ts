@@ -3,7 +3,6 @@
  * 供 runtime-auth|ws|listen|proxy 使用；薄委托不改变对外行为。
  */
 import type { Server as HttpServer, IncomingMessage } from 'node:http'
-import type { Socket } from 'node:net'
 import type { Duplex } from 'node:stream'
 
 /** Express 风格请求（委托层不依赖完整 @types/express） */

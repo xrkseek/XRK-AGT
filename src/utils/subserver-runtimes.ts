@@ -106,10 +106,6 @@ export function parseDataSubserverPath(
   return { dir, runtime: DATA_DIR_TO_RUNTIME[dir] || 'pyserver' };
 }
 
-export function listSubserverRuntimes(): string[] {
-  return Object.keys(SUBSERVER_RUNTIME_CATALOG);
-}
-
 /**
  * @param token runtime id 或别名（可带 @ 前缀）
  */

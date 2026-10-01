@@ -98,9 +98,9 @@ type StreamCollector = {
 };
 
 /**
- * DeepSeek Chat Completions?`reasoning_effort` ? low | high | max
+ * DeepSeek Chat Completions：`reasoning_effort` ∈ low | high | max
  * @see https://api-docs.deepseek.com/api/create-chat-completion
- * ?????medium / xhigh ? high????????
+ * 兼容映射：medium / xhigh → high（官方兼容约定）
  */
 function normalizeDeepSeekReasoningEffort(value: unknown): 'low' | 'high' | 'max' | undefined {
   if (value === undefined || value === null || value === '') return;
@@ -134,11 +134,11 @@ function applyResponseFormat(body: ChatCompletionBody, overrides: LlmOverrides, 
 }
 
 /**
- * DeepSeek ?? LLM ???
+ * DeepSeek 官方 LLM 客户端
  * @see https://api-docs.deepseek.com/zh-cn/
  *
- * harness ???`createLlmFromConfig` ? provider~/deepseek/ ? `createDeepSeekAdapter`?
- * ??????? LLMFactory ?????????????
+ * harness：`createLlmFromConfig` 对 provider~/deepseek/ 走 `createDeepSeekAdapter`
+ * 默认由 LLMFactory 直接构造；未接 adapter 时按本客户端原生协议发送
  */
 export default class DeepSeekLLMClient {
   config: LlmClientConfig;
@@ -231,7 +231,7 @@ export default class DeepSeekLLMClient {
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
-        `DeepSeekLLMClient ????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        `DeepSeekLLMClient 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
         { status: resp.status, headers: resp.headers as { get?: (name: string) => string | null } },
       );
     }
@@ -243,7 +243,7 @@ export default class DeepSeekLLMClient {
     if (message?.tool_calls?.length) {
       RuntimeUtil.makeLog(
         'info',
-        `[DeepSeekLLMClient] ????? tool_calls�${message.tool_calls.length}???????????`,
+        `[DeepSeekLLMClient] 单次补全含 tool_calls×${message.tool_calls.length}（本客户端不执行工具）`,
         'LLMFactory',
       );
       return { content, tool_calls: message.tool_calls };
@@ -266,7 +266,7 @@ export default class DeepSeekLLMClient {
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`DeepSeekLLMClient ??????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw new Error(`DeepSeekLLMClient 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
 
     const collector: StreamCollector = { toolCalls: [], content: '', reasoningContent: '', finishReason: null };
@@ -274,7 +274,7 @@ export default class DeepSeekLLMClient {
     if (collector.toolCalls.length) {
       RuntimeUtil.makeLog(
         'info',
-        `[DeepSeekLLMClient] ??????? tool_calls�${collector.toolCalls.length}???????????`,
+        `[DeepSeekLLMClient] 流式单次补全含 tool_calls×${collector.toolCalls.length}（本客户端不执行工具）`,
         'LLMFactory',
       );
     }

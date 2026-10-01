@@ -774,7 +774,7 @@ export default class RuntimeUtil {
   static getCircularReplacer(): (key: any, value: any) => any {
     const seen = new WeakSet();
 
-    return (key: any, value: any) => {
+    return (_key: any, value: any) => {
       if (value == null) return value;
 
       switch (typeof value) {

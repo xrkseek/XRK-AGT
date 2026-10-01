@@ -4,7 +4,7 @@ import { fetchAsBase64 } from '#utils/llm/image-utils.js';
 import { createLlmHttpError } from '#utils/llm/llm-http-error.js';
 
 /**
- * Ollama Chat API?/api/chat?
+ * Ollama Chat API（/api/chat）
  * @see https://docs.ollama.com/api/chat
  * think: boolean | "low" | "medium" | "high" | "max"
  */
@@ -107,8 +107,8 @@ function resolveOllamaThink(
 }
 
 /**
- * harness?? createOllamaAdapter?? OpenAICompatible ???
- * ?????? Ollama ?? `/api/chat`?LLMFactory compat??
+ * harness 未提供 `createOllamaAdapter`；本客户端自带协议转换（`toOllamaMessages`），不依赖 adapter
+ * 对接本地 Ollama 的 `/api/chat`；由 LLMFactory 的 compat provider 选择
  */
 export default class OllamaCompatibleLLMClient {
   config: LlmClientConfig;
@@ -144,7 +144,7 @@ export default class OllamaCompatibleLLMClient {
         headers['api-key'] = apiKey;
       } else if (mode === 'header') {
         const name = String(this.config.authHeaderName ?? '').trim();
-        if (!name) throw new Error('ollama_compat: authMode=header ????? authHeaderName');
+        if (!name) throw new Error('ollama_compat: authMode=header 时必须提供 authHeaderName');
         headers[name] = apiKey;
       } else {
         headers.Authorization = `Bearer ${apiKey}`;
@@ -253,7 +253,7 @@ export default class OllamaCompatibleLLMClient {
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
-        `ollama_compat ????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        `ollama_compat 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
         { status: resp.status, headers: resp.headers as { get?: (name: string) => string | null } },
       );
     }
@@ -279,7 +279,7 @@ export default class OllamaCompatibleLLMClient {
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
-        `ollama_compat ??????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        `ollama_compat 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
         { status: resp.status, headers: resp.headers as { get?: (name: string) => string | null } },
       );
     }

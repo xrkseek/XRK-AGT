@@ -41,8 +41,7 @@ export const PROJECT_RULES_DIR_REL = `${PROJECT_AGENTS_DIR_REL}/rules`;
 /** 项目级 subagents 清单种子 */
 export const PROJECT_SUBAGENTS_REL = `${PROJECT_AGENTS_DIR_REL}/subagents.yaml`;
 
-/** 项目级配方与 microagents 目录 */
-export const PROJECT_RECIPES_DIR_REL = `${PROJECT_AGENTS_DIR_REL}/recipes`;
+/** 项目级 microagents 目录（配方种子用 projectAgentsAbs(root, 'recipes') 就地解析） */
 export const PROJECT_MICROAGENTS_DIR_REL = `${PROJECT_AGENTS_DIR_REL}/microagents`;
 
 /** 工作区内用户规则目录（相对 data/ai-workspace/{id}；同相对路径覆盖项目规则） */

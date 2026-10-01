@@ -50,11 +50,3 @@ export function reconcileSystemContext(
   }
   return { text, unchanged: false, fingerprint };
 }
-
-export function clearSystemContextGeneration(sessionKey?: string): void {
-  if (!sessionKey) {
-    generations.clear();
-    return;
-  }
-  generations.delete(String(sessionKey));
-}

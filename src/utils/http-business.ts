@@ -974,7 +974,7 @@ export class HTTPBusinessLayer {
   /**
    * 处理CDN相关逻辑
    */
-  handleCDN(req: ExpressLikeReq, res: ExpressLikeRes, filePath: string): string {
+    handleCDN(_req: ExpressLikeReq, res: ExpressLikeRes, filePath: string): string {
     this.cdnManager.setCDNHeaders(res, filePath);
     return this.cdnManager.getCDNUrl(filePath);
   }

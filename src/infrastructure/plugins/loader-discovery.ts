@@ -1,7 +1,6 @@
 import path from 'path'
 import fs from 'node:fs'
 import paths from '#utils/paths.js'
-import PluginBase from './plugin-base.js'
 import Handler from './handler.js'
 import { errorHandler, ErrorCodes } from '#utils/error-handler.js'
 import { normalizeError } from '#utils/normalize-error.js'

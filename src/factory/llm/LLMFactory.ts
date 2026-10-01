@@ -9,9 +9,7 @@ import OpenAICompatibleLLMClient from './OpenAICompatibleLLMClient.js';
 import OpenAIResponsesCompatibleLLMClient from './OpenAIResponsesCompatibleLLMClient.js';
 import OpenAIPathCompatLLMClient from './OpenAIPathCompatLLMClient.js';
 import OllamaCompatibleLLMClient from './OllamaCompatibleLLMClient.js';
-import GeminiCompatibleLLMClient from './GeminiCompatibleLLMClient.js';
 import AnthropicCompatibleLLMClient from './AnthropicCompatibleLLMClient.js';
-import AzureOpenAICompatibleLLMClient from './AzureOpenAICompatibleLLMClient.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import { assertProviderAllowed } from '#utils/runtime-policy.js';
 
@@ -162,7 +160,7 @@ function readFactoryCfg(configKey: unknown): Record<string, unknown> {
 }
 
 /** 所有 LLM 工厂统一从 providers[] 解析；YAML 默认仅 providers: []（顺序与原版一致） */
-const factoryRegistry: FactoryRegistryEntry[] = [
+export const factoryRegistry: FactoryRegistryEntry[] = [
   { configKey: 'volcengine_llm', factoryType: 'builtin', protocol: 'volcengine', displayName: '火山引擎（官方）' },
   { configKey: 'deepseek_llm', factoryType: 'builtin', protocol: 'deepseek', displayName: 'DeepSeek（官方）' },
   { configKey: 'xiaomimimo_llm', factoryType: 'builtin', protocol: 'xiaomimimo', displayName: '小米 MiMo（官方）' },
@@ -175,9 +173,9 @@ const factoryRegistry: FactoryRegistryEntry[] = [
   { configKey: 'newapi_compat_llm', factoryType: 'compat', defaultProtocol: 'new-api', displayName: 'New API 兼容', clientClass: OpenAIPathCompatLLMClient },
   { configKey: 'cherryin_compat_llm', factoryType: 'compat', defaultProtocol: 'cherryin', displayName: 'CherryIN 兼容', clientClass: OpenAIPathCompatLLMClient },
   { configKey: 'ollama_compat_llm', factoryType: 'compat', defaultProtocol: 'ollama', displayName: 'Ollama 兼容', clientClass: OllamaCompatibleLLMClient },
-  { configKey: 'gemini_compat_llm', factoryType: 'compat', defaultProtocol: 'gemini', displayName: 'Gemini 兼容', clientClass: GeminiCompatibleLLMClient },
+  { configKey: 'gemini_compat_llm', factoryType: 'compat', defaultProtocol: 'gemini', displayName: 'Gemini 兼容', clientClass: GeminiLLMClient },
   { configKey: 'anthropic_compat_llm', factoryType: 'compat', defaultProtocol: 'anthropic', displayName: 'Anthropic 兼容', clientClass: AnthropicCompatibleLLMClient },
-  { configKey: 'azure_openai_compat_llm', factoryType: 'compat', defaultProtocol: 'azure-openai', displayName: 'Azure OpenAI 兼容', clientClass: AzureOpenAICompatibleLLMClient },
+  { configKey: 'azure_openai_compat_llm', factoryType: 'compat', defaultProtocol: 'azure-openai', displayName: 'Azure OpenAI 兼容', clientClass: AzureOpenAILLMClient },
 ];
 
 function normalizeProviderKey(name: unknown): string {

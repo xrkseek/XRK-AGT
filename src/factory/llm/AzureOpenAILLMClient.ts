@@ -79,16 +79,16 @@ type StreamCollector = {
 };
 
 /**
- * Azure OpenAI / Foundry Chat Completions ???
+ * Azure OpenAI / Foundry Chat Completions 客户端
  * @see https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle
  * @see https://learn.microsoft.com/en-us/rest/api/aifoundry/azureopenai/chat
  *
- * - ?????`/openai/deployments/{deployment}/chat/completions?api-version=YYYY-MM-DD`
- * - Foundry v1?`path=/openai/v1/chat/completions`?`api-version` ???body ? `model`?
- * - ????? header `api-key`?Microsoft Entra?`authMode: bearer` ? `Authorization: Bearer`
- * - deployment???????? yaml??? model=provider ????
+ * - 经典部署：`/openai/deployments/{deployment}/chat/completions?api-version=YYYY-MM-DD`
+ * - Foundry v1：`path=/openai/v1/chat/completions`（`api-version` 可选；body 带 `model`）
+ * - 认证：默认 header `api-key`；Microsoft Entra：`authMode: bearer` → `Authorization: Bearer`
+ * - deployment（真实部署名）在 yaml；对外 model=provider 约定不变
  *
- * harness???? Azure adapter?? OpenAICompatible?Chat Completions????????????
+ * harness 无 Azure adapter；`OpenAICompatible` 不做 Chat Completions 协议差异转换
  */
 export default class AzureOpenAILLMClient {
   config: LlmClientConfig;
@@ -103,12 +103,12 @@ export default class AzureOpenAILLMClient {
 
   normalizeEndpoint(config: LlmClientConfig) {
     const base = String(config.baseUrl ?? '').replace(/\/+$/, '');
-    if (!base) throw new Error('azure_openai: ??? baseUrl?Azure endpoint?');
+    if (!base) throw new Error('azure_openai: 未配置 baseUrl（Azure endpoint）');
 
     const deployment = encodeURIComponent(
       String(config.deployment ?? config.azureDeployment ?? config.model ?? config.chatModel ?? ''),
     );
-    if (!deployment && !config.path) throw new Error('azure_openai: ??? deployment?Azure ????? path');
+    if (!deployment && !config.path) throw new Error('azure_openai: 未配置 deployment（Azure 部署名）或 path');
 
     const path = (config.path || `/openai/deployments/${deployment}/chat/completions`).replace(/^\/?/, '/');
     const apiVersion = String(config.apiVersion || '').trim();
@@ -166,7 +166,7 @@ export default class AzureOpenAILLMClient {
           this.config.azureDeployment;
       }
     } else {
-      // ?? deployments/{name}/chat/completions???????????? model
+      // 经典 deployments/{name}/chat/completions：模型由路径决定，勿再传 model
       delete body.model;
     }
 
@@ -190,7 +190,7 @@ export default class AzureOpenAILLMClient {
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
-        `AzureOpenAILLMClient ????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        `AzureOpenAILLMClient 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
         { status: resp.status, headers: resp.headers as { get?: (name: string) => string | null } },
       );
     }
@@ -202,7 +202,7 @@ export default class AzureOpenAILLMClient {
     if (message?.tool_calls?.length) {
       RuntimeUtil.makeLog(
         'info',
-        `[AzureOpenAILLMClient] ????? tool_calls�${message.tool_calls.length}???????????`,
+        `[AzureOpenAILLMClient] 单次补全含 tool_calls×${message.tool_calls.length}（本客户端不执行工具）`,
         'LLMFactory',
       );
       return { content, tool_calls: message.tool_calls };
@@ -225,7 +225,7 @@ export default class AzureOpenAILLMClient {
 
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
-      throw new Error(`AzureOpenAILLMClient ??????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
+      throw new Error(`AzureOpenAILLMClient 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`);
     }
 
     const collector: StreamCollector = { toolCalls: [], content: '', reasoningContent: '', finishReason: null };
@@ -233,7 +233,7 @@ export default class AzureOpenAILLMClient {
     if (collector.toolCalls.length) {
       RuntimeUtil.makeLog(
         'info',
-        `[AzureOpenAILLMClient] ??????? tool_calls�${collector.toolCalls.length}???????????`,
+        `[AzureOpenAILLMClient] 流式单次补全含 tool_calls×${collector.toolCalls.length}（本客户端不执行工具）`,
         'LLMFactory',
       );
     }

@@ -115,8 +115,3 @@ export async function importHarnessSdk(): Promise<HarnessSdkModule> {
     throw wrapped;
   }
 }
-
-export function resetHarnessSdkCache(): void {
-  cached = null;
-  cachedError = null;
-}

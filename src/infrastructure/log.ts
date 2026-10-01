@@ -3,7 +3,6 @@ import chalk from 'chalk'
 import runtimeConfig from './config/config.js'
 import path from 'node:path'
 import util from 'node:util'
-import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
 // @ts-expect-error node-schedule 无官方类型
 import schedule from 'node-schedule'

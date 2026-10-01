@@ -25,14 +25,6 @@ export function formatSessionWhere(e: { group_id?: unknown; user_id?: unknown } 
   return '当前会话';
 }
 
-export function formatUserVisibleSentAck(where: string, summary: unknown): string {
-  const line = String(summary ?? '').trim();
-  if (!line) {
-    return `你未向${where}发出新的可见内容。\n${TOOL_DELIVERED_FOOTER}`;
-  }
-  return `你已在${where}发出：${line}。用户在 QQ 里已能看到。\n${TOOL_DELIVERED_FOOTER}`;
-}
-
 export function formatUserVisibleDuplicateAck(
   where: string,
   alreadySent: unknown,
@@ -55,17 +47,6 @@ export function formatReplySentAck(where: string, content: unknown, messageId: u
 /** @deprecated 保留兼容：旧「仅拟定、稍后统一发」文案；现 reply 已立即发送 */
 export function formatReplyQueuedAck(where: string, content: unknown, messageId: unknown): string {
   return formatReplySentAck(where, content, messageId);
-}
-
-export function formatDeliveredAck(where: string, sentLines: unknown): string {
-  const items = (Array.isArray(sentLines) ? sentLines : [sentLines])
-    .map((s) => String(s ?? '').trim())
-    .filter(Boolean);
-  if (!items.length) {
-    return `你未向${where}发出可见文字。\n${TOOL_DELIVERED_FOOTER}`;
-  }
-  const body = items.map((c, i) => `${i + 1}. ${c}`).join('\n');
-  return `你已在${where}发出 ${items.length} 条文字：\n${body}\n用户在 QQ 里已能看到。若无其它待办，本轮结束。\n${TOOL_DELIVERED_FOOTER}`;
 }
 
 export function actionAck(detail: unknown): string {

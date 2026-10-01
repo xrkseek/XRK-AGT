@@ -36,14 +36,6 @@ type PromptCacheCtx = {
   stream?: { name?: string };
 };
 
-type UsageStats = Record<string, unknown> & {
-  prompt_tokens_details?: { cached_tokens?: number };
-  input_token_details?: { cache_read_input_tokens?: number };
-  cache_read_input_tokens?: number;
-  prompt_tokens?: number;
-  input_tokens?: number;
-};
-
 export function buildPromptCacheKey(
   parts: {
     keyPrefix?: string;

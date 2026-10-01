@@ -2,7 +2,7 @@ import HttpApi, { type AgentRuntimeBot, type WsHandlerFn } from './http.js'
 import RuntimeUtil from '#utils/runtime-util.js'
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js'
 import paths from '#utils/paths.js'
-import { validateApiInstance, getApiPriority } from './utils/helpers.js'
+import { validateApiInstance, getApiPriority, defaultApiInfo } from './utils/helpers.js'
 import { FileLoader } from '#utils/file-loader.js'
 import { resolveQualifiedCoreModuleKey } from '#utils/core-fs.js'
 import { API_REGISTER_BATCH_SIZE, LOADER_BATCH_SIZE } from '#utils/loader-constants.js'
@@ -89,14 +89,7 @@ class HttpApiLoader {
       validateApiInstance(apiInstance, key)
       if (typeof apiInstance.getInfo !== 'function') {
         apiInstance.getInfo = function (this: HttpApi) {
-          return {
-            name: this.name,
-            dsc: this.dsc,
-            priority: getApiPriority(this),
-            routes: this.routes.length,
-            enable: this.enable !== false,
-            createTime: this.createTime ?? Date.now()
-          }
+          return defaultApiInfo(this, this.createTime ?? Date.now())
         }
       }
 

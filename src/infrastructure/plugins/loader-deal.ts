@@ -1,4 +1,3 @@
-import fs from 'fs/promises'
 import runtimeConfig from '../config/config.js'
 import PluginBase from './plugin-base.js'
 import Runtime from './runtime.js'

@@ -996,16 +996,6 @@ export function mapHarnessContinueTurnError(
   return { action: 'rethrow', cause: err };
 }
 
-/** @internal tests — duck-type / instanceof helpers */
-export function __isHarnessSafetyLimitErrorForTests(err: unknown, harness: HarnessSdk) {
-  return isHarnessSafetyLimitError(err, harness);
-}
-
-/** @internal tests */
-export function __isHarnessBusyErrorForTests(err: unknown, harness: HarnessSdk) {
-  return isHarnessBusyError(err, harness);
-}
-
 /**
  * Optional extension: register extra tools after MCP / client schema tools.
  * Prefer apiConfig.registerTools(registry, ctx); stream.registerHarnessTools as fallback.

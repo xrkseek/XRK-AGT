@@ -65,18 +65,18 @@ type GeminiResponse = {
 };
 
 /**
- * Gemini ?? LLM ????Google Generative Language API?
- * ???https://ai.google.dev/api
+ * Gemini 官方 LLM 客户端（Google Generative Language API）
+ * 文档：https://ai.google.dev/api
  *
- * - baseUrl ?? `https://generativelanguage.googleapis.com`
- * - path ?? `/v1beta/models/{model}:generateContent`
- * - ????? `x-goog-api-key`?`authMode: query` ??? `?key=`
- * - ???`:streamGenerateContent?alt=sse`
- * - ????inlineData(base64)??? `transformMessagesWithVision` ???? OpenAI content
- * - MCP tools?Gemini function calling ????????????? enableTools=false?
+ * - baseUrl 默认 `https://generativelanguage.googleapis.com`
+ * - path 默认 `/v1beta/models/{model}:generateContent`
+ * - 认证：优先 `x-goog-api-key`；`authMode: query` 时退回 `?key=`
+ * - 流式：`:streamGenerateContent?alt=sse`
+ * - 多模态：inlineData(base64)；上游 `transformMessagesWithVision` 先统一为 OpenAI content
+ * - MCP tools：Gemini function calling 协议不同，默认不注入（建议 enableTools=false）
  *
- * harness?`createLlmFromConfig` ? provider~/gemini/ ? `createGeminiAdapter`?
- * ??????? LLMFactory ?????
+ * harness：`createLlmFromConfig` 对 provider~/gemini/ 走 `createGeminiAdapter`
+ * 默认由 LLMFactory 直接构造；未接 adapter 时按本客户端原生协议发送
  */
 export default class GeminiLLMClient {
   config: LlmClientConfig;
@@ -94,10 +94,10 @@ export default class GeminiLLMClient {
     const model = encodeURIComponent(String(config.model || config.chatModel || ''));
     const path = (config.path || (model ? `/v1beta/models/${model}:generateContent` : '')).replace(/^\/?/, '/');
     if (!config.apiKey) {
-      throw new Error('gemini: ??? apiKey');
+      throw new Error('gemini: 未配置 apiKey');
     }
     if (!path) {
-      throw new Error('gemini: ??? model/chatModel ? path');
+      throw new Error('gemini: 未配置 model/chatModel 或 path');
     }
     return `${base}${path}`;
   }
@@ -179,7 +179,7 @@ export default class GeminiLLMClient {
             if (inlinePart) {
               parts.push(inlinePart);
             } else {
-              parts.push({ text: `[??:${String(p.image_url.url)}]` });
+              parts.push({ text: `[图片:${String(p.image_url.url)}]` });
             }
           }
         }
@@ -258,7 +258,7 @@ export default class GeminiLLMClient {
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
-        `Gemini ????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        `Gemini 请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
         { status: resp.status, headers: resp.headers as { get?: (name: string) => string | null } },
       );
     }
@@ -286,7 +286,7 @@ export default class GeminiLLMClient {
     if (!resp.ok || !resp.body) {
       const text = await resp.text().catch(() => '');
       throw createLlmHttpError(
-        `Gemini ??????: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
+        `Gemini 流式请求失败: ${resp.status} ${resp.statusText}${text ? ` | ${text}` : ''}`,
         { status: resp.status, headers: resp.headers as { get?: (name: string) => string | null } },
       );
     }
