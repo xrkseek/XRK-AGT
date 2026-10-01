@@ -9,6 +9,7 @@
  *   5. Agents — `agents/subagents.yaml`（或工作区同名；OpenCode 式 mode 清单，非隔离执行）
  */
 import fs from 'node:fs';
+import { walkFiles } from '#utils/walk-files.js';
 import path from 'node:path';
 import YAML from 'yaml';
 import { realpathSyncOrResolve } from '#utils/path-guards.js';
@@ -201,41 +202,14 @@ function buildAgentsCatalogPrompt(list: AgentCatalogItem[], maxChars: number): s
   return truncate(note + sections.join('\n'), maxChars, 'agents-catalog');
 }
 
-function listFilesRecursive(
-  dir: string,
-  predicate: (fp: string, name: string) => boolean,
-): string[] {
-  const out: string[] = [];
-  const walk = (cur: string): void => {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(cur, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      if (e.name.startsWith('.')) continue;
-      if (e.name === 'node_modules') continue;
-      const fp = path.join(cur, e.name);
-      if (e.isDirectory()) {
-        walk(fp);
-        continue;
-      }
-      if (e.isFile() && predicate(fp, e.name)) out.push(fp);
-    }
-  };
-  walk(dir);
-  return out;
-}
 
 /** rel → abs */
 function indexRuleFiles(rulesDir: string): Map<string, string> {
   const map = new Map<string, string>();
   if (!rulesDir || !fs.existsSync(rulesDir)) return map;
-  const absFiles = listFilesRecursive(
-    rulesDir,
-    (_fp, name) => name.endsWith('.md') || name.endsWith('.mdc')
-  );
+  const absFiles = walkFiles(rulesDir, {
+    match: (name) => name.endsWith('.md') || name.endsWith('.mdc'),
+  });
   for (const fp of absFiles) {
     const rel = path.relative(rulesDir, fp).replace(/\\/g, '/');
     if (!rel || rel === 'README.md') continue;

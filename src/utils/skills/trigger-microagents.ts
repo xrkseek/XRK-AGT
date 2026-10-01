@@ -8,6 +8,7 @@ import path from 'node:path';
 import YAML from 'yaml';
 import { getProjectRoot, PROJECT_MICROAGENTS_DIR_REL, PROJECT_SKILLS_STANDARD_REL, resolveAgentWorkspaceAbs } from '#utils/agent-workspace-paths.js';
 import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
+import { walkFiles } from '#utils/walk-files.js';
 
 const REL_ROOTS = [PROJECT_MICROAGENTS_DIR_REL, PROJECT_SKILLS_STANDARD_REL];
 
@@ -83,59 +84,25 @@ function triggerMatches(userText: unknown, trigger: unknown): boolean {
   return text.toLowerCase().includes(t.toLowerCase());
 }
 
+/** skills 树内的说明文档（md/mdc），限深 4 层、至多 80 条 */
 function listMdFiles(dir: string, maxFiles = 80): string[] {
-  const out: string[] = [];
-  const walk = (d: string, depth: number): void => {
-    if (out.length >= maxFiles || depth > 4) return;
-    let entries;
-    try {
-      entries = fs.readdirSync(d, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const ent of entries) {
-      if (out.length >= maxFiles) break;
-      if (ent.name.startsWith('.')) continue;
-      const abs = path.join(d, ent.name);
-      if (ent.isDirectory()) {
-        if (ent.name === 'node_modules') continue;
-        walk(abs, depth + 1);
-        continue;
-      }
-      if (/\.(md|mdc)$/i.test(ent.name)) out.push(abs);
-    }
-  };
-  walk(dir, 0);
-  return out;
+  return walkFiles(dir, {
+    maxDepth: 4,
+    maxFiles,
+    match: (name) => /\.(md|mdc)$/i.test(name),
+  });
 }
 
 /**
- * 额外扫描 skills 树中带 triggers 的 SKILL.md（OpenHands 式）。
+ * 额外扫描 skills 树中带 triggers 的 SKILL.md（OpenHands 式），限深 5 层、至多 120 条。
  */
 function listSkillMdWithTriggersHint(root: string, max = 120): string[] {
-  const out: string[] = [];
-  const walk = (d: string, depth: number): void => {
-    if (out.length >= max || depth > 5) return;
-    let entries;
-    try {
-      entries = fs.readdirSync(d, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const ent of entries) {
-      if (out.length >= max) break;
-      if (ent.name.startsWith('.')) continue;
-      const abs = path.join(d, ent.name);
-      if (ent.isDirectory()) {
-        if (ent.name === 'node_modules' || ent.name === '.git') continue;
-        walk(abs, depth + 1);
-        continue;
-      }
-      if (ent.name === 'SKILL.md' || ent.name === 'skill.md') out.push(abs);
-    }
-  };
-  walk(root, 0);
-  return out;
+  return walkFiles(root, {
+    maxDepth: 5,
+    maxFiles: max,
+    skipDirs: new Set(['node_modules', '.git']),
+    match: (name) => name === 'SKILL.md' || name === 'skill.md',
+  });
 }
 
 function loadAgentDoc(absFile: string, rootReal: string): AgentDoc | null {

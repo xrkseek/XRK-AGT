@@ -4,6 +4,7 @@
  * - #skills更新：托管包按种子覆盖；用户自建（种子无包）永不碰
  */
 import fs from 'node:fs';
+import { walkFiles } from '#utils/walk-files.js';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import {
@@ -46,30 +47,11 @@ export function listProjectManagedSkillRels(projectRoot: string = getProjectRoot
   return out.sort((a, b) => a.localeCompare(b));
 }
 
-function listFilesRecursive(dir: string): string[] {
-  const out: string[] = [];
-  const walk = (cur: string) => {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(cur, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      if (e.name.startsWith('.')) continue;
-      const fp = path.join(cur, e.name);
-      if (e.isDirectory()) walk(fp);
-      else if (e.isFile()) out.push(fp);
-    }
-  };
-  walk(dir);
-  return out;
-}
 
 /** 目录内容指纹（路径相对 dir，排序后哈希） */
 function hashSkillPackageDir(dirAbs: string): string {
   if (!fs.existsSync(dirAbs)) return '';
-  const files = listFilesRecursive(dirAbs)
+  const files = walkFiles(dirAbs)
     .map((fp) => path.relative(dirAbs, fp).replace(/\\/g, '/'))
     .sort((a, b) => a.localeCompare(b));
   const h = createHash('sha256');
