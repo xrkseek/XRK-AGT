@@ -76,7 +76,10 @@ function parsePort(value: any): number | null {
 
 async function writeFileIfChanged(filePath: any, content: any) {
   try {
-    const existing = await fs.readFile(filePath, typeof content === 'string' ? 'utf8' : undefined);
+    // 分开写两次 readFile：三元的 'utf8' | undefined 不匹配任何重载，且省略 encoding 才返回 Buffer
+    const existing = typeof content === 'string'
+      ? await fs.readFile(filePath, 'utf8')
+      : await fs.readFile(filePath);
     if (existing === content) return false;
   } catch (err: any) {
     if (err instanceof Error && (err as any).code !== 'ENOENT') throw err;
