@@ -3,6 +3,7 @@
  * 由 AgentRuntime 薄包装委托。
  */
 import path from 'path';
+import { asPlainDoc as rec } from '#utils/plain-doc.js' // 11 份私有副本已收敛到公共出口；保留 rec 别名，调用点无需改动
 import * as fsSync from 'fs';
 // @ts-expect-error express 无 @types/express（与仓库约定一致）
 import express from 'express';
@@ -12,10 +13,6 @@ import runtimeConfig from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
 import FrontendLauncher from '#infrastructure/frontend/launcher.js';
 import { normalizeError } from '#utils/normalize-error.js';
-
-function rec(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-}
 
 type HiddenMatcher =
   | { type: 'regex'; value: RegExp }
@@ -192,7 +189,7 @@ export async function setupStaticServing(runtime: StaticRuntime) {
 }
 
 export function directoryIndexMiddleware(
-  runtime: StaticRuntime,
+  _runtime: StaticRuntime,
   req: ExpressReq,
   res: ExpressRes,
   next: ExpressNext,

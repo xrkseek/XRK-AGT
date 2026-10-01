@@ -8,6 +8,7 @@ import {
   parseSubserverCommandLine,
   subserverRuntimeUsageHint,
 } from '#utils/subserver-runtimes.js';
+import { getRuntimeGlobal } from '#utils/runtime-globals.js';
 import {
   formatSubserverError,
   getSubserverConfig,
@@ -21,9 +22,6 @@ type AgentRuntimeLike = {
   callSubserver: (requestPath: string, options?: Record<string, unknown>) => Promise<unknown>;
 };
 
-function getAgentRuntime(): AgentRuntimeLike {
-  return (globalThis as { AgentRuntime?: AgentRuntimeLike }).AgentRuntime!;
-}
 
 /**
  * 代码内转发到子服务 POST /api/system/command（非终端入口）
@@ -53,7 +51,7 @@ export async function dispatchSubserverCommand(
   );
 
   try {
-    const result = await getAgentRuntime().callSubserver('/api/system/command', {
+    const result = await getRuntimeGlobal<AgentRuntimeLike>('AgentRuntime')!.callSubserver('/api/system/command', {
       method: 'POST',
       body: { line: commandLine },
       timeout,
@@ -80,7 +78,7 @@ export async function callPyserver(
   requestPath: string,
   options: Record<string, unknown> = {},
 ): Promise<unknown> {
-  return getAgentRuntime().callSubserver(requestPath, { runtime: PYSERVER, ...options });
+  return getRuntimeGlobal<AgentRuntimeLike>('AgentRuntime')!.callSubserver(requestPath, { runtime: PYSERVER, ...options });
 }
 
 export const PyserverApi = {

@@ -3,6 +3,7 @@
  * 由 AgentRuntime 类方法薄包装委托，不改变对外行为。
  */
 import path from 'node:path'
+import { asPlainDoc as rec } from '#utils/plain-doc.js' // 11 份私有副本已收敛到公共出口；保留 rec 别名，调用点无需改动
 import fs from 'node:fs/promises'
 import * as fsSync from 'node:fs'
 import crypto from 'node:crypto'
@@ -23,10 +24,6 @@ import { normalizeError } from '#utils/normalize-error.js'
 export type { RuntimeAuthHost, AuthWhitelistRule }
 
 type WhitelistRule = AuthWhitelistRule
-
-function rec(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
-}
 
 function serverAuth(): Record<string, unknown> {
   return rec(rec(runtimeConfig.server).auth)
@@ -215,6 +212,19 @@ export function isDangerousAuthWhitelistPrefix(base: string) {
   return p === '/' || p === '/api'
 }
 
+/**
+ * 判断**原始白名单条目**是否危险（未剥离通配星号）。
+ *
+ * 与 isDangerousAuthWhitelistPrefix 的分工：后者接收的是已去星号的 base
+ * （compileAuthWhitelistRule 会先剥离），所以它自己不必认 `*`；
+ * 而启动横幅那类直接读原始配置的调用方必须用本函数，否则 `/api*` 会被漏判。
+ */
+export function isDangerousWhitelistEntry(raw: unknown): boolean {
+  const s = String(raw || '').trim()
+  if (!s) return false
+  return isDangerousAuthWhitelistPrefix(s.endsWith('*') ? s.slice(0, -1) : s)
+}
+
 export function compileAuthWhitelistRule(pattern: unknown): WhitelistRule | null {
   const raw = String(pattern || '').trim()
   if (!raw) return null
@@ -231,7 +241,7 @@ export function compileAuthWhitelistRule(pattern: unknown): WhitelistRule | null
 
   const starred = raw.endsWith('*')
   const base = starred ? raw.slice(0, -1) : raw
-  if (isDangerousAuthWhitelistPrefix(base)) {
+  if (isDangerousWhitelistEntry(raw)) {
     RuntimeUtil.makeLog(
       'warn',
       `[Auth] 忽略危险白名单「${raw}」（会放行全部或全部 /api）；静态页/health 本就不走 API Key`,

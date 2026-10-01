@@ -1,11 +1,12 @@
 import fs from 'node:fs/promises';
+import { asYamlDoc } from '#utils/plain-doc.js';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import yaml from 'yaml';
 import RuntimeUtil from '#utils/runtime-util.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import paths from '#utils/paths.js';
-import { normalizeError } from '#utils/normalize-error.js';
+import { errMsg } from '#utils/normalize-error.js';
 
 type YamlDoc = Record<string, unknown>;
 
@@ -90,13 +91,7 @@ type FlatSchemaEntry = {
   meta: Record<string, unknown>;
 };
 
-function asYamlDoc(value: unknown): YamlDoc {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as YamlDoc) : {};
-}
 
-function errMsg(err: unknown): string {
-  return normalizeError(err).message;
-}
 
 function errCode(err: unknown): string | undefined {
   if (err && typeof err === 'object' && 'code' in err) {
@@ -1017,7 +1012,7 @@ export default class ConfigBase {
             keyPlaceholder: fs.keyPlaceholder || fs.meta?.keyPlaceholder,
           },
         });
-        if (valueFields && Object.keys(valueFields).length > 0) {
+        if (hasValueFields && valueFields) {
           list.push(...this.getFlatSchema(`${path}[]`, { fields: valueFields }));
         }
       } else if (fs.type === 'object') {

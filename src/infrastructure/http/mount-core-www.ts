@@ -12,6 +12,7 @@
  * 同名对外路径先到先得；保留段见 `RESERVED_ROOT_SEGMENTS`。
  */
 import path from 'node:path'
+import { asPlainDoc as rec } from '#utils/plain-doc.js' // 11 份私有副本已收敛到公共出口；保留 rec 别名，调用点无需改动
 import fsSync from 'node:fs'
 // @ts-expect-error express 无 @types/express（与仓库约定一致）
 import express from 'express'
@@ -58,10 +59,6 @@ export {
  * `shared` 为历史保留段；产品页勿用，见 skill `xrk-www-compat`。
  */
 export const RESERVED_ROOT_SEGMENTS = ['api', 'core', 'media', 'uploads', 'File', 'shared']
-
-function rec(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
-}
 
 type ExpressApp = { use: (...args: unknown[]) => unknown }
 

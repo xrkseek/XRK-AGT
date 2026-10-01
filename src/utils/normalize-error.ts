@@ -3,3 +3,8 @@ export function normalizeError(err: unknown): Error {
   if (Error.isError(err)) return err;
   return new Error(String(err));
 }
+
+/** 错误转可读消息；与 normalizeError(err).message 等价，供日志与错误文案直接取用。 */
+export function errMsg(err: unknown): string {
+  return normalizeError(err).message;
+}

@@ -3,6 +3,7 @@
  * 由 AgentRuntime 类方法薄包装委托，不改变对外行为。
  */
 import type { IncomingMessage } from 'node:http'
+import { asPlainDoc as rec } from '#utils/plain-doc.js' // 11 份私有副本已收敛到公共出口；保留 rec 别名，调用点无需改动
 import type { Duplex } from 'node:stream'
 import RuntimeUtil from '#utils/runtime-util.js'
 import runtimeConfig from '#infrastructure/config/config.js'
@@ -15,10 +16,6 @@ import type {
 } from '#infrastructure/http/runtime-host-types.js'
 
 export type { RuntimeWsHost, WsConnectionLike, WsHandlerEntry }
-
-function rec(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
-}
 
 type RuntimeLike = RuntimeWsHost
 

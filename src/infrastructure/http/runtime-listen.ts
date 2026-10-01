@@ -3,6 +3,7 @@
  * 由 AgentRuntime 类方法薄包装委托，不改变对外行为。
  */
 import fs from 'node:fs/promises'
+import { asPlainDoc as rec } from '#utils/plain-doc.js' // 11 份私有副本已收敛到公共出口；保留 rec 别名，调用点无需改动
 import * as fsSync from 'node:fs'
 import https from 'node:https'
 import RuntimeUtil from '#utils/runtime-util.js'
@@ -22,10 +23,6 @@ import type { SecureVersion } from 'node:tls'
 import { getRuntimeGlobal } from '#utils/runtime-globals.js'
 import { normalizeError } from '#utils/normalize-error.js'
 import type { RuntimeListenHost } from '#infrastructure/http/runtime-host-types.js'
-
-function rec(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
-}
 
 export type { RuntimeListenHost }
 

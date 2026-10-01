@@ -2,6 +2,7 @@
  * AgentRuntime 存活/指标/状态 HTTP 处理（从 agent-runtime 拆出，降 Facade 集中度）
  */
 import { HttpResponse } from '#utils/http-utils.js';
+import { asPlainDoc as rec } from '#utils/plain-doc.js' // 11 份私有副本已收敛到公共出口；保留 rec 别名，调用点无需改动
 import MonitorService from '#infrastructure/ai-workflow/monitor-service.js';
 import runtimeConfig from '#infrastructure/config/config.js';
 import {
@@ -9,10 +10,6 @@ import {
   formatPrometheusMetrics,
 } from '#utils/observability.js';
 import { getHttpRequestMetricsSummary } from '#utils/http-request-metrics.js';
-
-function rec(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-}
 
 type ExpressLikeReq = {
   requestId?: string | null;

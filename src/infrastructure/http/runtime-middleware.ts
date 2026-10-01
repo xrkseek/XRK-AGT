@@ -4,6 +4,7 @@
  */
 // @ts-expect-error compression 无类型声明
 import compression from 'compression';
+import { asPlainDoc as rec } from '#utils/plain-doc.js' // 11 份私有副本已收敛到公共出口；保留 rec 别名，调用点无需改动
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 // @ts-expect-error express 无 @types/express（与仓库约定一致）
@@ -22,10 +23,6 @@ import * as runtimeObs from '#infrastructure/http/runtime-observability.js';
 import {
   isPrivateOrLoopbackAddress,
 } from '#infrastructure/http/auth.js';
-
-function rec(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-}
 
 type ExpressReq = {
   requestId?: string;
@@ -101,7 +98,7 @@ export async function initializeMiddlewareAndRoutes(runtime: MwRuntime) {
     frontendMountPrefixes = [];
   }
 
-  runtime.express.use((req: ExpressReq, res: ExpressRes, next: ExpressNext) => {
+    runtime.express.use((req: ExpressReq, res: ExpressRes, next: ExpressNext) => {
     req.requestId = resolveRequestId(req);
     const traceparent = req.headers?.traceparent;
     enterRequestContext({
@@ -168,7 +165,7 @@ export async function initializeMiddlewareAndRoutes(runtime: MwRuntime) {
   setupRateLimiting(runtime);
   setupBodyParsers(runtime);
 
-  runtime.express.use((req: ExpressReq, res: ExpressRes, next: ExpressNext) => {
+  runtime.express.use((req: ExpressReq, _res: ExpressRes, next: ExpressNext) => {
     req.multipartUpload = runtime.multipartUpload;
     req.createMultipartUploader = (options: Record<string, unknown> = {}) => runtime._createMultipartUploader(options);
     req.serverLimits = rec(runtimeConfig.server).limits || {};

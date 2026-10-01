@@ -5,13 +5,10 @@
  * 展示基址以 yaml 为准：server.server.url → 公网（misc.detectPublicIP）→ 127.0.0.1
  */
 import chalk from 'chalk'
+import { asPlainDoc as rec } from '#utils/plain-doc.js' // 11 份私有副本已收敛到公共出口；保留 rec 别名，调用点无需改动
 import RuntimeUtil from '#utils/runtime-util.js'
 import runtimeConfig from '#infrastructure/config/config.js'
 import { normalizeError } from '#utils/normalize-error.js'
-
-function rec(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
-}
 
 function serverYaml(): Record<string, unknown> {
   return rec(runtimeConfig.server)

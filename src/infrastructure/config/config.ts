@@ -1,4 +1,5 @@
 import YAML from 'yaml';
+import { asYamlDoc } from '#utils/plain-doc.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import paths from '#utils/paths.js';
@@ -12,7 +13,7 @@ import {
   isGlobalConfig,
 } from './config-constants.js';
 import { seedGlobalConfigsSync } from './config-seed.js';
-import { normalizeError } from '#utils/normalize-error.js';
+import { errMsg } from '#utils/normalize-error.js';
 import { getRuntimeGlobal } from '#utils/runtime-globals.js';
 
 const LOG_TAG = 'Config';
@@ -20,13 +21,7 @@ const LOG_TAG = 'Config';
 /** any 值面：避免 `doc.foo || {}` 在 unknown 下塌成字面量 `{}`（TS2339） */
 type YamlDoc = Record<string, any>;
 
-function asYamlDoc(value: unknown): YamlDoc {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as YamlDoc) : {};
-}
 
-function errMsg(err: unknown): string {
-  return normalizeError(err).message;
-}
 
 type RendererBundle = {
   puppeteer: YamlDoc;

@@ -1,9 +1,7 @@
 import runtimeConfig from '#infrastructure/config/config.js';
+import { sleep } from '#utils/common.js';
 import { ProxyAgent } from 'undici';
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
 
 function normalizeTimeoutMs(v: unknown, fallback: number): number {
   const n = Number(v);

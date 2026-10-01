@@ -2,6 +2,7 @@
  * 启动汇总输出与 trash 清理（从 AgentRuntime 拆出）
  */
 import path from 'path';
+import { asPlainDoc as rec } from '#utils/plain-doc.js' // 11 份私有副本已收敛到公共出口；保留 rec 别名，调用点无需改动
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import chalk from 'chalk';
@@ -16,14 +17,10 @@ import bootstrapRuntimePackages from '#infrastructure/config/loader.js';
 import CommonConfigRegistry from '#infrastructure/commonconfig/loader.js';
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import { setRuntimeGlobal } from '#utils/runtime-globals.js';
-import { maskSensitive } from '#infrastructure/http/runtime-auth.js';
+import { maskSensitive, isDangerousWhitelistEntry } from '#infrastructure/http/runtime-auth.js';
 import { displayAccessUrls, getProxyConfig, isHttpsEnabled } from '#infrastructure/http/runtime-net.js';
 import { normalizeError } from '#utils/normalize-error.js';
 import type { Dirent } from 'node:fs';
-
-function rec(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-}
 
 type BootRuntime = {
   actualPort: number | null;
@@ -167,7 +164,7 @@ export async function displayStartupSummary(
       console.log(chalk.gray('    loopbackExempt=false：所有客户端均须 API Key（推荐）'));
     }
     const wl = Array.isArray(authConfig.whitelist) ? authConfig.whitelist : [];
-    if (wl.some((x) => String(x || '').trim() === '/' || String(x || '').trim() === '/api' || String(x || '').trim() === '/api*')) {
+    if (wl.some((x) => isDangerousWhitelistEntry(x))) {
       console.log(chalk.red('    ⚠ 白名单含「/」或「/api」类危险项，启动时会忽略；请清空后保存'));
     }
   }

@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { getRuntimeGlobal } from '#utils/runtime-globals.js';
 import path from 'node:path';
 import RuntimeUtil from '#utils/runtime-util.js';
 import { inlineBinaryFromRef, isPathLike } from '#utils/media-ref.js';
@@ -18,9 +19,6 @@ type AgentRuntimeLike = {
   }>;
 };
 
-function getAgentRuntime(): AgentRuntimeLike | undefined {
-  return (globalThis as { AgentRuntime?: AgentRuntimeLike }).AgentRuntime;
-}
 
 export type SendApi = (
   action: string,
@@ -110,7 +108,7 @@ async function getViaApi(
     }
   } catch (err) {
     const message = (err as { message?: string })?.message ?? String(err);
-    getAgentRuntime()?.makeLog?.(
+    getRuntimeGlobal<AgentRuntimeLike>('AgentRuntime')?.makeLog?.(
       'debug',
       `[${action}] ${JSON.stringify(params)} → ${message}`,
       'EntryMedia',
@@ -228,7 +226,7 @@ export async function persistEntryMedia(
   const buffer = await readMediaBuffer(data, sendApi, { persist: true, type: mediaType });
   if (!buffer?.length) return null;
 
-  const file = await getAgentRuntime()!.fileType!({ ...data, file: buffer });
+  const file = await getRuntimeGlobal<AgentRuntimeLike>('AgentRuntime')!.fileType!({ ...data, file: buffer });
   if (!Buffer.isBuffer(file.buffer)) return null;
 
   file.name = `${groupId}/${mediaType}/${file.name}`;

@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { RuntimeError, ErrorCodes } from '#utils/error-handler.js';
 import { isPathInside, realpathSyncOrResolve } from '#utils/path-guards.js';
+import { normalizeError } from '#utils/normalize-error.js';
+import { scanTextForThreats } from '#utils/security/tool-threat-patterns.js';
 
 /**
  * 输入验证器
@@ -26,7 +28,8 @@ export class InputValidator {
     }
     if (/\0/.test(candidate)) {
       throw new RuntimeError(
-        `无效的路径: ${filePath} (检测到非法字符)`,
+        `无效的路径:
+{filePath} (检测到非法字符)`,
         ErrorCodes.PATH_TRAVERSAL,
       );
     }
@@ -73,6 +76,17 @@ export class InputValidator {
       throw new RuntimeError('命令必须是字符串', ErrorCodes.INVALID_INPUT);
     }
 
+    // 精确威胁表（rm -rf 根/home、dd 覆写盘、curl|sh 等，带 risk 分级）
+    const hits = scanTextForThreats(command);
+    if (hits.some((h) => h.risk === 'critical' || h.risk === 'high')) {
+      const names = hits.map((h) => h.name).join(', ');
+      throw new RuntimeError(
+        `禁止执行危险命令（${names}）: ${command}`,
+        ErrorCodes.INVALID_COMMAND,
+      );
+    }
+
+    // 粗名单兜底：拦「任意路径的 rm -rf / del /f / format」等无盘符/路径限定的形态
     const dangerousPatterns = [
       /rm\s+-rf/i,
       /format\s+/i,
@@ -158,7 +172,7 @@ export class InputValidator {
       return JSON.parse(jsonString);
     } catch (error) {
       throw new RuntimeError(
-        `无效的JSON格式: ${normalizeMessage(error)}`,
+        `无效的JSON格式: ${normalizeError(error).message}`,
         ErrorCodes.INVALID_INPUT,
       );
     }
@@ -197,10 +211,4 @@ export class InputValidator {
 
     return apiKey;
   }
-}
-
-function normalizeMessage(error: unknown): string {
-  return (Error as ErrorConstructor & { isError?: (e: unknown) => e is Error }).isError?.(error)
-    ? error.message
-    : String(error);
 }

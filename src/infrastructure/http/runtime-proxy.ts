@@ -4,6 +4,7 @@
  */
 // @ts-expect-error express 无 @types/express（与仓库约定一致）
 import express from 'express';
+import { asPlainDoc as rec } from '#utils/plain-doc.js' // 11 份私有副本已收敛到公共出口；保留 rec 别名，调用点无需改动
 import http from 'node:http';
 import https from 'node:https';
 import tls from 'node:tls';
@@ -25,10 +26,6 @@ import type {
 } from '#infrastructure/http/runtime-host-types.js';
 
 export type { RuntimeProxyHost, ProxyDomainConfig };
-
-function rec(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-}
 
 function asDomain(v: unknown): ProxyDomainConfig {
   return rec(v) as ProxyDomainConfig;

@@ -11,6 +11,7 @@
  * `buildSignedStaticWwwBeforeRuntime`（Bootstrap）或 `pnpm run build:www`。
  */
 import path from 'node:path';
+import { asPlainDoc as rec } from '#utils/plain-doc.js' // 11 份私有副本已收敛到公共出口；保留 rec 别名，调用点无需改动
 import fsSync from 'node:fs';
 import type { Dirent } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -47,10 +48,6 @@ type WwwBuildSpec = {
 };
 
 type SpawnFailError = Error & { stdout?: string; stderr?: string; code?: number | null };
-
-function rec(v: unknown): Record<string, unknown> {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-}
 
 function wwwBuildLog(level: string, message: string) {
   RuntimeUtil.makeLog(level, message, 'AgentRuntime');

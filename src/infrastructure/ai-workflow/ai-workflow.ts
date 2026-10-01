@@ -27,7 +27,7 @@ import { assembleChatLlmMessages, logLlmMessagePreview } from '#infrastructure/a
 import { runHarnessModuleLoop, slimMessagesForExistingSession } from '#infrastructure/ai-workflow/harness-module-loop.js';
 import { hasHarnessSession } from '#infrastructure/ai-workflow/harness-session-registry.js';
 import { importHarnessSdk } from '#infrastructure/ai-workflow/harness-resolve.js';
-import { normalizeError } from '#utils/normalize-error.js';
+import { errMsg } from '#utils/normalize-error.js';
 
 /** 出站 / callAI 消息最小面（OpenAI chat 风格） */
 export type WorkflowChatMessage = {
@@ -128,9 +128,6 @@ function workflowCtx(): WorkflowRequestCtx | null {
   return getWorkflowRequestContext() as WorkflowRequestCtx | null;
 }
 
-function errMsg(err: unknown): string {
-  return normalizeError(err).message;
-}
 
 function messageTextContent(m: WorkflowChatMessage): string {
   const content = m.content;
