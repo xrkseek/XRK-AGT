@@ -8,4 +8,4 @@ export {
   WelfordAccumulator,
   ReservoirSampler,
   SlidingErrorWindow,
-} from '../../../src/utils/metrics-stats.js';
+} from '#utils/metrics-stats.js';

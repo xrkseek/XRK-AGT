@@ -1,7 +1,7 @@
 # Strix 安全扫描（外部工具 · 运维/CI）
 
 > 官方：[usestrix/strix](https://github.com/usestrix/strix) · 文档：[usestrix-strix.mintlify.app](https://usestrix-strix.mintlify.app/)  
-> 本仓库**不**把 Strix 嵌入 `AgentRuntime`、不做成聊天插件、不随 `node app` 启动。
+> 本仓库**不**把 Strix 嵌入 `AgentRuntime`、不做成聊天插件、不随 `node dist/app.js` 启动。
 
 ## 为什么不进 Runtime
 
@@ -71,7 +71,7 @@ strix -n -t ./ --scan-mode quick
 
 ## 本机（灰盒 · 已启动的 AGT）
 
-先 `node app`，确认端口与 Key 策略，再只对回环地址：
+先 `node dist/app.js`，确认端口与 Key 策略，再只对回环地址：
 
 ```bash
 strix -n -t http://127.0.0.1:<port> --scan-mode quick \

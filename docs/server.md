@@ -48,20 +48,20 @@
 - **多端口支持**：同时支持HTTP和HTTPS端口
 - **端口冲突处理**：智能处理端口占用情况
 
-### 3. 强大的反向代理
+### 3. 反向代理
 
 - **多域名支持**：一个服务器支持多个域名
 - **SNI支持**：每个域名可以有自己的SSL证书
 - **路径重写**：灵活的路径重写规则
 - **HTTP/2支持**：提升HTTPS性能
 
-### 4. 完善的WebSocket支持
+### 4. WebSocket 支持
 
 - **协议升级**：自动处理HTTP到WebSocket的升级
 - **路径路由**：支持多个WebSocket路径
 - **认证集成**：与HTTP认证系统统一
 
-### 5. 开箱即用的静态文件服务
+### 5. 静态文件服务
 
 - **零配置**：`core/system-Core/site/` 提供站点根 `/` 静态（favicon 等）；业务控制台见 `core/system-Core/www/xrk/`
 - **智能索引**：自动查找 index.html
@@ -259,7 +259,7 @@ _initHttpServer() {
 **特性**：
 - 基于 Express 应用
 - 自动处理 WebSocket 升级
-- 完善的错误处理
+- 错误处理
 
 ### HTTPS 服务器
 
@@ -613,9 +613,9 @@ static:
   cacheTime: "1d"
 ```
 
-### 开箱即用的Web控制台
+### Web 控制台
 
-- **开箱即用**：`core/system-Core/www/xrk/`（Vue 控制台；仓内带 `dist/`，`sign.json` 挂产物；源码更新时可 stale 自建）
+- **内置**：`core/system-Core/www/xrk/`（Vue 控制台；仓内带 `dist/`，`sign.json` 挂产物；源码更新时可 stale 自建）
 - **访问路径**：`/xrk/`（`sign.proxy.mount`，与文件夹名一致）
 - **dist 约定**：维护者改完**建议** build 后把 `dist` 提交入库；也支持用户自行 build。见 [www-mount.md](www-mount.md)
 - **功能完整**：API测试、配置管理、插件管理、设备管理等
@@ -1153,16 +1153,13 @@ A: 使用反向代理的 `target` 配置，支持数组形式配置多个后端�
 
 XRK-AGT 的 Server 层提供了：
 
-✅ **统一的服务器架构** - 一个入口管理所有服务  
-✅ **灵活的端口管理** - 自动检测和冲突处理  
-✅ **强大的反向代理** - 多域名、SNI、路径重写、负载均衡、健康检查  
-✅ **完善的WebSocket支持** - 协议升级、路径路由  
-✅ **开箱即用的静态服务** - 零配置Web控制台  
-✅ **完善的安全中间件** - 安全头、CORS、速率限制  
-✅ **HTTP业务层功能** - 重定向、CDN支持、反向代理增强  
-✅ **快速搭建能力** - 5-15分钟搭建各种服务  
-
-这使得 XRK-AGT 能够快速搭建各种通讯协议的客户端或服务端，是系统架构的核心优势之一。
+- **统一服务器架构**：一个入口管理所有服务
+- **端口管理**：自动检测与冲突处理
+- **反向代理**：多域名、SNI、路径重写、负载均衡、健康检查
+- **WebSocket**：协议升级、路径路由
+- **静态服务**：零配置 Web 控制台
+- **安全中间件**：安全头、CORS、速率限制
+- **HTTP 业务层**：重定向、CDN 支持、反向代理增强
 
 ---
 
@@ -1171,7 +1168,7 @@ XRK-AGT 的 Server 层提供了：
 - **[HTTP业务层文档](http-business-layer.md)** - 重定向、CDN、负载均衡详细说明
 - **[AgentRuntime 主类文档](agent-runtime.md)** - AgentRuntime 生命周期、中间件与认证
 - **[HTTP API 基类文档](http-api.md)** - HTTP API 基类说明
-- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明 ⭐
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 
 ---

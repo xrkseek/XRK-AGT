@@ -12,7 +12,6 @@ import {
   pushNetHistory,
 } from '@/home/metrics';
 import { useHomeCharts } from '@/home/useHomeCharts';
-import HomeTagCloud from '@/components/HomeTagCloud.vue';
 import { useViewport } from '@/composables/useViewport';
 import { useAuthReload } from '@/composables/useAuthReload';
 
@@ -380,138 +379,114 @@ const hostFacts = computed(() => [
 <template>
   <div class="home-page" :class="{ 'is-mobile-page': isMobile }">
     <NSpin :show="loading && !metrics.cpuText.includes('%')">
-      <div class="dashboard">
-      <div class="dash-head">
-        <div>
-          <h2 class="dash-title">系统概览</h2>
-          <p class="dash-sub">实时监控 · 资源 / 机器人 / 插件工作流</p>
-        </div>
-        <NButton
-          size="tiny"
-          type="primary"
-          :loading="refreshing"
-          @click="load({ force: true })"
-        >
-          刷新
-        </NButton>
-      </div>
-
-      <div v-if="staleHint" class="stale-banner" role="status">{{ staleHint }}</div>
-
-      <div class="stats-grid">
-        <div
-          v-for="s in statCards"
-          :key="s.k"
-          class="stat-card brutal-card"
-          :style="{ '--c': s.c }"
-        >
-          <div class="stat-label">{{ s.k }}</div>
-          <div class="stat-value mono">{{ s.v }}</div>
-          <div v-if="s.sub" class="stat-sub">{{ s.sub }}</div>
-          <div
-            v-if="s.bar != null"
-            class="stat-bar"
-            role="presentation"
-          >
-            <i :style="{ width: `${Math.min(100, Math.max(0, s.bar))}%` }" />
+      <div class="status-board">
+        <header class="board-head">
+          <div>
+            <h2 class="board-title">状态台</h2>
+            <p class="board-sub">资源 · 主机 · 机器人</p>
           </div>
-        </div>
-      </div>
-
-      <section class="brutal-card chart-card net-card">
-        <header class="card-h">
-          <span>网络流量 (KB/s)</span>
-          <span class="card-meta">↓ {{ host.rxText }} · ↑ {{ host.txText }}</span>
+          <NButton size="tiny" type="primary" :loading="refreshing" @click="load({ force: true })">
+            刷新
+          </NButton>
         </header>
-        <div class="net-wrap">
-          <canvas id="netChart" ref="netRef" />
-        </div>
-      </section>
 
-      <div class="info-grid">
-        <section class="brutal-card panel">
-          <header class="card-h">
-            <span>机器人状态</span>
-            <span v-if="bots.length" class="card-meta">
-              <strong>{{ onlineBots }}</strong>/{{ bots.length }} 在线
+        <div v-if="staleHint" class="stale-banner" role="status">{{ staleHint }}</div>
+
+        <div class="metrics-row" role="list">
+          <div
+            v-for="s in statCards"
+            :key="s.k"
+            class="metric"
+            role="listitem"
+            :style="{ '--c': s.c }"
+          >
+            <span class="metric-k">{{ s.k }}</span>
+            <span class="metric-v mono">{{ s.v }}</span>
+            <span v-if="s.sub" class="metric-sub">{{ s.sub }}</span>
+            <span v-if="s.bar != null" class="metric-bar" role="presentation">
+              <i :style="{ width: `${Math.min(100, Math.max(0, s.bar))}%` }" />
             </span>
-          </header>
-          <div v-if="!bots.length" class="empty-pad">
-            <NEmpty description="暂无机器人" size="small" />
           </div>
-          <ul v-else class="bot-list">
-            <li v-for="(bot, i) in bots" :key="bot.uin || bot.id || i" class="bot-row">
-              <div class="bot-avatar">{{ botInitial(bot) }}</div>
-              <div class="bot-body">
-                <div class="bot-name">{{ bot.nickname ?? bot.uin ?? '未知' }}</div>
-                <div class="bot-sub">{{ botSub(bot) }}</div>
-              </div>
-              <img
-                v-if="bot.avatar && !bot.device"
-                class="bot-face"
-                :src="bot.avatar"
-                :alt="bot.nickname || ''"
-                @error="($e) => ($e.target.style.display = 'none')"
-              />
-              <span class="online-dot" :class="{ on: bot.online }" />
-            </li>
-          </ul>
+        </div>
+
+        <section class="board-section host-block">
+          <header class="sec-h">
+            <h3>主机</h3>
+            <span class="mono muted truncate" :title="host.cpuModel">{{ host.cpuModel }}</span>
+          </header>
+          <dl class="fact-row">
+            <div v-for="f in hostFacts" :key="f.k" class="fact">
+              <dt>{{ f.k }}</dt>
+              <dd class="mono">{{ f.v }}</dd>
+            </div>
+          </dl>
         </section>
 
-        <section class="brutal-card panel">
-          <header class="card-h">
-            <span>插件与工作流</span>
-          </header>
-          <div class="runtime-sections">
-            <section aria-label="插件">
-              <div class="sec-label">插件</div>
-              <div v-if="pluginMeta.error" class="cloud-empty">{{ pluginMeta.error }}</div>
-              <template v-else>
-                <div class="cloud-meta" aria-label="插件汇总">
-                  <span><strong class="num cyan">{{ pluginMeta.total }}</strong> 总插件</span>
-                  <span class="sep">·</span>
-                  <span><strong class="num green">{{ pluginMeta.withRules }}</strong> 有规则</span>
-                  <span class="sep">·</span>
-                  <span><strong class="num yellow">{{ pluginMeta.withTasks }}</strong> 定时</span>
-                  <span class="sep">·</span>
-                  <span><strong class="num pink mono">{{ pluginMeta.loadTime }}</strong> 加载</span>
+        <div class="split">
+          <section class="board-section">
+            <header class="sec-h">
+              <h3>机器人</h3>
+              <span v-if="bots.length" class="muted">
+                <strong class="accent-text">{{ onlineBots }}</strong>/{{ bots.length }} 在线
+              </span>
+            </header>
+            <div v-if="!bots.length" class="empty-pad">
+              <NEmpty description="暂无机器人" size="small" />
+            </div>
+            <ul v-else class="bot-list">
+              <li v-for="(bot, i) in bots" :key="bot.uin || bot.id || i" class="bot-row">
+                <div class="bot-avatar">{{ botInitial(bot) }}</div>
+                <div class="bot-body">
+                  <div class="bot-name">{{ bot.nickname ?? bot.uin ?? '未知' }}</div>
+                  <div class="bot-sub">{{ botSub(bot) }}</div>
                 </div>
-                <HomeTagCloud
-                  v-if="pluginChips.length"
-                  tip-prefix="plg"
-                  :items="pluginChips"
+                <img
+                  v-if="bot.avatar && !bot.device"
+                  class="bot-face"
+                  :src="bot.avatar"
+                  :alt="bot.nickname || ''"
+                  @error="($e) => ($e.target.style.display = 'none')"
                 />
-                <div v-else class="cloud-empty">暂无插件条目</div>
-              </template>
-            </section>
-            <section aria-label="工作流">
-              <div class="sec-label">工作流</div>
-              <div class="cloud-meta" aria-label="工作流汇总">
-                <span>
-                  <strong class="num cyan">{{ workflowMeta.enabled }}/{{ workflowMeta.total }}</strong>
-                  启用 / 总数
-                </span>
-              </div>
-              <HomeTagCloud
-                v-if="workflowChips.length"
-                tip-prefix="wf"
-                :items="workflowChips"
-              />
-              <div v-else class="cloud-empty">暂无工作流数据</div>
-            </section>
-          </div>
-        </section>
-      </div>
+                <span class="online-dot" :class="{ on: bot.online }" />
+              </li>
+            </ul>
+          </section>
 
-      <div class="bottom-grid">
-        <section class="brutal-card panel">
-          <header class="card-h">
-            <span>进程 Top 5</span>
-          </header>
+          <section class="board-section">
+            <header class="sec-h">
+              <h3>运行时</h3>
+            </header>
+            <div class="runtime-line">
+              <span>插件</span>
+              <template v-if="pluginMeta.error">
+                <span class="muted">{{ pluginMeta.error }}</span>
+              </template>
+              <template v-else>
+                <span class="mono">
+                  {{ pluginMeta.total }} · 规则 {{ pluginMeta.withRules }} · 定时 {{ pluginMeta.withTasks }} · {{ pluginMeta.loadTime }}
+                </span>
+              </template>
+            </div>
+            <div class="runtime-line">
+              <span>工作流</span>
+              <span class="mono">{{ workflowMeta.enabled }}/{{ workflowMeta.total }} 启用</span>
+            </div>
+            <ul v-if="pluginChips.length || workflowChips.length" class="chip-list">
+              <li v-for="c in pluginChips.slice(0, 12)" :key="'p-' + c.key" class="signal-tag">{{ c.label || c.key }}</li>
+              <li v-for="c in workflowChips.slice(0, 8)" :key="'w-' + c.key" class="signal-tag wf">{{ c.label || c.key }}</li>
+            </ul>
+          </section>
+        </div>
+
+        <details class="board-section secondary">
+          <summary>网络 · 进程 · 磁盘</summary>
+          <div class="net-wrap">
+            <canvas id="netChart" ref="netRef" />
+          </div>
           <table class="proc-table">
             <thead>
               <tr>
-                <th>进程名</th>
+                <th>进程</th>
                 <th>PID</th>
                 <th>CPU</th>
                 <th>内存</th>
@@ -524,37 +499,11 @@ const hostFacts = computed(() => [
               <tr v-for="(p, i) in processes" :key="p.pid || i">
                 <td class="name">{{ p.name || '未知进程' }}</td>
                 <td class="mono muted">{{ p.pid ?? '—' }}</td>
-                <td class="mono" :class="{ warn: procWarn(p.cpu) }">
-                  {{ Number(p.cpu || 0).toFixed(1) }}%
-                </td>
-                <td class="mono" :class="{ warn: procWarn(p.mem) }">
-                  {{ Number(p.mem || 0).toFixed(1) }}%
-                </td>
+                <td class="mono" :class="{ warn: procWarn(p.cpu) }">{{ Number(p.cpu || 0).toFixed(1) }}%</td>
+                <td class="mono" :class="{ warn: procWarn(p.mem) }">{{ Number(p.mem || 0).toFixed(1) }}%</td>
               </tr>
             </tbody>
           </table>
-        </section>
-
-        <section class="brutal-card panel">
-          <header class="card-h">
-            <span>主机信息</span>
-            <span class="card-meta mono truncate" :title="host.cpuModel">{{ host.cpuModel }}</span>
-          </header>
-          <dl class="fact-grid">
-            <div v-for="f in hostFacts" :key="f.k" class="fact">
-              <dt>{{ f.k }}</dt>
-              <dd class="mono">{{ f.v }}</dd>
-            </div>
-          </dl>
-        </section>
-      </div>
-
-      <div class="bottom-grid detail-grid">
-        <section class="brutal-card panel">
-          <header class="card-h">
-            <span>磁盘分卷</span>
-            <span class="card-meta">{{ disks.length || 0 }} 卷</span>
-          </header>
           <ul v-if="disks.length" class="disk-list">
             <li v-for="d in disks" :key="d.id" class="disk-row">
               <div class="disk-top">
@@ -572,14 +521,6 @@ const hostFacts = computed(() => [
               <div class="disk-sub mono">{{ d.usedText }} / {{ d.sizeText }}</div>
             </li>
           </ul>
-          <div v-else class="empty-pad"><NEmpty description="暂无磁盘数据" size="small" /></div>
-        </section>
-
-        <section class="brutal-card panel">
-          <header class="card-h">
-            <span>网络接口</span>
-            <span class="card-meta">↓{{ host.rxText }} ↑{{ host.txText }}</span>
-          </header>
           <ul v-if="ifaces.length" class="iface-list">
             <li v-for="n in ifaces" :key="n.name" class="iface-row">
               <strong>{{ n.name }}</strong>
@@ -587,410 +528,254 @@ const hostFacts = computed(() => [
               <span class="mono muted">{{ n.mac }}</span>
             </li>
           </ul>
-          <div v-else class="empty-pad"><NEmpty description="暂无外网接口" size="small" /></div>
-        </section>
+        </details>
       </div>
-    </div>
     </NSpin>
   </div>
 </template>
+
 <style scoped>
 .home-page {
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
   box-sizing: border-box;
+  padding: 2px;
 }
-.dashboard {
+.status-board {
   display: flex;
   flex-direction: column;
   gap: var(--section-gap);
-  padding-bottom: 10px;
+  padding-bottom: 12px;
+  max-width: 1100px;
 }
-.dash-head {
+.board-head {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 8px;
-  flex-shrink: 0;
 }
-.dash-title {
+.board-title {
   margin: 0;
-  font-size: 15px;
+  font-family: var(--font-display);
+  font-size: 22px;
   font-weight: 800;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.03em;
 }
-.dash-sub {
+.board-sub {
   margin: 2px 0 0;
   font-size: var(--font-xs);
   color: var(--muted);
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 .stale-banner {
-  margin: 0 0 var(--gap);
-  padding: 8px 12px;
+  padding: 8px 10px;
   font-size: var(--font-xs);
-  color: #7a3b00;
-  background: #fff3d6;
-  border: 1px solid #f0c36d;
-  border-radius: 6px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--yellow) 18%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
+  border-radius: var(--radius);
 }
-html.dark .stale-banner {
-  color: #ffd89a;
-  background: rgba(240, 195, 109, 0.12);
-  border-color: rgba(240, 195, 109, 0.35);
-}
-.stats-grid {
+.metrics-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--gap);
-  flex-shrink: 0;
-}
-.stat-card {
-  position: relative;
-  padding: 8px 10px 10px;
-  background: color-mix(in srgb, var(--c) 26%, var(--card));
+  gap: 1px;
+  background: color-mix(in srgb, var(--line) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 22%, transparent);
+  border-radius: var(--radius);
   overflow: hidden;
 }
-.stat-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: var(--c);
-  border-right: 1.5px solid var(--ink);
-}
-.stat-label {
-  font-size: var(--font-xs);
-  font-weight: 700;
-  opacity: 0.72;
-  margin-bottom: 3px;
-  letter-spacing: 0.03em;
-  padding-left: 4px;
-}
-.stat-value {
-  font-size: 17px;
-  font-weight: 800;
-  line-height: 1.15;
-  font-variant-numeric: tabular-nums;
-  padding-left: 4px;
-}
-.stat-sub {
-  margin-top: 3px;
-  padding-left: 4px;
-  font-size: var(--font-xs);
-  color: var(--muted);
-  line-height: 1.3;
-  word-break: break-all;
-}
-.stat-bar {
-  margin-top: 7px;
-  margin-left: 4px;
-  height: 5px;
-  border: 1.5px solid var(--ink);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--card) 70%, transparent);
-  overflow: hidden;
-}
-.stat-bar i {
-  display: block;
-  height: 100%;
-  background: var(--c);
-  border-radius: inherit;
-  transition: width 280ms ease;
-}
-.chart-grid {
-  display: grid;
-  grid-template-columns: 1fr 1.15fr;
-  gap: var(--gap);
-}
-.net-card {
-  flex-shrink: 0;
-}
-.chart-card {
-  padding: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-.card-h {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 800;
-  margin: 0;
-  padding: 7px 10px;
-  background: color-mix(in srgb, var(--paper-2) 55%, var(--card));
-  border-bottom: 2px solid var(--ink);
-}
-.card-meta {
-  font-size: var(--font-xs);
-  font-weight: 700;
-  color: var(--muted);
-}
-.card-meta strong {
-  color: var(--green);
-  font-size: 12px;
-}
-.dual {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding: 8px 10px 10px;
-}
-.chart-item {
+.metric {
+  background: var(--surface);
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 2px;
+  border-left: 2px solid var(--c);
 }
-.chart-item-label {
+.metric-k {
   font-size: var(--font-xs);
-  font-weight: 700;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--muted);
 }
-.doughnut-wrap {
-  width: 100px;
-  height: 100px;
-}
-.doughnut-wrap canvas,
-.net-wrap canvas {
-  display: block;
-  width: 100% !important;
-  height: 100% !important;
-}
-.net-wrap {
-  height: 160px;
-  position: relative;
-  padding: 6px 10px 10px;
-}
-.info-grid {
-  display: grid;
-  grid-template-columns: 0.9fr 1.25fr;
-  gap: var(--gap);
-  align-items: stretch;
-}
-.bottom-grid {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: var(--gap);
-  align-items: stretch;
-}
-.detail-grid {
-  grid-template-columns: 1fr 1fr;
-}
-.fact-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 10px;
-  margin: 0;
-  padding: 8px 10px 10px;
-}
-.fact {
-  min-width: 0;
-  padding: 5px 6px;
-  border: 1.5px solid color-mix(in srgb, var(--ink) 18%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--paper-2) 35%, var(--card));
-}
-.fact dt {
-  margin: 0;
-  font-size: var(--font-xs);
+.metric-v {
+  font-size: 18px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.metric-sub {
+  font-size: var(--font-xs);
   color: var(--muted);
 }
-.fact dd {
-  margin: 2px 0 0;
-  font-size: 12px;
-  font-weight: 700;
-  word-break: break-all;
-}
-.mini-bar {
-  margin: 0 10px 8px;
-  height: 7px;
-  border: 1.5px solid var(--ink);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--card) 70%, transparent);
+.metric-bar {
+  margin-top: 6px;
+  height: 3px;
+  background: color-mix(in srgb, var(--line) 12%, transparent);
+  border-radius: 1px;
   overflow: hidden;
 }
-.mini-bar.swap {
-  margin-top: -2px;
-}
-.mini-bar i {
+.metric-bar i {
   display: block;
   height: 100%;
-  border-radius: inherit;
+  background: var(--c);
+  transition: width 280ms var(--ease-out);
 }
-.disk-list,
-.iface-list {
-  list-style: none;
-  margin: 0;
-  padding: 6px 10px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.board-section {
+  border: 1px solid color-mix(in srgb, var(--line) 22%, transparent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0;
+  overflow: hidden;
 }
-.disk-row .disk-top {
+.sec-h {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  font-size: var(--font-xs);
-  margin-bottom: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 14%, transparent);
 }
-.disk-row .mini-bar {
-  margin: 0 0 3px;
+.sec-h h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
 }
-.disk-sub {
-  font-size: var(--font-xs);
-  color: var(--muted);
-}
-.iface-row {
-  display: grid;
-  grid-template-columns: minmax(72px, 0.7fr) 1fr auto;
-  gap: 6px;
-  align-items: center;
-  padding: 6px 7px;
-  border: 1.5px solid var(--ink);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--cyan) 12%, var(--card));
-  font-size: var(--font-xs);
-}
-.iface-row .muted {
-  color: var(--muted);
-  font-size: var(--font-xs);
-}
+.muted { color: var(--muted); }
+.accent-text { color: var(--accent); font-weight: 700; }
 .truncate {
   max-width: 55%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.panel {
-  padding: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+.fact-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
 }
-.panel > .bot-list,
-.panel > .runtime-sections,
-.panel > .proc-table,
-.panel > .empty-pad {
-  padding: 6px 10px 10px;
+.fact {
+  padding: 8px 12px;
+  border-right: 1px solid color-mix(in srgb, var(--line) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 10%, transparent);
 }
-.empty-pad {
-  padding: 14px 0;
+.fact:nth-child(4n) { border-right: 0; }
+.fact dt {
+  margin: 0;
+  font-size: 10px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
 }
+.fact dd {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  word-break: break-all;
+}
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap);
+}
+.empty-pad { padding: 16px; }
 .bot-list {
   list-style: none;
   margin: 0;
-  max-height: 240px;
+  padding: 4px 0;
+  max-height: 260px;
   overflow: auto;
 }
 .bot-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 4px;
-  border-bottom: 1.5px solid color-mix(in srgb, var(--ink) 12%, transparent);
-  transition: background 100ms ease;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 8%, transparent);
 }
-.bot-row:last-child {
-  border-bottom: none;
-}
-.bot-row:hover {
-  background: color-mix(in srgb, var(--yellow) 22%, transparent);
-  border-radius: 6px;
-}
+.bot-row:last-child { border-bottom: 0; }
+.bot-row:hover { background: var(--accent-dim); }
 .bot-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  border: 1.5px solid var(--ink);
-  background: color-mix(in srgb, var(--pink) 28%, var(--paper-2));
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  font-size: var(--font-xs);
-  flex-shrink: 0;
-  box-shadow: 1px 1px 0 var(--ink);
-}
-.bot-body {
-  flex: 1;
-  min-width: 0;
-}
-.bot-name {
-  font-weight: 700;
-  font-size: 12px;
-  line-height: 1.2;
-}
-.bot-sub {
-  font-size: var(--font-xs);
-  color: var(--muted);
-  line-height: 1.35;
-  white-space: normal;
-  word-break: break-word;
-}
-.bot-face {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--line) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--paper-2));
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: var(--font-xs);
+  font-family: var(--mono);
   flex-shrink: 0;
 }
+.bot-body { flex: 1; min-width: 0; }
+.bot-name { font-weight: 650; font-size: 12px; }
+.bot-sub { font-size: var(--font-xs); color: var(--muted); }
+.bot-face {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  object-fit: cover;
+  border: 1px solid color-mix(in srgb, var(--line) 25%, transparent);
+}
 .online-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--muted);
   flex-shrink: 0;
-  border: 1.5px solid var(--ink);
 }
-.online-dot.on {
-  background: var(--green);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 35%, transparent);
-}
-.runtime-sections {
+.online-dot.on { background: var(--green); }
+.runtime-line {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: var(--font-sm);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 8%, transparent);
 }
-.sec-label {
-  font-size: var(--font-xs);
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink);
-  margin-bottom: 3px;
-  padding: 2px 0 2px 6px;
-  border-left: 3px solid var(--cyan);
-}
-.cloud-meta {
+.chip-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 12px 10px;
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 5px;
-  font-size: var(--font-xs);
-  color: var(--muted);
-  margin-bottom: 4px;
+  gap: 4px;
 }
-.cloud-meta .num {
-  font-weight: 800;
-  font-size: 12px;
-  margin-right: 1px;
+.signal-tag.wf {
+  background: color-mix(in srgb, var(--cyan) 16%, transparent);
 }
-.num.cyan { color: var(--cyan); }
-.num.green { color: var(--green); }
-.num.yellow { color: color-mix(in srgb, var(--yellow) 70%, var(--ink)); }
-.num.pink { color: var(--pink); }
-.sep { opacity: 0.4; }
-.cloud-empty {
-  font-size: var(--font-xs);
-  color: var(--muted);
-  padding: 4px 0;
+.secondary {
+  padding: 0;
+}
+.secondary summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  list-style: none;
+  border-bottom: 1px solid transparent;
+}
+.secondary[open] summary {
+  border-bottom-color: color-mix(in srgb, var(--line) 14%, transparent);
+}
+.secondary summary::-webkit-details-marker { display: none; }
+.net-wrap {
+  height: 140px;
+  padding: 8px 12px;
+}
+.net-wrap canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
 }
 .proc-table {
   width: 100%;
@@ -999,69 +784,59 @@ html.dark .stale-banner {
 }
 .proc-table th,
 .proc-table td {
-  padding: 5px 8px;
+  padding: 5px 12px;
   text-align: left;
-  border-bottom: 1.5px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 10%, transparent);
 }
 .proc-table th {
   font-size: var(--font-xs);
   color: var(--muted);
-  font-weight: 700;
-  background: color-mix(in srgb, var(--paper-2) 40%, transparent);
-}
-.proc-table tbody tr:hover td {
-  background: color-mix(in srgb, var(--cyan) 12%, transparent);
-}
-.proc-table .name {
+  font-family: var(--mono);
   font-weight: 600;
 }
-.proc-table .warn {
-  color: var(--red);
-  font-weight: 700;
+.proc-table .name { font-weight: 600; }
+.proc-table .warn { color: var(--red); font-weight: 700; }
+.proc-table .center { text-align: center; padding: 10px; }
+.disk-list,
+.iface-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-.proc-table .muted {
-  color: var(--muted);
+.disk-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-xs);
+  margin-bottom: 4px;
 }
-.proc-table .center {
-  text-align: center;
-  padding: 10px;
+.mini-bar {
+  height: 3px;
+  background: color-mix(in srgb, var(--line) 12%, transparent);
+  overflow: hidden;
+  margin-bottom: 3px;
+}
+.mini-bar i { display: block; height: 100%; }
+.disk-sub { font-size: var(--font-xs); color: var(--muted); }
+.iface-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.7fr) 1fr auto;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 0;
+  font-size: var(--font-xs);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 8%, transparent);
 }
 
-@media (max-width: 980px) {
-  .stats-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-  .chart-grid,
-  .info-grid,
-  .bottom-grid {
-    grid-template-columns: 1fr;
-  }
-  .detail-grid {
-    grid-template-columns: 1fr;
-  }
+@media (max-width: 900px) {
+  .metrics-row { grid-template-columns: 1fr 1fr; }
+  .fact-row { grid-template-columns: 1fr 1fr; }
+  .split { grid-template-columns: 1fr; }
 }
-@media (min-width: 981px) and (max-width: 1200px) {
-  .detail-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-.home-page.is-mobile-page .stats-grid {
-  grid-template-columns: 1fr;
-}
-.home-page.is-mobile-page .chart-grid,
-.home-page.is-mobile-page .info-grid,
-.home-page.is-mobile-page .bottom-grid,
-.home-page.is-mobile-page .detail-grid {
-  grid-template-columns: 1fr;
-}
-.home-page.is-mobile-page .doughnut-wrap {
-  width: 72px;
-  height: 72px;
-}
-.home-page.is-mobile-page .net-wrap {
-  height: 110px;
-}
-.home-page.is-mobile-page .stat-value {
-  font-size: 15px;
-}
+.home-page.is-mobile-page .metrics-row { grid-template-columns: 1fr; }
+.home-page.is-mobile-page .fact-row { grid-template-columns: 1fr 1fr; }
+.home-page.is-mobile-page .net-wrap { height: 110px; }
 </style>
+

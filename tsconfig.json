@@ -1,13 +1,30 @@
 {
+  "include": [
+    "app.ts",
+    "start.ts",
+    "debug.ts",
+    "src/types/**/*.d.ts",
+    "src/**/*",
+    "core/**/*.ts",
+    "core/**/*.mts",
+    "tests/unit/**/*.ts",
+    "tests/unit/**/*.mjs",
+    "tests/integration/**/*.ts",
+    "tests/integration/**/*.mjs",
+    "tests/e2e/**/*.ts",
+    "tests/e2e/**/*.mjs",
+    "tests/helpers/**/*.mjs"
+  ],
+  "exclude": ["node_modules", "**/dist/**", "**/www/**", "**/site/**"],
   "compilerOptions": {
     "target": "ES2024",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2024"],
+    "lib": ["ES2024", "DOM"],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "allowJs": true,
+    "allowJs": false,
     "checkJs": false,
     "verbatimModuleSyntax": true,
     "rewriteRelativeImportExtensions": true,
@@ -22,11 +39,5 @@
       "#data/*": ["./data/*"],
       "#renderers/*": ["./src/renderers/*"]
     }
-  },
-  "include": [
-    "src/utils/module-ext.ts",
-    "core/**/*.ts",
-    "tests/framework/**/*.ts"
-  ],
-  "exclude": ["node_modules", "**/dist/**", "**/www/**"]
+  }
 }

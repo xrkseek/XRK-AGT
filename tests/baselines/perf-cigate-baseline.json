@@ -1,0 +1,20 @@
+{
+  "profile": "cigate",
+  "command": "pnpm test:perf:gate",
+  "recordedAt": "2026-09-12T09:01:14.721Z",
+  "node": ">=26",
+  "dist": true,
+  "target": "health",
+  "selfServer": true,
+  "slo": {
+    "maxP99Ms": 800,
+    "maxErrorRate": 0.05,
+    "minRps": 20
+  },
+  "sameMachineNote": "同机复跑不得无故显著劣于本基线；硬门槛以 cigate SLO 为准（p99≤800ms、errorRate≤5%、load rps≥20）。",
+  "baseline": {
+    "load": { "rps": 83.41, "p99Ms": 678.164, "errorRate": 0 },
+    "soak": { "rps": 88.59, "p99Ms": 675.738, "errorRate": 0 },
+    "metricsHttp": { "total": 1241, "p99Ms": 18.047, "rps": 86.75 }
+  }
+}

@@ -784,7 +784,7 @@ class ProxyManager {
 
 - **[AgentRuntime 主类文档](agent-runtime.md)** - HTTP/HTTPS/WebSocket 服务详细说明
 - **[Server 服务器架构](server.md)** - 完整的服务器架构说明
-- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明 ⭐
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明
 
 ---
 

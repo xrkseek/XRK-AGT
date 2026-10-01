@@ -3,8 +3,8 @@
  */
 process.env.XRK_TEST = '1';
 
-import AgentRuntime from '../../src/agent-runtime.js';
-import { setRuntimeGlobal } from '../../src/utils/runtime-globals.js';
+import AgentRuntime from '../../dist/src/agent-runtime.js';
+import { setRuntimeGlobal } from '#utils/runtime-globals.js';
 
 const port = Number(process.env.XRK_TEST_PORT);
 if (!Number.isFinite(port) || port <= 0) {

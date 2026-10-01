@@ -22,9 +22,18 @@ apis/<group>/
   core/plugin/*.js
 ```
 
+## 本机前置与验收
+
+完整步骤见 **[subserver/SETUP.md](../../subserver/SETUP.md)**「本机前置」：
+
+1. `pnpm subservers:check` — 工具链 + 端口空闲（缺工具只标 `✗`，不强制失败）
+2. 起子服 — `pnpm docker:up` 或本机 `SUBSERVER_RUNTIME_CATALOG.start`
+3. `pnpm test:subservers` — 连通性冒烟（未启动则 FAIL；可 `--runtime <id>`）
+
 ## 文档
 
 - [subserver-plugin-development.md](../../docs/subserver-plugin-development.md)
 - [subserver/CONTRACT.md](../../subserver/CONTRACT.md)
+- [docs/subserver-api.md](../../docs/subserver-api.md) · [docs/docker.md](../../docs/docker.md)
 
 参考：`subserver/pyserver/apis/jmcomic/`、`media-tools/`。

@@ -3,7 +3,7 @@
   "version": "2.0.9",
   "author": "Xrkseek",
   "description": "多平台、多Tasker、工作流驱动型智能体平台 - Multi-platform, multi-Tasker, workflow-driven intelligent agent platform",
-  "main": "app.js",
+  "main": "dist/app.js",
   "type": "module",
   "engines": {
     "node": ">=26.0.0",
@@ -22,22 +22,21 @@
     "chatbot"
   ],
   "imports": {
-    "#utils/*": "./src/utils/*",
-    "#core/*": "./core/*",
+    "#utils/*": "./dist/src/utils/*",
+    "#core/*": "./dist/core/*",
     "#config/*": "./config/*",
     "#data/*": "./data/*",
-    "#renderers/*": "./src/renderers/*",
-    "#modules/*": "./src/modules/*",
-    "#infrastructure/*": "./src/infrastructure/*",
-    "#factory/*": "./src/factory/*"
+    "#renderers/*": "./dist/src/renderers/*",
+    "#modules/*": "./dist/src/modules/*",
+    "#infrastructure/*": "./dist/src/infrastructure/*",
+    "#factory/*": "./dist/src/factory/*"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "0.61.1",
     "@mozilla/readability": "^0.6.0",
-    "@xrkseek/harness": "0.1.26",
+    "@xrkseek/harness": "0.3.3",
     "art-template": "^4.13.2",
     "chalk": "^5.4.1",
-    "chokidar": "^5.0.0",
     "compression": "^1.8.1",
     "express": "^4.22.1",
     "express-rate-limit": "^8.1.0",
@@ -66,25 +65,34 @@
     "yaml": "^2.7.0"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
+    "@types/node": "26.6.3",
     "eslint": "^9.18.0",
     "typescript": "^5.9.3"
   },
   "scripts": {
-    "start": "node --experimental-strip-types app.js",
-    "dev": "node --experimental-strip-types app.js",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json && node scripts/copy-runtime-assets.mjs",
+    "build:watch": "tsc -p tsconfig.build.json -w",
+    "start": "pnpm build && node dist/app.js",
+    "dev": "pnpm build && node dist/app.js",
     "build:www": "node scripts/build-www-static.mjs",
-    "debug": "node --experimental-strip-types debug.js",
+    "debug": "pnpm build && node dist/debug.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "setup:browsers": "node -e \"import { installPlaywrightChromium } from '#utils/bootstrap-deps.js'; await installPlaywrightChromium();\"",
+    "any-heat": "node scripts/any-heat.mjs",
+    "any-heat:baseline": "node scripts/any-heat.mjs --write-baseline",
+    "any-heat:check": "node scripts/any-heat.mjs --check",
+    "setup:browsers": "pnpm build && node -e \"import { installPlaywrightChromium } from '#utils/bootstrap-deps.js'; await installPlaywrightChromium();\"",
     "start:windows": "start.bat server",
     "start:unix": "./start.sh server",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "lint:gate": "node tests/checks/lint-gate.mjs",
+    "lint:unused": "node tests/checks/unused-decls-check.mjs",
+    "lint:unused:self-test": "node tests/checks/unused-decls-check.mjs --self-test",
     "test": "node tests/run.mjs unit",
     "test:all": "node tests/run.mjs all",
-    "test:subservers": "node tests/subservers-smoke.mjs",
-    "subservers:check": "node tests/subservers-check-env.mjs",
+    "test:subservers": "node tests/checks/subservers-smoke.mjs",
+    "subservers:check": "node tests/checks/subservers-check-env.mjs",
+    "docker:check": "node tests/checks/docker-check-env.mjs",
     "docker:clean": "node src/utils/docker-stack.mjs clean",
     "docker:build": "node src/utils/docker-stack.mjs build",
     "docker:build:browser": "node src/utils/docker-stack.mjs build xrk-agt --browser",
@@ -103,7 +111,9 @@
     "test:stress": "node tests/perf/run-perf.mjs stress",
     "test:soak": "node tests/perf/run-perf.mjs soak",
     "test:bench": "node tests/perf/run-perf.mjs bench",
-    "test:chaos": "node tests/perf/run-perf.mjs chaos"
+    "test:chaos": "node tests/perf/run-perf.mjs chaos",
+    "test:coverage": "node tests/run.mjs coverage",
+    "coverage:gate": "node tests/coverage-gate.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

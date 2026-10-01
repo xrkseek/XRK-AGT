@@ -11,12 +11,12 @@ description: 编写或审查 core/src 代码时，确保使用 Node 26 稳定 AP
 
 ## 版本
 
-- **要求**：Node ≥ 26.0（推荐 / 实测 **26.7.x**，至少 ≥ 26.5.1）；`package.json` engines 与 `app.js` 启动校验一致。
+- **要求**：Node ≥ 26.0（推荐 / 实测 **26.7.x**，至少 ≥ 26.5.1）；`package.json` engines 与 `app.ts` / `dist/app.js` 启动校验一致。
 - **勿用**：Node 24 特性检测回退、polyfill、未在文档列出的实验 API（如 `node:ffi`，除非用户明确要求）。
 
 ---
 
-## Core / 业务代码（`core/**/*.js`）必用
+## Core / 业务代码（`core/**/*.{js,ts}`）必用
 
 | 场景 | 正确写法 | 禁止 |
 |------|----------|------|

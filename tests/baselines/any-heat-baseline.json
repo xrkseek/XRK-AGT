@@ -1,0 +1,548 @@
+{
+  "generatedAt": "2026-09-08T14:42:59.442Z",
+  "root": "src",
+  "fileCount": 227,
+  "hitFileCount": 134,
+  "totalAny": 2871,
+  "topN": 15,
+  "reduceTarget": 0.5,
+  "files": [
+    {
+      "path": "src/agent-runtime.ts",
+      "count": 164
+    },
+    {
+      "path": "src/infrastructure/plugins/loader-deal.ts",
+      "count": 122
+    },
+    {
+      "path": "src/infrastructure/commonconfig/commonconfig.ts",
+      "count": 116
+    },
+    {
+      "path": "src/utils/runtime-util.ts",
+      "count": 112
+    },
+    {
+      "path": "src/infrastructure/log.ts",
+      "count": 96
+    },
+    {
+      "path": "src/infrastructure/plugins/loader-discovery.ts",
+      "count": 93
+    },
+    {
+      "path": "src/infrastructure/crawl/playwright-session.ts",
+      "count": 91
+    },
+    {
+      "path": "src/infrastructure/ai-workflow/harness-module-loop.ts",
+      "count": 83
+    },
+    {
+      "path": "src/infrastructure/ai-workflow/remote-mcp.ts",
+      "count": 64
+    },
+    {
+      "path": "src/infrastructure/ai-workflow/ai-workflow.ts",
+      "count": 62
+    },
+    {
+      "path": "src/infrastructure/http/runtime-proxy.ts",
+      "count": 62
+    },
+    {
+      "path": "src/infrastructure/http/runtime-static.ts",
+      "count": 57
+    },
+    {
+      "path": "src/infrastructure/http/runtime-middleware.ts",
+      "count": 52
+    },
+    {
+      "path": "src/infrastructure/renderer/browser-renderer-base.ts",
+      "count": 52
+    },
+    {
+      "path": "src/infrastructure/crawl/ssrf-policy.ts",
+      "count": 49
+    },
+    {
+      "path": "src/factory/asr/VolcengineASRClient.ts",
+      "count": 45
+    },
+    {
+      "path": "src/infrastructure/crawl/web-fetch-executor.ts",
+      "count": 44
+    },
+    {
+      "path": "src/factory/tts/VolcengineTTSClient.ts",
+      "count": 43
+    },
+    {
+      "path": "src/utils/llm/vision-content.ts",
+      "count": 43
+    },
+    {
+      "path": "src/infrastructure/crawl/pw-page-state.ts",
+      "count": 42
+    },
+    {
+      "path": "src/factory/llm/OpenAIResponsesCompatibleLLMClient.ts",
+      "count": 41
+    },
+    {
+      "path": "src/infrastructure/crawl/page-screenshot-enhance.ts",
+      "count": 40
+    },
+    {
+      "path": "src/infrastructure/frontend/launcher.ts",
+      "count": 37
+    },
+    {
+      "path": "src/infrastructure/ai-workflow/loader.ts",
+      "count": 36
+    },
+    {
+      "path": "src/infrastructure/http/www-static-build.ts",
+      "count": 36
+    },
+    {
+      "path": "src/factory/llm/AnthropicCompatibleLLMClient.ts",
+      "count": 34
+    },
+    {
+      "path": "src/factory/llm/LLMFactory.ts",
+      "count": 33
+    },
+    {
+      "path": "src/modules/systemmonitor.ts",
+      "count": 33
+    },
+    {
+      "path": "src/factory/llm/OpenAICompatibleLLMClient.ts",
+      "count": 30
+    },
+    {
+      "path": "src/infrastructure/http/http.ts",
+      "count": 29
+    },
+    {
+      "path": "src/factory/llm/DeepSeekLLMClient.ts",
+      "count": 28
+    },
+    {
+      "path": "src/infrastructure/config/config.ts",
+      "count": 26
+    },
+    {
+      "path": "src/factory/llm/AnthropicLLMClient.ts",
+      "count": 25
+    },
+    {
+      "path": "src/infrastructure/crawl/crawl-config.ts",
+      "count": 25
+    },
+    {
+      "path": "src/infrastructure/http/runtime-boot.ts",
+      "count": 25
+    },
+    {
+      "path": "src/factory/llm/OllamaCompatibleLLMClient.ts",
+      "count": 24
+    },
+    {
+      "path": "src/factory/llm/GeminiLLMClient.ts",
+      "count": 23
+    },
+    {
+      "path": "src/utils/http/ai-v3-utils.ts",
+      "count": 23
+    },
+    {
+      "path": "src/utils/llm/anthropic-chat-utils.ts",
+      "count": 23
+    },
+    {
+      "path": "src/factory/llm/AzureOpenAILLMClient.ts",
+      "count": 22
+    },
+    {
+      "path": "src/factory/llm/OpenAILLMClient.ts",
+      "count": 22
+    },
+    {
+      "path": "src/factory/llm/XiaomiMiMoLLMClient.ts",
+      "count": 22
+    },
+    {
+      "path": "src/infrastructure/http/loader.ts",
+      "count": 22
+    },
+    {
+      "path": "src/infrastructure/http/www-app-resolve.ts",
+      "count": 19
+    },
+    {
+      "path": "src/infrastructure/plugins/plugin-base.ts",
+      "count": 19
+    },
+    {
+      "path": "src/infrastructure/plugins/runtime.ts",
+      "count": 19
+    },
+    {
+      "path": "src/utils/workspace/repo-map-lite.ts",
+      "count": 19
+    },
+    {
+      "path": "src/infrastructure/http/utils/system-metrics.ts",
+      "count": 17
+    },
+    {
+      "path": "src/renderers/playwright/lib/playwright.ts",
+      "count": 17
+    },
+    {
+      "path": "src/utils/skills/trigger-microagents.ts",
+      "count": 17
+    },
+    {
+      "path": "src/infrastructure/http/runtime-ws.ts",
+      "count": 16
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-perplexity.ts",
+      "count": 15
+    },
+    {
+      "path": "src/infrastructure/plugins/enhancer-base.ts",
+      "count": 15
+    },
+    {
+      "path": "src/renderers/puppeteer/lib/puppeteer.ts",
+      "count": 15
+    },
+    {
+      "path": "src/utils/llm/openai-chat-utils.ts",
+      "count": 15
+    },
+    {
+      "path": "src/infrastructure/http/runtime-net.ts",
+      "count": 14
+    },
+    {
+      "path": "src/utils/security/tool-approval.ts",
+      "count": 14
+    },
+    {
+      "path": "src/infrastructure/http/runtime-auth.ts",
+      "count": 13
+    },
+    {
+      "path": "src/infrastructure/plugins/loader-neural.ts",
+      "count": 13
+    },
+    {
+      "path": "src/utils/llm/mcp-tool-adapter.ts",
+      "count": 13
+    },
+    {
+      "path": "src/utils/llm/message-transform.ts",
+      "count": 13
+    },
+    {
+      "path": "src/utils/security/tool-security-inspect.ts",
+      "count": 13
+    },
+    {
+      "path": "src/infrastructure/crawl/browser-navigation-guard.ts",
+      "count": 12
+    },
+    {
+      "path": "src/infrastructure/crawl/pw-ref-locator.ts",
+      "count": 12
+    },
+    {
+      "path": "src/utils/llm/image-utils.ts",
+      "count": 12
+    },
+    {
+      "path": "src/utils/llm/message-cleanup.ts",
+      "count": 12
+    },
+    {
+      "path": "src/factory/BaseFactory.ts",
+      "count": 11
+    },
+    {
+      "path": "src/infrastructure/ai-workflow/chat-pipeline.ts",
+      "count": 11
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-executor.ts",
+      "count": 11
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-gemini.ts",
+      "count": 11
+    },
+    {
+      "path": "src/infrastructure/redis.ts",
+      "count": 11
+    },
+    {
+      "path": "src/infrastructure/ai-workflow/chat-tool-streams.ts",
+      "count": 10
+    },
+    {
+      "path": "src/infrastructure/config/loader.ts",
+      "count": 10
+    },
+    {
+      "path": "src/infrastructure/http/runtime-listen.ts",
+      "count": 10
+    },
+    {
+      "path": "src/infrastructure/http/mount-core-www.ts",
+      "count": 9
+    },
+    {
+      "path": "src/infrastructure/http/www-sign-merge.ts",
+      "count": 9
+    },
+    {
+      "path": "src/infrastructure/plugins/loader-schedule.ts",
+      "count": 9
+    },
+    {
+      "path": "src/infrastructure/plugins/loader.ts",
+      "count": 9
+    },
+    {
+      "path": "src/utils/llm/prompt-cache-policy.ts",
+      "count": 9
+    },
+    {
+      "path": "src/utils/recipes/recipe-loader.ts",
+      "count": 9
+    },
+    {
+      "path": "src/factory/llm/VolcengineLLMClient.ts",
+      "count": 8
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-brave.ts",
+      "count": 8
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-exa.ts",
+      "count": 8
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-firecrawl.ts",
+      "count": 8
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-kimi.ts",
+      "count": 8
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-minimax.ts",
+      "count": 8
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-ollama.ts",
+      "count": 8
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-tavily.ts",
+      "count": 8
+    },
+    {
+      "path": "src/infrastructure/plugins/loader-hot-reload.ts",
+      "count": 8
+    },
+    {
+      "path": "src/infrastructure/crawl/web-fetch-utils.ts",
+      "count": 7
+    },
+    {
+      "path": "src/infrastructure/http/runtime-observability.ts",
+      "count": 7
+    },
+    {
+      "path": "src/infrastructure/plugins/handler.ts",
+      "count": 7
+    },
+    {
+      "path": "src/infrastructure/tasker/tasker-base.ts",
+      "count": 7
+    },
+    {
+      "path": "src/utils/workspace/apply-edit-blocks.ts",
+      "count": 7
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-mcp-client.ts",
+      "count": 6
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-parallel.ts",
+      "count": 6
+    },
+    {
+      "path": "src/infrastructure/database/index.ts",
+      "count": 6
+    },
+    {
+      "path": "src/infrastructure/renderer/loader.ts",
+      "count": 6
+    },
+    {
+      "path": "src/infrastructure/renderer/Renderer.ts",
+      "count": 6
+    },
+    {
+      "path": "src/infrastructure/sqlite.ts",
+      "count": 6
+    },
+    {
+      "path": "src/utils/base-tools.ts",
+      "count": 6
+    },
+    {
+      "path": "src/infrastructure/commonconfig/loader.ts",
+      "count": 5
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-registry.ts",
+      "count": 5
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-searxng.ts",
+      "count": 5
+    },
+    {
+      "path": "src/infrastructure/crawl/fetch-guard.ts",
+      "count": 4
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-parallel-free.ts",
+      "count": 4
+    },
+    {
+      "path": "src/infrastructure/tasker/loader.ts",
+      "count": 4
+    },
+    {
+      "path": "src/utils/agent-workspace.ts",
+      "count": 4
+    },
+    {
+      "path": "src/utils/ai-workflow-config.ts",
+      "count": 4
+    },
+    {
+      "path": "src/utils/llm/llm-config-resolve.ts",
+      "count": 4
+    },
+    {
+      "path": "src/utils/llm/proxy-utils.ts",
+      "count": 4
+    },
+    {
+      "path": "src/utils/llm/reasoning-budget.ts",
+      "count": 4
+    },
+    {
+      "path": "src/utils/subserver-client.ts",
+      "count": 4
+    },
+    {
+      "path": "src/infrastructure/ai-workflow/memory-manager.ts",
+      "count": 3
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-duckduckgo.ts",
+      "count": 3
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-parallel-shared.ts",
+      "count": 3
+    },
+    {
+      "path": "src/infrastructure/listener/base.ts",
+      "count": 3
+    },
+    {
+      "path": "src/infrastructure/listener/loader.ts",
+      "count": 3
+    },
+    {
+      "path": "src/factory/asr/ASRFactory.ts",
+      "count": 2
+    },
+    {
+      "path": "src/factory/tts/TTSFactory.ts",
+      "count": 2
+    },
+    {
+      "path": "src/infrastructure/ai-workflow/monitor-service.ts",
+      "count": 2
+    },
+    {
+      "path": "src/infrastructure/crawl/web-search-shared.ts",
+      "count": 2
+    },
+    {
+      "path": "src/infrastructure/http/auth.ts",
+      "count": 2
+    },
+    {
+      "path": "src/utils/http-business.ts",
+      "count": 2
+    },
+    {
+      "path": "src/factory/llm/OpenAIPathCompatLLMClient.ts",
+      "count": 1
+    },
+    {
+      "path": "src/infrastructure/ai-workflow/harness-session-registry.ts",
+      "count": 1
+    },
+    {
+      "path": "src/renderers/playwright/index.ts",
+      "count": 1
+    },
+    {
+      "path": "src/renderers/puppeteer/index.ts",
+      "count": 1
+    },
+    {
+      "path": "src/utils/agent-workspace-skills.ts",
+      "count": 1
+    },
+    {
+      "path": "src/utils/bootstrap-deps.ts",
+      "count": 1
+    },
+    {
+      "path": "src/utils/event-normalizer.ts",
+      "count": 1
+    },
+    {
+      "path": "src/utils/llm/message-token-budget.ts",
+      "count": 1
+    },
+    {
+      "path": "src/utils/monitor-safety.ts",
+      "count": 1
+    },
+    {
+      "path": "src/utils/observability.ts",
+      "count": 1
+    }
+  ],
+  "note": "Baseline for ≥50% any drop on top 15 files + typecheck green"
+}
