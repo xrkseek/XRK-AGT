@@ -9,7 +9,8 @@ import {
   resolveSearchTimeoutSeconds,
   writeSearchCache,
   wrapWebContent,
-  SEARCH_CACHE
+  SEARCH_CACHE,
+  resolveSiteName as resolveSiteNameShared
 } from './web-search-shared.js'
 import {
   validateSelfHostedBaseUrl,
@@ -92,12 +93,9 @@ async function resolveFirecrawlEndpoint(baseUrl: string) {
   return { url: url.toString(), mode }
 }
 
+// firecrawl 比公共版多剥一层 www. 前缀；其余（URL 解析/失败返回 undefined）复用公共实现
 function resolveSiteName(urlRaw: string) {
-  try {
-    return new URL(urlRaw).hostname.replace(/^www\./, '') || undefined
-  } catch {
-    return undefined
-  }
+  return resolveSiteNameShared(urlRaw)?.replace(/^www\./, '') || undefined
 }
 
 function asFirecrawlEntry(value: unknown): FirecrawlEntry | null {
