@@ -2,14 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import AiWorkflowLoader from '#infrastructure/ai-workflow/loader.js';
 import { getAiWorkflowConfigOptional } from '#utils/ai-workflow-config.js';
 import { auditToolUse, formatAuditDetail } from './ai-workspace-audit.js';
-import { normalizePresetId } from './ai-workspace-runtime.js';
-
 const consoleContext = new AsyncLocalStorage();
 let mcpAuditHookInstalled = false;
-
-function normalizeWorkspaceId(id: any) {
-  return normalizePresetId(id);
-}
 
 function isAuditEnabled() {
   const runtimeConfig = getAiWorkflowConfigOptional();
@@ -70,4 +64,3 @@ export function runWithAiConsoleContext(ctx: any = {}, fn: any) {
 export function getAiConsoleContext() {
   return consoleContext.getStore() || {};
 }
-
