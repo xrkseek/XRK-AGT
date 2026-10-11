@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import ChatToolBlock from '@/components/ChatToolBlock.vue';
 import XrkIcon from '@/components/XrkIcon.vue';
@@ -15,13 +15,13 @@ const props = defineProps({
 const emit = defineEmits(['preview', 'copy', 'quote', 'regen', 'delete']);
 const rootEl = ref(null);
 
-const ROLE_LABEL = {
+const ROLE_LABEL: Record<string, string> = {
   user: '用户',
   assistant: '助手',
   system: '系统',
 };
 
-const ROLE_GLYPH = {
+const ROLE_GLYPH: Record<string, string> = {
   user: '用',
   assistant: '助',
   system: '系',
@@ -60,7 +60,7 @@ const plain = computed(() => {
   return props.message.text || props.message.content || segmentsToPlainText(segments.value) || '';
 });
 
-function md(text) {
+function md(text: string) {
   return renderMarkdown(text);
 }
 
@@ -72,11 +72,11 @@ async function paintMermaid() {
 onMounted(paintMermaid);
 watch(segments, paintMermaid, { deep: true });
 
-function onImgLoad(e) {
-  e.target?.classList?.add('loaded');
+function onImgLoad(e: Event) {
+  (e.target as HTMLElement | null)?.classList?.add('loaded');
 }
-function onImgError(e) {
-  const img = e?.target;
+function onImgError(e: Event | null) {
+  const img = e?.target as HTMLImageElement | null;
   if (!img) return;
   img.classList.add('loaded');
   img.alt = '图片加载失败';
