@@ -1,10 +1,10 @@
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useRoute, useRouter, RouterView } from 'vue-router';
 import { NButton, NInput, NSpace, NTag, NTooltip } from 'naive-ui';
 import XrkIcon from '@/components/XrkIcon.vue';
-import { SHELL_NAV, SHELL_KEEPALIVE } from '@/layouts/shell-nav.js';
-import { useShellAuth } from '@/composables/useShellAuth.js';
+import { SHELL_NAV, SHELL_KEEPALIVE } from '@/layouts/shell-nav';
+import { useShellAuth } from '@/composables/useShellAuth';
 
 const route = useRoute();
 const router = useRouter();
@@ -13,7 +13,7 @@ const collapsed = ref(localStorage.getItem('xrk.sidebarCollapsed') === '1');
 const nav = SHELL_NAV;
 const pageTitle = computed(() => route.meta.title || 'XRK');
 
-function go(name) {
+function go(name: string) {
   router.push({ name });
 }
 
@@ -29,13 +29,12 @@ function toggleCollapse() {
 
 <template>
   <a href="#main" class="skip-link">跳到主内容</a>
-  <div class="shell shell-enter" :class="{ collapsed }">
-    <aside class="sidebar surface">
+  <div class="shell" :class="{ collapsed }">
+    <aside class="sidebar brutal-card">
       <div class="brand">
-        <span class="logo" aria-hidden="true">XRK</span>
+        <span class="logo" aria-hidden="true">★</span>
         <div v-show="!collapsed" class="brand-text">
           <strong>XRK-AGT</strong>
-          <span class="brand-sub">Signal Board</span>
         </div>
       </div>
       <nav class="nav ink-scroll" aria-label="主菜单">
@@ -64,12 +63,9 @@ function toggleCollapse() {
     </aside>
 
     <div class="main-col">
-      <header class="topbar surface">
-        <div class="top-titles">
-          <span class="brand-mark">XRK-AGT</span>
-          <h1>{{ pageTitle }}</h1>
-        </div>
-        <NSpace size="small" align="center" :wrap="false" class="toolbar">
+      <header class="topbar brutal-card">
+        <h1>{{ pageTitle }}</h1>
+        <NSpace size="small" align="center" :wrap="false">
           <NInput
             v-model:value="keyDraft"
             size="small"
@@ -130,57 +126,45 @@ function toggleCollapse() {
   align-self: stretch;
   display: flex;
   flex-direction: column;
-  padding: 8px;
+  padding: 6px;
   overflow: hidden;
 }
 .shell.collapsed .sidebar {
-  flex-basis: 52px;
-  width: 52px;
+  flex-basis: 48px;
+  width: 48px;
 }
 
 .brand {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 4px 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 22%, transparent);
-  margin-bottom: 8px;
+  gap: 6px;
+  padding: 2px 4px 8px;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 6px;
 }
 .logo {
-  width: 36px;
-  height: 36px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
-  background: var(--ink);
-  color: var(--accent);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  background: var(--yellow);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  font-size: 12px;
+  box-shadow: var(--shadow);
   flex-shrink: 0;
 }
 .brand-text {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
 }
 .brand-text strong {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-}
-.brand-sub {
-  font-family: var(--mono);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
 }
 
 .nav {
@@ -188,68 +172,55 @@ function toggleCollapse() {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   overflow-x: hidden;
   overflow-y: auto;
 }
 .nav-link {
   flex-shrink: 0;
-  position: relative;
   display: grid;
   grid-template-columns: 22px 1fr auto;
   align-items: center;
   gap: 6px;
-  border: 0;
+  border: 1.5px solid transparent;
   background: transparent;
   color: var(--ink);
   text-align: left;
-  padding: 8px 8px 8px 10px;
-  border-radius: 4px;
+  padding: 7px 6px;
+  border-radius: 6px;
   font: inherit;
   font-size: var(--font-ui);
-  transition: background 160ms var(--ease-out), color 160ms var(--ease-out);
 }
 .shell.collapsed .nav-link {
   grid-template-columns: 1fr;
   justify-items: center;
-  padding: 10px 4px;
-}
-.nav-link::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 20%;
-  bottom: 20%;
-  width: 2px;
-  border-radius: 1px;
-  background: transparent;
-  transition: background 160ms var(--ease-out), top 160ms var(--ease-out), bottom 160ms var(--ease-out);
+  padding: 8px 4px;
 }
 .nav-ico {
   width: 22px;
   height: 22px;
   display: grid;
   place-items: center;
-  color: var(--muted);
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--ink);
 }
 .nav-link.active {
-  background: var(--accent-dim);
+  background: color-mix(in srgb, var(--accent) 55%, var(--card));
+  border-color: var(--ink);
+  box-shadow: var(--shadow);
   font-weight: 700;
 }
-.nav-link.active::before {
-  background: var(--accent);
-  top: 12%;
-  bottom: 12%;
-}
 .nav-link.active .nav-ico {
-  color: var(--accent);
+  background: var(--accent);
 }
 .nav-link:hover:not(.active) {
-  background: color-mix(in srgb, var(--line) 6%, transparent);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 .hint {
   font-size: var(--font-xs);
-  opacity: 0.5;
+  opacity: 0.55;
   font-family: var(--mono);
 }
 .collapse-btn {
@@ -259,18 +230,14 @@ function toggleCollapse() {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  border: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
-  background: transparent;
-  border-radius: 4px;
-  padding: 7px;
+  border: 1.5px solid var(--ink);
+  background: var(--paper-2);
+  border-radius: 6px;
+  padding: 6px;
   font: inherit;
   font-size: var(--font-sm);
-  font-weight: 600;
-  color: var(--muted);
-}
-.collapse-btn:hover {
-  color: var(--ink);
-  border-color: var(--accent);
+  font-weight: 700;
+  box-shadow: var(--shadow);
 }
 .key-tag {
   display: inline-flex;
@@ -294,41 +261,18 @@ function toggleCollapse() {
 }
 .topbar {
   flex-shrink: 0;
-  min-height: var(--topbar-h);
+  height: var(--topbar-h);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
-  gap: 10px;
-}
-.top-titles {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-}
-.brand-mark {
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  flex-shrink: 0;
+  padding: 0 10px;
+  gap: 8px;
 }
 .topbar h1 {
   margin: 0;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-family: var(--mono);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.toolbar {
-  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
 }
 .content {
   flex: 1 1 0;

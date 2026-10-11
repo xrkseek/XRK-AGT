@@ -1,10 +1,10 @@
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute, useRouter, RouterView } from 'vue-router';
 import { NButton, NInput, NSpace, NTag, NTooltip } from 'naive-ui';
 import XrkIcon from '@/components/XrkIcon.vue';
-import { SHELL_NAV, SHELL_KEEPALIVE } from '@/layouts/shell-nav.js';
-import { useShellAuth } from '@/composables/useShellAuth.js';
+import { SHELL_NAV, SHELL_KEEPALIVE } from '@/layouts/shell-nav';
+import { useShellAuth } from '@/composables/useShellAuth';
 
 const route = useRoute();
 const router = useRouter();
@@ -12,21 +12,18 @@ const { auth, keyDraft, saveKey, onKeyEnter } = useShellAuth();
 const nav = SHELL_NAV;
 const pageTitle = computed(() => route.meta.title || 'XRK');
 
-function go(name) {
+function go(name: string) {
   router.push({ name });
 }
 </script>
 
 <template>
   <a href="#main" class="skip-link">跳到主内容</a>
-  <div class="m-shell shell-enter">
-    <header class="m-topbar surface">
+  <div class="m-shell">
+    <header class="m-topbar brutal-card">
       <div class="m-brand">
-        <span class="logo" aria-hidden="true">XRK</span>
-        <div class="m-titles">
-          <strong class="brand-mark">XRK-AGT</strong>
-          <h1>{{ pageTitle }}</h1>
-        </div>
+        <span class="logo" aria-hidden="true">★</span>
+        <h1>{{ pageTitle }}</h1>
       </div>
       <NSpace size="small" align="center" :wrap="false">
         <NInput
@@ -106,51 +103,32 @@ function go(name) {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 8px 10px;
-  min-height: 44px;
+  padding: 6px 8px;
+  min-height: 40px;
   margin-bottom: 6px;
 }
 .m-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 .logo {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   display: grid;
   place-items: center;
-  background: var(--ink);
-  color: var(--accent);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  font-family: var(--font-display);
-  font-size: 9px;
-  font-weight: 800;
+  background: var(--yellow);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  font-size: 11px;
+  box-shadow: var(--shadow);
   flex-shrink: 0;
-}
-.m-titles {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 0;
-}
-.brand-mark {
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
 }
 .m-topbar h1 {
   margin: 0;
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--muted);
-  font-family: var(--mono);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 13px;
+  font-weight: 800;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -191,49 +169,42 @@ function go(name) {
     0
     calc(-1 * max(6px, env(safe-area-inset-left)));
   padding: 4px 6px max(4px, env(safe-area-inset-bottom));
-  border-top: 1px solid color-mix(in srgb, var(--line) 28%, transparent);
-  background: var(--surface);
+  border-top: 2px solid var(--ink);
+  background: var(--card);
+  box-shadow: 0 -2px 0 color-mix(in srgb, var(--ink) 8%, transparent);
 }
 .tab {
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  border: 0;
+  gap: 1px;
+  border: 1.5px solid transparent;
   background: transparent;
-  color: var(--muted);
-  border-radius: 4px;
-  padding: 6px 2px;
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 4px 2px;
   font: inherit;
   font-size: 10px;
   font-weight: 600;
   touch-action: manipulation;
   min-height: 44px;
-  transition: color 160ms var(--ease-out), background 160ms var(--ease-out);
 }
 .tab-ico {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
+  border: 1.5px solid var(--ink);
+  border-radius: 8px;
+  background: var(--card);
 }
 .tab.active {
-  color: var(--ink);
-  background: var(--accent-dim);
+  background: color-mix(in srgb, var(--accent) 45%, var(--card));
+  border-color: var(--ink);
+  box-shadow: var(--shadow);
 }
 .tab.active .tab-ico {
-  color: var(--accent);
-}
-.tab.active::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 30%;
-  right: 30%;
-  height: 2px;
-  border-radius: 1px;
   background: var(--accent);
 }
 .tab-label {
