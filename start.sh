@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-# XRK-AGT Linux/macOS 启动（先确保本机 Redis 可连，再经 app.js 引导）
+# XRK-AGT Linux/macOS 启动（先确保本机 Redis 可连，再经 dist/app.js）
 ROOT=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 ENSURE="$ROOT/scripts/ensure-redis.mjs"
 if [ ! -f "$ENSURE" ]; then
@@ -9,4 +9,5 @@ if [ ! -f "$ENSURE" ]; then
   exit 1
 fi
 node "$ENSURE"
-exec node --experimental-strip-types --no-warnings --no-deprecation app.js "$@"
+pnpm build
+exec node --no-warnings --no-deprecation dist/app.js "$@"

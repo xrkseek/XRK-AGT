@@ -6,7 +6,7 @@
 
 | 我想… | 从这里开始 |
 |--------|------------|
-| 跑起来 | [README.md §快速开始](../README.md#-快速开始) · [startup.md](startup.md) |
+| 跑起来 | [README.md §快速开始](../README.md#-快速开始) · [startup.md](startup.md) · [上线底层检查单.md](上线底层检查单.md) |
 | **看实拍** | [README §项目展示](../README.md#-项目展示) |
 | **写业务（先看挂载）** | **[runtime-surface.md](runtime-surface.md)** → [base-classes.md](base-classes.md) |
 | **写法与性能** | **[coding-style.md](coding-style.md)** → [node-26-runtime.md](node-26-runtime.md) |
@@ -17,6 +17,7 @@
 | 用内置能力 | [system-core.md](system-core.md) |
 | 写插件 / API / 工作流 | [框架可扩展性指南](框架可扩展性指南.md) |
 | 发布前检查 | [框架测试指南](框架测试指南.md) → [代码审查清单](代码审查清单.md) → [文档审查清单](文档审查清单.md) |
+| any 热度 | [any-heat-2026-09-12.md](any-heat-2026-09-12.md)（`pnpm any-heat`） |
 
 > 配图约定：[DOCSTYLE.md](DOCSTYLE.md) · 仓库 [github.com/xrkseek/XRK-AGT](https://github.com/xrkseek/XRK-AGT)
 
@@ -56,28 +57,28 @@
 
 - **[框架测试指南](框架测试指南.md)** - 标准值、实测数据、CI 命令（仅 system-Core；**Node ≥ 26**；集成测 import `bootstrap-globals`）
 - **[代码审查清单](代码审查清单.md)** - 发布前代码与架构检查
-- **[文档审查清单](文档审查清单.md)** - 发布前文档准确性、互链与数字一致性 ⭐
+- **[文档审查清单](文档审查清单.md)** - 发布前文档准确性、互链与数字一致性
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 目录树与文档入口（架构图见底层架构设计）
-- **[底层架构设计](底层架构设计.md)** - Runtime / Infrastructure / Core 分层与 AI 链路（**架构单一事实源**） ⭐
-- **[启动与引导](startup.md)** - `app.js` → bootstrap → `start.js` → AgentRuntime，环境变量与 Playwright ⭐
+- **[底层架构设计](底层架构设计.md)** - Runtime / Infrastructure / Core 分层与 AI 链路（**架构单一事实源**）
+- **[启动与引导](startup.md)** - `dist/app.js` → bootstrap → `dist/start.js` → AgentRuntime，环境变量与 Playwright
 - **[运行时挂载面](runtime-surface.md)** - 全局对象、AgentRuntime Proxy、Loader 单例、按场景写法 ⭐ **开发首读**
-- **[底层写法规范](coding-style.md)** - 全局裸名、状态/I/O/异步/HTTP、性能速查 ⭐
+- **[底层写法规范](coding-style.md)** - 全局裸名、状态/I/O/异步/HTTP、性能速查
 - **[业务基类契约](base-classes.md)** - plugin / HttpApi / AiWorkflow 最小 export
 - **[文档编写规范](DOCSTYLE.md)** - 维护者标注化模板
 - **[Node 26 运行时约定](node-26-runtime.md)** - 版本要求、已用 API（禁止项见 skill `xrk-node-runtime`）
 - **[AgentRuntime 主类文档](agent-runtime.md)** - AgentRuntime 生命周期、HTTP/WebSocket（挂载面见 runtime-surface）
 - **[基础设施共享约定](infrastructure-shared.md)** - Loader 标准模式、热重载、`bootstrap-globals`
-- **[框架可扩展性指南](框架可扩展性指南.md)** - 7 大扩展点与 Core 开发完整说明，包含最佳实践和代码质量规范 ⭐
+- **[框架可扩展性指南](框架可扩展性指南.md)** - 7 大扩展点与 Core 开发完整说明，包含最佳实践和代码质量规范
 
 ### 🏗️ 架构
 
 分层与职责见 **[底层架构设计](底层架构设计.md)**（本页不重复架构图）。业务实现放在 `core/*/`；`src/` 为基础设施，**勿写业务 API/工作流**。能力诚实与决策见 **[status.md](status.md)** · **[adr/](adr/README.md)**；Harness 模块见 **[harness-module-loop.md](harness-module-loop.md)**。
 
-**system-Core 内置模块**：11 HTTP / 7 工作流 / 15 插件 / 4 Tasker / 4 events；MCP 工具在七个自带工作流内合计 **80** 个（`registerMCPTool` 计数）。详见 **[system-Core 特性文档](system-core.md)**；标准值见本地 **`tests/helpers/system-core.mjs`**（`tests/` 不入库）与 **[框架测试指南](框架测试指南.md)**。
+**system-Core 内置模块**：11 HTTP / 7 工作流 / 18 插件 / 4 Tasker / 4 events；MCP 工具在七个自带工作流内合计 **95** 个（`registerMCPTool` 计数）。详见 **[system-Core 特性文档](system-core.md)**；标准值见 **`tests/helpers/system-core.mjs`** 与 **[框架测试指南](框架测试指南.md)**。
 
 ### 🔌 插件与事件系统
 
-- **[插件基类文档](plugin-base.md)** - `plugin` 基类：事件链路、规则/上下文、工作流集成 ⭐
+- **[插件基类文档](plugin-base.md)** - `plugin` 基类：事件链路、规则/上下文、工作流集成
 - **[插件加载器文档](plugins-loader.md)** - `PluginLoader` 的插件加载、事件调度、冷却与节流机制
 - **[事件系统标准化文档](事件系统标准化文档.md)** - 事件命名规范、字段责任、处理流程、事件监听器开发指南
 
@@ -96,14 +97,14 @@
 - **[鉴权与认证（AUTH）](AUTH.md)** - 系统级 API Key、各层职责与推荐鉴权方式
 - **[Strix 安全扫描（外部 CI）](security-strix.md)** - 可选 usestrix/strix；不进 Runtime，仅自有目标
 - **[HTTP 业务层文档](http-business-layer.md)** - 重定向、CDN、反向代理增强、负载均衡等企业级功能
-- **[system-Core 特性文档](system-core.md)** - system-Core 内置模块完整说明，包含所有HTTP API、工作流、插件和Web控制台 ⭐
+- **[system-Core 特性文档](system-core.md)** - system-Core 内置模块完整说明，包含所有HTTP API、工作流、插件和Web控制台
 
 ### 🤖 AI 工作流
 
 - **说明**：Node 侧统一通过工作流 + MCP 工具完成能力编排；如需 Python 侧能力，请在子服务端按 `apis/<group>/*.py` 扩展自定义接口。
 - **[底层架构设计](底层架构设计.md)** - AI 主链路、AiWorkflow 链路、子服务端职责边界（权威）
 - **[办事助手说明](agents.md)** - 怎么用、改哪里、工作区注入、Agents 清单、实现索引；框架写码见根 [AGENTS.md](../AGENTS.md)
-- **[Agent 运行链与上下文](agent-context.md)** - **概念地图** + mergeWorkflows、消息三层、**出站压缩/策略安全/斜杠**、Workspace/skills、工具环 ⭐
+- **[Agent 运行链与上下文](agent-context.md)** - **概念地图** + mergeWorkflows、消息三层、**出站压缩/策略安全/斜杠**、Workspace/skills、工具环
 - **[MCP 完整指南](mcp-guide.md)** - MCP 工具注册与连接（含 `apply_edit` / `repo_map` 等）
 - **[MCP 配置指南](mcp-config-guide.md)** - Cursor、Claude Desktop 等外部平台连接配置
 - **[AiWorkflow 工作流基类文档](ai-workflow.md)** - `AiWorkflow` 基类；`context` / `policies` / `security` / `recipes` 配置键；禁止文本假 ReAct
@@ -115,13 +116,13 @@
 ### ⚙️ 配置与工具
 
 - **[配置基类文档](config-base.md)** - 配置基类 `ConfigBase`，包括 YAML/JSON 读写、校验、按路径读写、多文件配置等
-- **[Redis（框架内置数据库）](database.md)** - 连接配置、启动流程、全局客户端、环境变量与 Docker ⭐
+- **[Redis（框架内置数据库）](database.md)** - 连接配置、启动流程、全局客户端、环境变量与 Docker
 - **[渲染器基类文档](renderer.md)** - 渲染器基类 `Renderer`，模板渲染与文件监听机制
 - **[RuntimeUtil 工具类文档](runtime-util.md)** - 工具类 `RuntimeUtil`，封装日志、缓存、文件/网络操作与异步控制等基础能力
 
 ### 🧱 基础设施约定
 
-- **[运行时挂载面](runtime-surface.md)** - AgentRuntime / global / req 注入透明清单 ⭐
+- **[运行时挂载面](runtime-surface.md)** - AgentRuntime / global / req 注入透明清单
 - **[业务扩展基类契约](base-classes.md)** - 各基类最小 export
 - **[基础设施共享约定](infrastructure-shared.md)** - Loader 标准模式、热重载、`bootstrap-globals`
 - **[文档编写规范](DOCSTYLE.md)** - 文档分层与单篇模板
@@ -129,7 +130,7 @@
 ### 📱 应用开发
 
 - **[应用开发指南](app-dev.md)** - Web 控制台、前后端协作、runtimeConfig 体系
-- **[启动与引导](startup.md)** - 引导链、环境变量、Playwright 浏览器 ⭐
+- **[启动与引导](startup.md)** - 引导链、环境变量、Playwright 浏览器
 - **[Docker 部署指南](docker.md)** - Docker 容器化部署说明，包含 docker-compose 配置和使用指南
 
 ---
@@ -156,7 +157,7 @@
 
 业务均在 `core/` 下按模块开发；每个 core 内含 `plugin/`、`tasker/`、`events/`、`http/`、`workflow/`、`commonconfig/`、`www/<目录名>/` 等业务目录（按需创建）。继承对应基类、使用 `#` 别名导入、放置到约定目录即可自动加载。
 
-**完整流程与目录说明**：详见 **[框架可扩展性指南 - Core 模块开发](框架可扩展性指南.md#core-模块开发)** ⭐
+**完整流程与目录说明**：详见 **[框架可扩展性指南 - Core 模块开发](框架可扩展性指南.md#core-模块开发)**
 
 ### 编写一个简单指令插件
 
@@ -220,7 +221,7 @@ AgentRuntime 生命周期、HTTP/WS、关闭流程：**[agent-runtime.md](agent-
 2. **全局对象访问**：始终通过 `AgentRuntime[self_id]` 访问 AgentRuntime 实例，不要直接使用 `e.bot`（除非确保已初始化）
 3. **事件命名**：`{tasker}.{post_type}.{detail?}.{sub_type?}`，如 `onebot.message` / `onebot.message.group`；插件可用跨 Tasker 的 `message`（见 [事件系统标准化文档](事件系统标准化文档.md)）
 4. **错误处理**：异步操作用 try/catch；基础设施层用 `Error.isError` / `normalizeError`
-5. **AgentRuntime 实例**：通过 `node app` 启动，勿手动 `new AgentRuntime()`
+5. **AgentRuntime 实例**：通过 `pnpm start` / `node dist/app.js` 启动，勿手动 `new AgentRuntime()`
 6. **Ctrl+C**：服务端 1 次重启 / 3 次回菜单（见 [agent-runtime.md](agent-runtime.md)）；勿在业务代码自行 `process.on('SIGINT')`
 7. **Node.js ≥ 26**、**pnpm** 为硬性要求（见 [node-26-runtime.md](node-26-runtime.md)）
 

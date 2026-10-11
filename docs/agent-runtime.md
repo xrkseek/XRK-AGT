@@ -31,7 +31,7 @@
 
 启动链见 **[startup.md](startup.md)**。一般**不需要**手动 `import AgentRuntime` 或 `new AgentRuntime()`：
 
-- 启动：`node app`（推荐）或 `node app server {端口}`
+- 启动：`pnpm start` / `node dist/app.js`（推荐）或 `node dist/app.js server {端口}`
 - 运行时：
   - 在插件 / Tasker / 事件监听器等代码中，直接使用全局 `AgentRuntime`（由启动脚本挂载）
   - 在 HTTP API 中使用 `req.agentRuntime`（由 `HttpApi` 基类自动注入）
@@ -821,7 +821,7 @@ server:
 
 - **[Server 服务器架构](server.md)** - HTTP/HTTPS/WebSocket 服务详细说明
 - **[HTTP业务层](http-business-layer.md)** - 重定向、CDN、反向代理增强
-- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含所有HTTP API、工作流、插件和Web控制台 ⭐
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块完整说明，包含所有HTTP API、工作流、插件和Web控制台
 - **[项目概览](../PROJECT_OVERVIEW.md)** - 项目整体架构
 - **[插件系统](plugin-base.md)** - 插件开发指南
 - **[AiWorkflow 文档](ai-workflow.md)** - Node 侧单次对话 + MCP 工具调用（复杂多步在 Python 子服务端）

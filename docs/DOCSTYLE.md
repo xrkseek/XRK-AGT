@@ -27,7 +27,7 @@
 ```markdown
 # 标题
 
-> **源码**：`path/to/file.js`（函数/类名）  
+> **源码**：`path/to/file.ts`（函数/类名；运行产物写 `dist/.../*.js`）  
 > **读者**：插件开发者 / 运维 / …  
 > **关联**：[runtime-surface.md](runtime-surface.md) · [其他](other.md)
 
@@ -92,7 +92,7 @@
 | `docker-compose-stack.png` | Docker 编排 |
 
 - 单篇：导读图 ≤1 张 + 实拍表按需；与上层文档勿重复贴同图
-- 生图提示词须符合项目事实：Node ≥26、pnpm、`node app.js`、仓库 `github.com/xrkseek/XRK-AGT`；**禁止** pip/Python/错误仓库名
+- 生图提示词须符合项目事实：Node ≥26、pnpm、`node dist/app.js`（或 `pnpm start`）、仓库 `github.com/xrkseek/XRK-AGT`；**禁止** pip/Python/错误仓库名
 - 少用大段假代码/假 URL，优先图标 + 准确标签
 
 ---

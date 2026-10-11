@@ -1,8 +1,8 @@
-<script>
+<script lang="ts">
 export default { name: 'HomeView' };
 </script>
 
-<script setup>
+<script setup lang="ts">
 import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { NButton, NEmpty, NSpin, useMessage } from 'naive-ui';
 import { apiFetch } from '@/api/client';
@@ -15,6 +15,25 @@ import { useHomeCharts } from '@/home/useHomeCharts';
 import HomeTagCloud from '@/components/HomeTagCloud.vue';
 import { useViewport } from '@/composables/useViewport';
 import { useAuthReload } from '@/composables/useAuthReload';
+import type { LoosePayload } from '@/types';
+import type { DiskRow, IfaceRow, NetHistory } from '@/home/metrics';
+
+/** 概览页各类卡片 chip（HomeTagCloud 入参） */
+interface CloudChip {
+  seed: string;
+  label: string;
+  badge?: string;
+  disabled?: boolean;
+  popoverTitle?: string;
+  popoverKey?: string;
+  desc?: string;
+  facts?: Array<{ label: string; value: string }>;
+}
+
+interface LoadOptions {
+  force?: boolean;
+  silent?: boolean;
+}
 
 const { isMobile } = useViewport();
 const message = useMessage();
@@ -53,18 +72,18 @@ const host = reactive({
   botUrl: '—',
 });
 
-const disks = ref([]);
-const ifaces = ref([]);
+const disks = ref<DiskRow[]>([]);
+const ifaces = ref<IfaceRow[]>([]);
 /** 接口失败时若仍展示缓存，告知用户别当成实时鉴权成功 */
 const staleHint = ref('');
 
-const cpuRef = ref(null);
-const memRef = ref(null);
-const netRef = ref(null);
+const cpuRef = ref<HTMLCanvasElement | null>(null);
+const memRef = ref<HTMLCanvasElement | null>(null);
+const netRef = ref<HTMLCanvasElement | null>(null);
 const cpuVal = ref(0);
 const memVal = ref(0);
 
-const netHistory = reactive({
+const netHistory = reactive<NetHistory>({
   netRx: Array(60).fill(0),
   netTx: Array(60).fill(0),
   _lastUpdate: null,
@@ -79,8 +98,8 @@ const { paint } = useHomeCharts({
   history: netHistory,
 });
 
-const bots = ref([]);
-const processes = ref([]);
+const bots = ref<LoosePayload[]>([]);
+const processes = ref<LoosePayload[]>([]);
 const pluginMeta = reactive({
   total: 0,
   withRules: 0,
@@ -88,17 +107,17 @@ const pluginMeta = reactive({
   loadTime: '—',
   error: '',
 });
-const pluginChips = ref([]);
+const pluginChips = ref<CloudChip[]>([]);
 const workflowMeta = reactive({ enabled: 0, total: 0, error: '' });
-const workflowChips = ref([]);
+const workflowChips = ref<CloudChip[]>([]);
 
-let pollTimer = null;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
 let lastFetch = 0;
 const CACHE_KEY = 'xrk.homeDataCache';
 const CACHE_TTL = 5 * 60 * 1000;
 const MIN_INTERVAL = 12000;
 
-function applyOverview(data) {
+function applyOverview(data: LoosePayload | null | undefined): void {
   if (!data) return;
   const m = extractMetrics(data);
   metrics.cpu = m.cpu;
@@ -153,7 +172,7 @@ function applyOverview(data) {
   workflowMeta.enabled = enabled;
   workflowMeta.total = total;
   workflowMeta.error = '';
-  workflowChips.value = items.map((item, i) => {
+  workflowChips.value = items.map((item: LoosePayload, i: number): CloudChip => {
     const name = item.name ?? 'workflow';
     const on = item.enabled !== false;
     return {
@@ -173,7 +192,7 @@ function applyOverview(data) {
   nextTick(() => paint());
 }
 
-function applyPlugins(payload) {
+function applyPlugins(payload: LoosePayload | null | undefined): void {
   if (!payload) return;
   const summary = payload.summary ?? {};
   const list = Array.isArray(payload.plugins) ? payload.plugins : [];
@@ -182,7 +201,7 @@ function applyPlugins(payload) {
   pluginMeta.withTasks = summary.withTasks ?? summary.taskCount ?? 0;
   pluginMeta.loadTime = formatLoadTime(summary.totalLoadTime ?? 0);
   pluginMeta.error = '';
-  pluginChips.value = list.map((p, i) => {
+  pluginChips.value = list.map((p: LoosePayload, i: number): CloudChip => {
     const key = p.key ?? p.name ?? `p${i}`;
     const label = p.name ?? p.key ?? 'plugin';
     return {
@@ -200,7 +219,7 @@ function applyPlugins(payload) {
   });
 }
 
-function loadCache() {
+function loadCache(): LoosePayload | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
@@ -212,7 +231,7 @@ function loadCache() {
   }
 }
 
-function saveCache(data) {
+function saveCache(data: LoosePayload): void {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify({ ...data, _cacheTime: Date.now() }));
   } catch {
@@ -220,22 +239,22 @@ function saveCache(data) {
   }
 }
 
-function botInitial(bot) {
+function botInitial(bot: LoosePayload): string {
   return (bot.nickname || '').slice(0, 2) || String(bot.uin || '').slice(-2) || '??';
 }
 
-function botSub(bot) {
+function botSub(bot: LoosePayload): string {
   if (bot.device) return bot.tasker || '未知 Tasker';
   const friends = bot.stats?.friends ?? 0;
   const groups = bot.stats?.groups ?? 0;
   return `${bot.tasker || '未知 Tasker'} · ${friends} 好友 · ${groups} 群组`;
 }
 
-function procWarn(n) {
+function procWarn(n: unknown): boolean {
   return Number(n) > 50;
 }
 
-async function load({ force = false, silent = false } = {}) {
+async function load({ force = false, silent = false }: LoadOptions = {}): Promise<void> {
   const now = Date.now();
   if (!force && now - lastFetch < MIN_INTERVAL) return;
   lastFetch = now;
@@ -451,7 +470,7 @@ const hostFacts = computed(() => [
                 class="bot-face"
                 :src="bot.avatar"
                 :alt="bot.nickname || ''"
-                @error="($e) => ($e.target.style.display = 'none')"
+                @error="($e: Event) => (($e.target as HTMLElement).style.display = 'none')"
               />
               <span class="online-dot" :class="{ on: bot.online }" />
             </li>

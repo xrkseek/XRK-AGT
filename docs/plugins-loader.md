@@ -18,7 +18,7 @@
 
 > **注意**：框架支持多 core 模块架构。`PluginLoader` 经 `discoverAllCoreSubDirs`（`src/utils/core-fs.js`）合并三类目录：仓库 `core/*/plugin`、子服 `subserver/*/apis/*/core/plugin`、办事工作区 `data/ai-workspace/{id}/core/*/plugin`。工作区种子见 `agents/workspace/core/`；写法技能 **agent-core-dev**。
 
-事件链路导读见 [plugin-base.md § 事件链路](plugin-base.md#事件链路)；Loader 扫描与热重载见 [infrastructure-shared.md](infrastructure-shared.md)。
+事件链路导读见 [plugin-base.md § 事件链路](plugin-base.md#事件链路)；Loader 扫描见 [infrastructure-shared.md](infrastructure-shared.md)。无文件热重载（[ADR-0004](adr/0004-typescript-dist-no-hot-reload.md)）。
 
 ## 📚 目录
 
@@ -327,42 +327,7 @@ async handleMessage(e) {
 
 ## 热加载系统
 
-PluginLoader 支持完整的插件热加载功能，包括新增、修改和删除插件的自动处理。
-
-### 启用热加载
-
-```javascript
-// 在 AgentRuntime.run() 中自动启用
-await PluginLoader.watch(true);
-```
-
-### 热加载流程
-
-**新增插件** (`onAdd`)：
-1. 检测到新文件时，自动加载插件
-2. 创建定时任务
-3. 重新排序和识别默认消息处理器
-4. 输出加载日志
-
-**修改插件** (`onChange`)：
-1. `HotReloadBase` 校验内容 hash，未变则 **不进入** `changePlugin`
-2. `changePlugin(key, filePath)` 用监视器报告的绝对路径卸载并重载
-3. `_rebuildPluginGraph()` → `createTask()` 仅在 cron 指纹变化时重建定时任务
-4. 重新排序和识别默认消息处理器
-
-**删除插件** (`onUnlink`)：
-1. 经 600ms 延迟确认（避免原子保存误删）；期间文件恢复则跳过
-2. 清理定时任务、Handler、事件订阅等
-3. 重新识别默认消息处理器
-
-### 热加载优化
-
-- **内容去重**：底层 `HotReloadBase` 对 add/change 做 SHA256 比对，编辑器 touch-only 或 chokidar 重复事件不会触发业务重载
-- **unlink 防抖**：rename 式保存不会误走卸载再加载
-- **Cron 指纹**：`_taskScheduleKey` 避免插件热更但 schedule 未变时刷屏「加载定时任务」
-- **资源清理**：卸载时完整清理所有相关资源，避免内存泄漏
-- **精确路径**：`changePlugin` 优先 `filePath`，不单靠 basename 查找
-- **错误隔离**：单个插件热加载失败不影响其他插件
+**已移除。** 无 `PluginLoader.watch` / chokidar。改插件后重启；调试仍可手动调用 `changePlugin` / `unloadPlugin`。见 [ADR-0004](adr/0004-typescript-dist-no-hot-reload.md)。
 
 ---
 

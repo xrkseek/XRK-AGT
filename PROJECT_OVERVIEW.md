@@ -20,7 +20,7 @@
 
 ## 技术栈摘要
 
-- **运行时**：Node.js 26+，Express，全局 `AgentRuntime`（`src/agent-runtime.js`）
+- **运行时**：Node.js 26+，Express，全局 `AgentRuntime`（源码 `src/agent-runtime.ts` → 运行 `dist/src/agent-runtime.js`）
 - **数据**：Redis（框架内置，启动必需）
 - **AI**：`AiWorkflow` 工作流 + LLM/ASR/TTS 工厂 + MCP
 - **接入**：OneBotv11 / QBQBot / GSUIDCORE / stdin / 自定义 Tasker
@@ -34,12 +34,19 @@
 
 ```
 XRK-AGT/
-├── app.js                    # → src/utils/bootstrap.js
-├── start.js                  # 菜单 / PM2 / server
+├── app.ts                    # → dist/app.js → Bootstrap
+├── start.ts                  # → dist/start.js：菜单 / PM2 / server
+├── debug.ts                  # → dist/debug.js：跳过引导直接跑 AgentRuntime
 ├── package.json
 │
+├── dist/                     # tsc 产物（运行入口）
+│   ├── app.js
+│   ├── start.js
+│   ├── src/
+│   └── core/
+│
 ├── src/                      # Runtime + 基础设施（勿写业务）
-│   ├── agent-runtime.js      # AgentRuntime 门面（鉴权/监听/WS/代理委托 runtime-*）
+│   ├── agent-runtime.ts      # AgentRuntime 门面（鉴权/监听/WS/代理委托 runtime-*）
 │   ├── infrastructure/       # 加载器、基类、database、config、ai-workflow…
 │   ├── utils/                # bootstrap、process-signals、http-business…
 │   ├── factory/              # LLM / ASR / TTS
@@ -63,7 +70,7 @@ XRK-AGT/
 
 | 路径 | 说明 |
 |------|------|
-| `app.js` → `bootstrap.js` → `start.js` → `agent-runtime.js` | 启动链，见 [docs/startup.md](docs/startup.md) |
+| `dist/app.js` → bootstrap → `dist/start.js` → `dist/src/agent-runtime.js` | 启动链，见 [docs/startup.md](docs/startup.md) |
 | `core/*/plugin/` | 指令与增强插件 |
 | `core/*/http/` | HTTP API（`/api/` 默认鉴权） |
 | `core/*/workflow/` | AI 工作流（`AiWorkflow`） |
@@ -79,7 +86,7 @@ XRK-AGT/
 
 ## system-Core 规模（索引）
 
-开箱即用模块数量以代码与 [docs/system-core.md](docs/system-core.md) 为准（约 **11 HTTP / 7 工作流 / 15 插件 / 4 Tasker / 4 events**；Web 控制台 `/xrk/`）。MCP 工具数以 `registerMCPTool` 为准（当前 **80**）。
+开箱即用模块数量以代码与 [docs/system-core.md](docs/system-core.md) 为准（**11 HTTP / 7 工作流 / 18 插件 / 4 Tasker / 4 events**；Web 控制台 `/xrk/`）。MCP 工具数以 `registerMCPTool` 为准（当前 **95**）。
 
 ---
 
@@ -92,4 +99,4 @@ XRK-AGT/
 
 ---
 
-*最后更新：2026-08-07*
+*最后更新：2026-09-12*

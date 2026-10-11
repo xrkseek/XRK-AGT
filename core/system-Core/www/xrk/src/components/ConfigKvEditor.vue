@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * map / 扁平 object：键值行编辑（headers、extraBody 等）
  */
@@ -14,7 +14,12 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
-const rows = computed(() => {
+interface KvRow {
+  key: string;
+  value: string;
+}
+
+const rows = computed<KvRow[]>(() => {
   const obj = props.modelValue && typeof props.modelValue === 'object' && !Array.isArray(props.modelValue)
     ? props.modelValue
     : {};
@@ -25,8 +30,8 @@ const rows = computed(() => {
   return entries.length ? entries : [{ key: '', value: '' }];
 });
 
-function commit(nextRows) {
-  const out = {};
+function commit(nextRows: KvRow[]) {
+  const out: Record<string, unknown> = {};
   for (const row of nextRows) {
     const k = String(row.key ?? '').trim();
     if (!k) continue;
@@ -49,7 +54,7 @@ function commit(nextRows) {
   emit('update:modelValue', out);
 }
 
-function patchRow(i, patch) {
+function patchRow(i: number, patch: Partial<KvRow>) {
   const next = rows.value.map((r, idx) => (idx === i ? { ...r, ...patch } : { ...r }));
   commit(next);
 }
@@ -58,7 +63,7 @@ function addRow() {
   commit([...rows.value, { key: '', value: '' }]);
 }
 
-function removeRow(i) {
+function removeRow(i: number) {
   const next = rows.value.filter((_, idx) => idx !== i);
   commit(next.length ? next : [{ key: '', value: '' }]);
 }

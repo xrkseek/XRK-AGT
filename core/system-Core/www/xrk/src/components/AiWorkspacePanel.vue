@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import {
   NButton,
@@ -12,19 +12,50 @@ import {
 import { apiFetch, authHeaders, getServerUrl } from '@/api/client';
 import { breadcrumbParts, formatBytes, toolLabel } from '@/chat/workspace';
 import { normalizeWorkspaceId } from '@/chat/llm-settings';
+import type { LoosePayload } from '@/types';
+
+/** /api/ai/workspace/files 返回的目录条目 */
+interface WorkspaceFile {
+  path: string;
+  name: string;
+  type: string;
+  size?: number;
+}
+
+/** /api/ai/workspace/audit 返回的调用记录 */
+interface AuditEntry {
+  ok?: boolean;
+  tool?: unknown;
+  ts?: number;
+  detail?: string;
+}
+
+/** apiFetch 返回 union，这里收成宽松载荷 */
+function asPayload(v: unknown): LoosePayload {
+  return v as LoosePayload;
+}
+
+/** catch 里的 err 是 unknown，统一取可读文案 */
+function errText(err: unknown): string {
+  const msg = (err as { message?: unknown } | null | undefined)?.message;
+  return msg ? String(msg) : String(err);
+}
 
 const props = defineProps({
   workspace: { type: String, default: 'default' },
 });
 
-const emit = defineEmits(['update:workspace', 'presets']);
+const emit = defineEmits<{
+  (e: 'update:workspace', value: string): void;
+  (e: 'presets', value: string[]): void;
+}>();
 
 const message = useMessage();
 const loading = ref(false);
 const dir = ref('');
 const rootHint = ref('');
-const files = ref([]);
-const uploadInput = ref(null);
+const files = ref<WorkspaceFile[]>([]);
+const uploadInput = ref<HTMLInputElement | null>(null);
 
 const agentsOpen = ref(false);
 const agentsText = ref('');
@@ -32,32 +63,32 @@ const agentsSaving = ref(false);
 
 const auditOpen = ref(false);
 const auditLoading = ref(false);
-const auditEntries = ref([]);
+const auditEntries = ref<AuditEntry[]>([]);
 
 const crumbs = computed(() => breadcrumbParts(dir.value));
 const wsId = computed(() => normalizeWorkspaceId(props.workspace));
 
-async function refresh({ silent = false } = {}) {
+async function refresh({ silent = false }: { silent?: boolean } = {}): Promise<void> {
   if (!silent) loading.value = true;
   try {
     const q = new URLSearchParams({ workspace: wsId.value, dir: dir.value || '' });
-    const data = await apiFetch(`/api/ai/workspace/files?${q}`, { timeoutMs: 10000 });
+    const data = asPayload(await apiFetch(`/api/ai/workspace/files?${q}`, { timeoutMs: 10000 }));
     rootHint.value = data?.root || data?.hint || '';
-    files.value = Array.isArray(data?.files) ? data.files : [];
+    files.value = Array.isArray(data?.files) ? (data.files as WorkspaceFile[]) : [];
   } catch (err) {
     files.value = [];
-    if (!silent) message.error(err?.message || String(err));
+    if (!silent) message.error(errText(err));
   } finally {
     loading.value = false;
   }
 }
 
-function openDir(path) {
+function openDir(path: string): void {
   dir.value = path || '';
   void refresh();
 }
 
-async function downloadFile(path) {
+async function downloadFile(path: string): Promise<void> {
   try {
     const q = new URLSearchParams({ workspace: wsId.value, path });
     const res = await fetch(`${getServerUrl()}/api/ai/workspace/files/download?${q}`, {
@@ -75,20 +106,20 @@ async function downloadFile(path) {
     a.click();
     URL.revokeObjectURL(url);
   } catch (err) {
-    message.error(err?.message || String(err));
+    message.error(errText(err));
   }
 }
 
-async function createWorkspace() {
+async function createWorkspace(): Promise<void> {
   const name = window.prompt('新建工作区名称（字母/数字/中文/下划线）');
   if (!name?.trim()) return;
   try {
-    const created = await apiFetch('/api/ai/workspaces', {
+    const created = asPayload(await apiFetch('/api/ai/workspaces', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: name.trim() }),
-    });
-    const list = await apiFetch('/api/ai/workspaces');
+    }));
+    const list = asPayload(await apiFetch('/api/ai/workspaces'));
     emit('presets', list?.workspaces || []);
     const id = created?.id || name.trim();
     emit('update:workspace', normalizeWorkspaceId(id));
@@ -96,12 +127,13 @@ async function createWorkspace() {
     message.success('工作区已创建');
     await refresh();
   } catch (err) {
-    message.error(err?.message || String(err));
+    message.error(errText(err));
   }
 }
 
-async function onUploadChange(e) {
-  const list = e.target?.files;
+async function onUploadChange(e: Event): Promise<void> {
+  const input = e.target as HTMLInputElement | null;
+  const list = input?.files;
   if (!list?.length) return;
   const fd = new FormData();
   for (const f of list) fd.append('file', f);
@@ -112,32 +144,32 @@ async function onUploadChange(e) {
       headers: authHeaders(),
       body: fd,
     });
-    const json = await res.json().catch(() => ({}));
+    const json = asPayload(await res.json().catch(() => ({})));
     if (!res.ok || json.success === false) {
       throw new Error(json.message || '上传失败');
     }
     message.success(`已上传 ${json.files?.length || list.length} 个文件`);
     await refresh({ silent: true });
   } catch (err) {
-    message.error(err?.message || String(err));
+    message.error(errText(err));
   } finally {
     if (uploadInput.value) uploadInput.value.value = '';
   }
 }
 
-async function openRules() {
+async function openRules(): Promise<void> {
   try {
-    const data = await apiFetch(
-      `/api/ai/workspace/agents?workspace=${encodeURIComponent(wsId.value)}`,
+    const data = asPayload(
+      await apiFetch(`/api/ai/workspace/agents?workspace=${encodeURIComponent(wsId.value)}`),
     );
     agentsText.value = data?.content || '';
     agentsOpen.value = true;
   } catch (err) {
-    message.error(err?.message || String(err));
+    message.error(errText(err));
   }
 }
 
-async function saveRules() {
+async function saveRules(): Promise<void> {
   agentsSaving.value = true;
   try {
     await apiFetch(`/api/ai/workspace/agents?workspace=${encodeURIComponent(wsId.value)}`, {
@@ -148,23 +180,23 @@ async function saveRules() {
     message.success('规则已保存');
     agentsOpen.value = false;
   } catch (err) {
-    message.error(err?.message || String(err));
+    message.error(errText(err));
   } finally {
     agentsSaving.value = false;
   }
 }
 
-async function openAudit() {
+async function openAudit(): Promise<void> {
   auditOpen.value = true;
   auditLoading.value = true;
   try {
-    const data = await apiFetch(
-      `/api/ai/workspace/audit?workspace=${encodeURIComponent(wsId.value)}&limit=50`,
+    const data = asPayload(
+      await apiFetch(`/api/ai/workspace/audit?workspace=${encodeURIComponent(wsId.value)}&limit=50`),
     );
-    auditEntries.value = Array.isArray(data?.entries) ? data.entries : [];
+    auditEntries.value = Array.isArray(data?.entries) ? (data.entries as AuditEntry[]) : [];
   } catch (err) {
     auditEntries.value = [];
-    message.error(err?.message || String(err));
+    message.error(errText(err));
   } finally {
     auditLoading.value = false;
   }

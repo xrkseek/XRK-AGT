@@ -54,4 +54,4 @@ description: 编写或审查 core/*/www 静态页、校园 WebView 兼容、Http
 - [ ] 产品页未 `import` `/shared` 或跨应用 `/xrk/...` 的兼容层
 - [ ] 未使用保留目录名 `shared`
 - [ ] 有 `sign.json` 的工程：URL 与 `proxy.mount` / Vite `base` 一致
-- [ ] `tests/framework/www-web-compat.test.mjs` · `mount-core-www.test.mjs`
+  - [ ] `tests/unit/www-web-compat.test.mjs` · `tests/unit/mount-core-www.test.mjs`

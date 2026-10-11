@@ -10,16 +10,16 @@
 | 能力 | 状态 | 说明 |
 |------|------|------|
 | AgentRuntime Host | 能跑 | HTTP/WS/多 bot；非 LLM loop（ADR-0001） |
-| Tasker / Core 扩展点 | 能跑 | 可用 `.ts`（`--experimental-strip-types`；同名优先 `.ts`） |
+| Tasker / Core 扩展点 | 能跑 | 源码 `.ts` → `pnpm build` 后由 Loader 加载 `dist/core/...`（[ADR-0004](adr/0004-typescript-dist-no-hot-reload.md)；无热重载） |
 
 ## Agent
 
 | 能力 | 状态 | 说明 |
 |------|------|------|
-| `@xrkseek/harness` 模块 loop | 未稳 | `callAI` / Web `/v1` / `/v1`+MCP；持久 session（`data/harness-sessions`）· 步内 live SSE（`assistant/chunk`）· compaction · adapter · safety · llmRetry · toolSettle · dangling · denyTools · hooks · vision |
+| `@xrkseek/harness` 模块 loop | 能跑 | 钉 **0.3.3**；`callAI` / Web `/v1` / `/v1`+MCP；持久 session（`data/harness-sessions`）· 步内 live SSE · compaction · adapter · safety · llmRetry · toolSettle · dangling · denyTools · hooks · vision |
 | `/v1` 无 MCP（工厂透传） | 能跑 | 单次补全；流式/非流式透传 `tool_calls` |
 | 出站 `contextWindow` 裁剪 | 能跑 | 与 harness soft budget 叠加 |
-| `chat.js` / mergeWorkflows | 能跑 | |
+| `core/system-Core/workflow/chat.ts` / mergeWorkflows | 能跑 | |
 | harness 步内流式 tool 事件 | 能跑 | OpenAI `stream=true` 透传 `assistant/chunk` · 完整 `mcp_tools`（args/result）；Anthropic/Responses 仍整段 JSON |
 
 ## MCP
@@ -28,4 +28,4 @@
 |------|------|------|
 | MCPServer（经模块 loop） | 能跑 | 门禁在 `handleToolCall` |
 
-*最后更新：2026-09-01*
+*最后更新：2026-09-12（路径：`chat.ts`；`@xrkseek/harness` 0.3.3）*

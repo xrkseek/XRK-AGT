@@ -32,8 +32,8 @@
 `tests/helpers/bootstrap.mjs` 在 `describe(..., { before: bootstrapTestEnv })` 中：
 
 1. 设置 `process.env.XRK_TEST = '1'`
-2. **import `src/bootstrap-globals.js`**（与生产 `agent-runtime.js` 一致，挂载 `PluginBase` / `msgSegment`）
-3. stub 最小 `AgentRuntime`（EventEmitter + `makeLog` / `tasker` / `em`）
+2. **import `dist/src/bootstrap-globals.js`**（与生产 `agent-runtime.js` 首行同源；测试对齐编译产物，勿 import `src/`）
+3. stub 最小 `AgentRuntime`（EventEmitter + `makeLog` / `tasker` / `em`）；校验 `PluginBase` / `msgSegment` 已挂 `globalThis`
 
 未执行 bootstrap-globals 时，system-Core 插件（`extends PluginBase`）会在 PluginLoader 导入阶段报 `PluginBase is not defined`。HttpApiLoader 集成断言的 key 见 [api-loader.md](api-loader.md)（`resolveQualifiedCoreModuleKey`，如 `system-Core/ai-workspace`）。
 
@@ -43,7 +43,7 @@
 
 ```mermaid
 sequenceDiagram
-  participant App as app.js
+  participant App as dist/app.js
   participant Boot as bootstrap-globals
   participant Start as start.js
   participant AgentRuntime as AgentRuntime.run
@@ -247,7 +247,7 @@ export default class MyStream extends AiWorkflow {
 
 - [coding-style.md](coding-style.md) — 写法与性能速查  
 - [base-classes.md](base-classes.md) — 各基类 export 形状  
-- [bot.md](bot.md) — AgentRuntime 生命周期、HTTP/WS、关闭流程  
+\
 - [startup.md](startup.md) — 启动链  
 - [config-base.md](config-base.md) — `runtimeConfig` 与 ConfigBase  
 

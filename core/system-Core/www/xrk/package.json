@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --port 5177 --strictPort --host 127.0.0.1",
-    "static": "vite build"
+    "static": "vite build",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "chart.js": "^4.4.9",
@@ -20,6 +21,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.4",
-    "vite": "^6.3.5"
+    "typescript": "5.9.3",
+    "vite": "^6.3.5",
+    "vue-tsc": "^2.2.12"
   }
 }

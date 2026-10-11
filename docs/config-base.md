@@ -1,7 +1,7 @@
 # 配置基类文档
 
 > **文件位置**：`src/infrastructure/commonconfig/commonconfig.js`  
-> **可扩展性**：ConfigBase是配置系统的核心基类。通过继承ConfigBase，开发者可以快速创建自定义配置类，支持动态路径、Schema验证、多文件配置等高级特性。详见 **[框架可扩展性指南](框架可扩展性指南.md)** ⭐
+> **扩展点**：ConfigBase 是配置系统的基类。继承后支持动态路径、Schema 验证、多文件配置。详见 **[框架可扩展性指南](框架可扩展性指南.md)**
 
 `ConfigBase` 是 XRK-AGT 的 **配置管理基类**，用于统一处理 YAML/JSON 配置文件的读写、缓存、备份、验证等功能。
 

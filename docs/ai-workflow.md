@@ -396,7 +396,7 @@ llm:
 
 ## 相关文档
 
-- **[system-Core 特性](system-core.md)** - system-Core 内置模块与工作流清单（以 `core/system-Core/workflow/*.js` 为准，含 `web` 等） ⭐
+- **[system-Core 特性](system-core.md)** - system-Core 内置模块与工作流清单（以 `core/system-Core/workflow/*.js` 为准，含 `web` 等）
 - **[框架可扩展性指南](框架可扩展性指南.md)** - 扩展开发完整指南
 - **[工厂系统](factory.md)** - LLM（含多模态）/ASR/TTS 工厂系统
 - **[子服务端 API](subserver-api.md)** - 子服务端底层系统接口与扩展装载说明

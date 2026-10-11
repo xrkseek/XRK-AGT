@@ -1,5 +1,6 @@
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue';
+import type { PropType } from 'vue';
 import {
   parseToolResultPayload,
   summarizeToolResultText,
@@ -7,34 +8,46 @@ import {
   toolName,
   toolResultPreview,
 } from '@/chat/tools';
+import type { ToolLike, ToolPreview } from '@/chat/tools';
+
+/** 归一化后的工具块行 */
+interface ToolItem {
+  name: string;
+  args: string;
+  preview: ToolPreview | null;
+  result: string;
+  running: boolean;
+  isError: boolean;
+}
 
 const props = defineProps({
-  tools: { type: Array, default: () => [] },
+  tools: { type: Array as PropType<ToolLike[]>, default: () => [] },
 });
 
 /** Explicit toggles only; unset → default open when args/result present. */
-const openMap = ref({});
+const openMap = ref<Record<string, boolean>>({});
 
-function hasBody(item) {
+function hasBody(item: ToolItem) {
   const args = String(item.args || '').trim();
   const result = String(item.result || '').trim();
-  return (args && args !== '{}') || Boolean(result) || Boolean(item.preview);
+  return Boolean((args && args !== '{}') || result || item.preview);
 }
 
-function isOpen(i, item) {
-  if (Object.prototype.hasOwnProperty.call(openMap.value, i)) {
-    return Boolean(openMap.value[i]);
+function isOpen(i: number | string, item: ToolItem) {
+  const key = String(i);
+  if (Object.prototype.hasOwnProperty.call(openMap.value, key)) {
+    return Boolean(openMap.value[key]);
   }
   return hasBody(item);
 }
 
-function toggle(i) {
+function toggle(i: number) {
   const cur = isOpen(i, items.value[i]);
   openMap.value = { ...openMap.value, [i]: !cur };
 }
 
-const items = computed(() =>
-  (props.tools || []).map((tool) => {
+const items = computed<ToolItem[]>(() =>
+  (props.tools || []).map((tool: ToolLike): ToolItem => {
     const name = toolName(tool);
     const args = toolArgsText(tool);
     const payload = parseToolResultPayload(tool.result ?? tool.content ?? '');

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 数组<object> 工厂式编辑（LLM providers 等）
  * UI 壳与 ConfigKeyedMapForm 共用 config-chrome.css
@@ -12,6 +12,8 @@ import {
   resolveFieldControl,
   setNestedValue,
 } from '@/config/flat';
+import type { FieldControl, SchemaNode } from '@/config/flat';
+import type { LoosePayload } from '@/types';
 import {
   getProviderEntrySummary,
   groupProviderSchemaFields,
@@ -31,19 +33,35 @@ const props = defineProps({
   dense: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits<{ (e: 'update:modelValue', value: LoosePayload[]): void }>();
 const { confirm } = useConfirmDialog();
 
-const items = computed(() => (Array.isArray(props.modelValue) ? props.modelValue : []));
+const items = computed<LoosePayload[]>(() =>
+  Array.isArray(props.modelValue) ? (props.modelValue as LoosePayload[]) : [],
+);
 const isProviders = computed(() => isLlmProvidersArray(props.path));
 const hasSchema = computed(() => Object.keys(props.itemFields || {}).length > 0);
-const rootEl = ref(null);
-const rowKeys = ref([]);
+const rootEl = ref<HTMLElement | null>(null);
+const rowKeys = ref<string[]>([]);
 
-const sectionsForItem = computed(() => {
+interface FormSection {
+  id: string;
+  label: string;
+  collapsible?: boolean;
+  entries: Array<[string, SchemaNode]>;
+}
+
+const sectionsForItem = computed<FormSection[]>(() => {
   if (!hasSchema.value) return [];
-  if (isProviders.value) return groupProviderSchemaFields(props.itemFields);
-  return [{ id: 'all', label: '', collapsible: false, entries: Object.entries(props.itemFields) }];
+  if (isProviders.value) return groupProviderSchemaFields(props.itemFields) as FormSection[];
+  return [
+    {
+      id: 'all',
+      label: '',
+      collapsible: false,
+      entries: Object.entries(props.itemFields) as Array<[string, SchemaNode]>,
+    },
+  ];
 });
 
 watch(
@@ -56,24 +74,24 @@ watch(
   { immediate: true },
 );
 
-function fieldControl(schema) {
+function fieldControl(schema: SchemaNode): FieldControl {
   return resolveFieldControl(schema);
 }
 
-function isFull(key, schema) {
+function isFull(key: string, schema: SchemaNode): boolean {
   return isConfigEntryFieldFull(key, schema);
 }
 
-function readItem(item, relPath) {
-  return getNestedValue(item || {}, relPath);
+function readItem(item: unknown, relPath: string): unknown {
+  return getNestedValue((item || {}) as LoosePayload, relPath);
 }
 
-function patchItem(index, relPath, value) {
+function patchItem(index: number, relPath: string, value: unknown): void {
   emit(
     'update:modelValue',
     items.value.map((it, i) => {
       if (i !== index) return it;
-      if (!relPath) return value && typeof value === 'object' ? value : {};
+      if (!relPath) return (value && typeof value === 'object' ? value : {}) as LoosePayload;
       return setNestedValue(it || {}, relPath, value);
     }),
   );
@@ -87,7 +105,7 @@ function addItem() {
   ]);
 }
 
-async function removeItem(i) {
+async function removeItem(i: number): Promise<void> {
   const title = summary(items.value[i], i);
   const ok = await confirm({
     title: `删除${props.label || '条目'}`,
@@ -104,7 +122,7 @@ async function removeItem(i) {
   emit('update:modelValue', next);
 }
 
-function moveItem(i, delta) {
+function moveItem(i: number, delta: number): void {
   const next = [...items.value];
   const j = i + delta;
   if (j < 0 || j >= next.length) return;
@@ -115,13 +133,18 @@ function moveItem(i, delta) {
   emit('update:modelValue', next);
 }
 
-function summary(item, index) {
+function summary(item: LoosePayload, index: number): string {
   if (isProviders.value) return getProviderEntrySummary(item) || `${props.label} #${index + 1}`;
   return `${props.label} #${index + 1}`;
 }
 
-function setAllOpen(open) {
-  rootEl.value?.querySelectorAll('details.card').forEach((el) => {
+/** nested 子字段表：模板里 Object.entries 会退化成 unknown，这里收口一次 */
+function nestedEntries(schema: SchemaNode): Array<[string, SchemaNode]> {
+  return Object.entries(schema.fields || {}) as Array<[string, SchemaNode]>;
+}
+
+function setAllOpen(open: boolean): void {
+  rootEl.value?.querySelectorAll<HTMLDetailsElement>('details.card').forEach((el) => {
     el.open = open;
   });
 }
@@ -214,7 +237,7 @@ function setAllOpen(open) {
                   </p>
                   <div class="field-grid">
                     <div
-                      v-for="[nk, ns] in Object.entries(schema.fields || {})"
+                      v-for="[nk, ns] in nestedEntries(schema)"
                       :key="nk"
                       class="field"
                       :class="{ full: isFull(nk, ns) }"

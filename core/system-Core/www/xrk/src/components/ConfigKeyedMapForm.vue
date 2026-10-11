@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 动态键对象（map / keyedObject）
  * UI 壳与 ConfigArrayForm 共用 config-chrome.css
@@ -13,6 +13,8 @@ import {
   resolveFieldControl,
   setNestedValue,
 } from '@/config/flat';
+import type { FieldControl, SchemaFieldMap, SchemaNode } from '@/config/flat';
+import type { LoosePayload } from '@/types';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { deepClone, randomId } from '@/utils/http';
 import ConfigFieldControl from '@/components/ConfigFieldControl.vue';
@@ -29,28 +31,30 @@ const props = defineProps({
   dense: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits<{ (e: 'update:modelValue', value: LoosePayload): void }>();
 const message = useMessage();
 const { confirm } = useConfirmDialog();
 
 const viewMode = ref('form');
 const draftKey = ref('');
-const rowKeys = ref([]);
-const entryOrder = ref([]);
-const rootEl = ref(null);
+const rowKeys = ref<string[]>([]);
+const entryOrder = ref<string[]>([]);
+const rootEl = ref<HTMLElement | null>(null);
 
-const resolvedFields = computed(() => {
+const resolvedFields = computed<SchemaFieldMap>(() => {
   const fromProp = props.itemFields && typeof props.itemFields === 'object' ? props.itemFields : {};
-  if (Object.keys(fromProp).length) return fromProp;
+  if (Object.keys(fromProp).length) return fromProp as SchemaFieldMap;
   return inferFieldsFromExample(props.example) || inferFieldsFromExample(props.modelValue) || {};
 });
 
 const hasSchema = computed(() => Object.keys(resolvedFields.value).length > 0);
 
-const entries = computed(() => {
-  const obj =
+type EntryRow = { key: string; value: unknown };
+
+const entries = computed<EntryRow[]>(() => {
+  const obj: LoosePayload =
     props.modelValue && typeof props.modelValue === 'object' && !Array.isArray(props.modelValue)
-      ? props.modelValue
+      ? (props.modelValue as LoosePayload)
       : {};
   const keys = entryOrder.value.filter((k) => Object.prototype.hasOwnProperty.call(obj, k));
   for (const k of Object.keys(obj)) {
@@ -61,8 +65,8 @@ const entries = computed(() => {
 
 watch(
   () => props.modelValue,
-  (v) => {
-    const obj = v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  (v: LoosePayload) => {
+    const obj: LoosePayload = v && typeof v === 'object' && !Array.isArray(v) ? v : {};
     const keys = Object.keys(obj);
     const nextOrder = entryOrder.value.filter((k) => keys.includes(k));
     for (const k of keys) {
@@ -75,20 +79,20 @@ watch(
   { immediate: true, deep: true },
 );
 
-function fieldControl(schema) {
+function fieldControl(schema: SchemaNode): FieldControl {
   return resolveFieldControl(schema);
 }
 
-function isFull(key, schema) {
+function isFull(key: string, schema: SchemaNode): boolean {
   return isConfigEntryFieldFull(key, schema);
 }
 
-function emitObj(next) {
+function emitObj(next: LoosePayload): void {
   emit('update:modelValue', next);
 }
 
-function commitEntries(list) {
-  const out = {};
+function commitEntries(list: EntryRow[]): void {
+  const out: LoosePayload = {};
   for (const row of list) {
     const k = String(row.key ?? '').trim();
     if (!k) continue;
@@ -101,15 +105,15 @@ function commitEntries(list) {
   emitObj(out);
 }
 
-function renameKey(i, nextKey) {
+function renameKey(i: number, nextKey: string): void {
   const list = entries.value.map((e) => ({ ...e, value: deepClone(e.value) }));
   list[i] = { ...list[i], key: nextKey };
   commitEntries(list);
 }
 
-function patchValue(i, relPath, value) {
+function patchValue(i: number, relPath: string, value: unknown): void {
   const list = entries.value.map((e) => ({ ...e, value: deepClone(e.value) }));
-  const cur = list[i].value && typeof list[i].value === 'object' ? list[i].value : {};
+  const cur = list[i].value && typeof list[i].value === 'object' ? (list[i].value as LoosePayload) : {};
   list[i] = {
     ...list[i],
     value: relPath ? setNestedValue(cur, relPath, value) : value,
@@ -117,8 +121,8 @@ function patchValue(i, relPath, value) {
   commitEntries(list);
 }
 
-function readValue(item, relPath) {
-  return getNestedValue(item || {}, relPath);
+function readValue(item: unknown, relPath: string): unknown {
+  return getNestedValue((item || {}) as LoosePayload, relPath);
 }
 
 function addEntry() {
@@ -142,7 +146,7 @@ function addEntry() {
   emitObj(obj);
 }
 
-async function removeEntry(i) {
+async function removeEntry(i: number): Promise<void> {
   const key = entries.value[i]?.key;
   if (!key) return;
   const ok = await confirm({
@@ -176,8 +180,13 @@ async function applyExample() {
   emitObj(deepClone(ex));
 }
 
-function setAllOpen(open) {
-  rootEl.value?.querySelectorAll('details.card').forEach((el) => {
+/** nested 子字段表：模板里 Object.entries 会退化成 unknown，这里收口一次 */
+function nestedEntries(schema: SchemaNode): Array<[string, SchemaNode]> {
+  return Object.entries(schema.fields || {}) as Array<[string, SchemaNode]>;
+}
+
+function setAllOpen(open: boolean): void {
+  rootEl.value?.querySelectorAll<HTMLDetailsElement>('details.card').forEach((el) => {
     el.open = open;
   });
 }
@@ -285,7 +294,7 @@ function setAllOpen(open) {
                 <div class="nested-title">{{ schema.label || fk }}</div>
                 <div class="field-grid">
                   <div
-                    v-for="[nk, ns] in Object.entries(schema.fields || {})"
+                    v-for="[nk, ns] in nestedEntries(schema)"
                     :key="nk"
                     class="field"
                     :class="{ full: isFull(nk, ns) }"

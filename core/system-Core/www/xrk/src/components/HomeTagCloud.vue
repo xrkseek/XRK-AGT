@@ -1,26 +1,46 @@
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import type { PropType } from 'vue';
 import { sizeClass, toneClass } from '@/home/metrics';
+import type { SizeClass, ToneClass } from '@/home/metrics';
 import XrkIcon from '@/components/XrkIcon.vue';
 
+/** HomeTagCloud 入参 chip（与 HomeView CloudChip 对齐） */
+interface CloudChip {
+  label: string;
+  seed?: string;
+  badge?: string;
+  disabled?: boolean;
+  popoverTitle?: string;
+  popoverKey?: string;
+  desc?: string;
+  facts?: Array<{ label: string; value: string }>;
+}
+
+interface CloudChipView extends CloudChip {
+  size: SizeClass;
+  tone: ToneClass;
+  tip: string;
+  stagger: number;
+}
+
 const props = defineProps({
-  items: { type: Array, default: () => [] },
+  items: { type: Array as PropType<CloudChip[]>, default: () => [] },
   tipPrefix: { type: String, default: 'tip' },
 });
 
-const root = ref(null);
-/** @type {import('vue').Ref<string|null>} */
-const activeTip = ref(null);
+const root = ref<HTMLElement | null>(null);
+const activeTip = ref<string | null>(null);
 
-function tipId(item, i) {
+function tipId(item: CloudChip, i: number) {
   const base = String(item.seed ?? item.label ?? 'x')
     .replace(/[^a-zA-Z0-9_-]/g, '_')
     .slice(0, 40);
   return `${props.tipPrefix}-${i}-${base || 'n'}`;
 }
 
-const chips = computed(() =>
-  props.items.map((item, i) => ({
+const chips = computed<CloudChipView[]>(() =>
+  props.items.map((item: CloudChip, i: number): CloudChipView => ({
     ...item,
     size: sizeClass(item.seed ?? item.label ?? i),
     tone: toneClass(item.seed ?? item.label ?? i),
@@ -37,11 +57,11 @@ function closeDetail() {
   activeTip.value = null;
 }
 
-function onPeerClose(e) {
-  if (e?.detail !== props.tipPrefix) closeDetail();
+function onPeerClose(e: Event) {
+  if ((e as CustomEvent | undefined)?.detail !== props.tipPrefix) closeDetail();
 }
 
-function toggleChip(tip) {
+function toggleChip(tip: string) {
   if (activeTip.value === tip) {
     closeDetail();
     return;
@@ -52,15 +72,16 @@ function toggleChip(tip) {
   activeTip.value = tip;
 }
 
-function onDocPointer(e) {
+function onDocPointer(e: Event) {
   if (!activeTip.value) return;
-  const t = e.target;
+  const t = e.target as Node | null;
+  if (!t) return;
   if (root.value?.contains(t)) return;
   if (t instanceof Element && t.closest('[data-tag-detail]')) return;
   closeDetail();
 }
 
-function onKey(e) {
+function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape') closeDetail();
 }
 

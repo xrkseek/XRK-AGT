@@ -12,6 +12,12 @@ export default [
 
       // Build outputs
       'dist/',
+      // 嵌套构建产物。上面那条 'dist/' 只匹配顶层目录，匹配不到
+      // core/system-Core/www/*/dist/ 这类 Core 内嵌的前端 vite 产物——minified 代码
+      // 里的 no-var / prefer-const 是压缩产物的固有形态，不是可修的源码问题。
+      // 实测这一项就占了全仓 9257 条里的 9249 条。
+      '**/dist/**',
+      '**/.vite/**',
       'build/',
       'out/',
       '.next/',
@@ -99,4 +105,3 @@ export default [
     }
   }
 ]
-

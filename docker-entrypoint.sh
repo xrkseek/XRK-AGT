@@ -31,7 +31,7 @@ if [ "$1" = "server" ]; then
             sed -i 's/host: "127.0.0.1"/host: "mongodb"/g; s/host: 127.0.0.1/host: "mongodb"/g' /app/data/server_bots/mongodb.yaml 2>/dev/null || true
     fi
 
-    exec node --no-warnings --no-deprecation start.js server "$PORT"
+    exec node --no-warnings --no-deprecation dist/start.js server "$PORT"
 fi
 
 echo "错误: 未知命令 '$1'，请使用 'server' 或 'subserver'" >&2

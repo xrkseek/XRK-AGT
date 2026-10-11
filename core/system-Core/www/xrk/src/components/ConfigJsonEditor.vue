@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * JSON 对象编辑：本地草稿 + 校验态，错误区固定高度防抖动
  */
@@ -15,7 +15,7 @@ const emit = defineEmits(['update:modelValue']);
 const draft = ref('{}');
 const error = ref('');
 
-function stringify(v) {
+function stringify(v: unknown) {
   try {
     return JSON.stringify(v ?? {}, null, 2);
   } catch {
@@ -33,14 +33,14 @@ watch(
   { immediate: true, deep: true },
 );
 
-function onInput(text) {
+function onInput(text: string) {
   draft.value = text;
   try {
     const parsed = JSON.parse(text || 'null');
     error.value = '';
     emit('update:modelValue', parsed);
   } catch (err) {
-    error.value = err?.message || 'JSON 无法解析';
+    error.value = (err as { message?: string } | null)?.message || 'JSON 无法解析';
   }
 }
 
@@ -51,7 +51,7 @@ function format() {
     error.value = '';
     emit('update:modelValue', parsed);
   } catch (err) {
-    error.value = err?.message || 'JSON 无法解析';
+    error.value = (err as { message?: string } | null)?.message || 'JSON 无法解析';
   }
 }
 </script>

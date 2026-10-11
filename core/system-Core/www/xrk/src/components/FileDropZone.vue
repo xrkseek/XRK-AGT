@@ -1,9 +1,10 @@
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue';
+import type { PropType } from 'vue';
 import XrkIcon from '@/components/XrkIcon.vue';
 
 const props = defineProps({
-  modelValue: { type: Array, default: () => [] },
+  modelValue: { type: Array as PropType<File[]>, default: () => [] },
   multiple: { type: Boolean, default: true },
   accept: { type: String, default: '' },
   label: { type: String, default: '点击或拖放文件到此处' },
@@ -12,34 +13,34 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
-const inputEl = ref(null);
+const inputEl = ref<HTMLInputElement | null>(null);
 const dragOver = ref(false);
 
-const files = computed(() => (Array.isArray(props.modelValue) ? props.modelValue : []));
+const files = computed<File[]>(() => (Array.isArray(props.modelValue) ? props.modelValue : []));
 
-function formatSize(n) {
+function formatSize(n: number) {
   const size = Number(n) || 0;
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function setFiles(list) {
+function setFiles(list: FileList | File[] | null | undefined) {
   const next = Array.from(list || []).filter(Boolean);
   emit('update:modelValue', props.multiple ? next : next.slice(0, 1));
 }
 
-function onPick(e) {
-  setFiles(e.target?.files);
+function onPick(e: Event) {
+  setFiles((e.target as HTMLInputElement | null)?.files);
   if (inputEl.value) inputEl.value.value = '';
 }
 
-function onDrop(e) {
+function onDrop(e: DragEvent) {
   dragOver.value = false;
   setFiles(e.dataTransfer?.files);
 }
 
-function removeAt(i) {
+function removeAt(i: number) {
   emit(
     'update:modelValue',
     files.value.filter((_, idx) => idx !== i),

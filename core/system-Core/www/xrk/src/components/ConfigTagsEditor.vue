@@ -1,9 +1,10 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 字符串数组：芯片可点编辑；底部输入 + 添加/保存（cfg-tb-save 风格）
  */
 import { computed, nextTick, ref } from 'vue';
 import { NButton, NInput } from 'naive-ui';
+import type { InputInst } from 'naive-ui';
 import XrkIcon from '@/components/XrkIcon.vue';
 
 const props = defineProps({
@@ -15,7 +16,7 @@ const emit = defineEmits(['update:modelValue']);
 const draft = ref('');
 /** @type {import('vue').Ref<number>} */
 const editingIndex = ref(-1);
-const inputRef = ref(null);
+const inputRef = ref<InputInst | null>(null);
 
 const tags = computed(() => {
   if (Array.isArray(props.modelValue)) {
@@ -30,7 +31,7 @@ const tags = computed(() => {
 const isEditing = computed(() => editingIndex.value >= 0);
 const canSubmit = computed(() => Boolean(draft.value.trim()));
 
-function commit(next) {
+function commit(next: string[]) {
   emit('update:modelValue', next);
 }
 
@@ -44,13 +45,13 @@ async function focusInput() {
   inputRef.value?.focus?.();
 }
 
-function startEdit(i) {
+function startEdit(i: number) {
   editingIndex.value = i;
   draft.value = tags.value[i] || '';
   void focusInput();
 }
 
-function removeAt(i, e) {
+function removeAt(i: number, e?: Event) {
   e?.stopPropagation?.();
   e?.preventDefault?.();
   if (editingIndex.value === i) resetDraft();
@@ -82,7 +83,7 @@ function onClear() {
   else draft.value = '';
 }
 
-function onKeydown(e) {
+function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter') {
     e.preventDefault();
     submit();

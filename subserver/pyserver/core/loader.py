@@ -10,6 +10,7 @@ import logging
 
 from .base_api import BaseAPI, create_api_from_dict
 from .command_registry import CommandRegistry, PluginCommandSet
+from . import plugin_kit
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +31,8 @@ class ApiLoader:
     
     @property
     def apis_dir(self) -> Path:
-        """获取 apis 目录"""
-        apis_dir = Path(__file__).parent.parent / "apis"
+        """获取 apis 目录（复用 plugin_kit 的定位，确保目录存在）"""
+        apis_dir = plugin_kit.apis_dir()
         apis_dir.mkdir(exist_ok=True)
         return apis_dir
     

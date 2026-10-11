@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 统一线标：粗描边、圆角端点，不引图标库。
  */

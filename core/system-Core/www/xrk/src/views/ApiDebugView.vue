@@ -1,8 +1,8 @@
-<script>
+<script lang="ts">
 export default { name: 'ApiDebugView' };
 </script>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   NButton,
@@ -20,11 +20,76 @@ import { useAuthReload } from '@/composables/useAuthReload';
 import { useListPaneWidth } from '@/composables/useListPaneWidth';
 import { useViewport } from '@/composables/useViewport';
 import { copyText } from '@/utils/http';
+import type { LoosePayload } from '@/types';
+
+/** api-config.json 里的参数定义 */
+interface ApiParam {
+  name: string;
+  type?: string;
+  label?: string;
+  hint?: string;
+  placeholder?: string;
+  required?: boolean;
+  defaultValue?: unknown;
+  example?: unknown;
+  encode?: boolean;
+  options?: Array<{ label?: string; value: unknown }>;
+}
+
+/** api-config.json 里的接口定义 */
+interface ApiDef {
+  id: string;
+  path?: string;
+  method?: string;
+  title?: string;
+  description?: string;
+  pathParams?: Record<string, ApiParam>;
+  queryParams?: ApiParam[];
+  bodyParams?: ApiParam[];
+  requestType?: string;
+  contentType?: string;
+  fileField?: string;
+  multiple?: boolean;
+}
+
+/** api-config.json 里的分组 */
+interface ApiGroup {
+  id: string;
+  title?: string;
+  name?: string;
+  apis?: ApiDef[];
+}
+
+/** 展平后的接口（带分组信息） */
+interface FlatApi extends ApiDef {
+  groupId: string;
+  groupTitle: string;
+}
+
+interface Catalog {
+  apiGroups: ApiGroup[];
+  examples?: Record<string, Record<string, unknown>>;
+}
+
+/** buildRequestData 的产物 */
+interface RequestData {
+  method: string;
+  url: string;
+  query?: Record<string, string>;
+  body?: unknown;
+  files?: Array<{ name: string; size: number }>;
+  multipart?: boolean;
+  fileField?: string;
+}
+
+function errText(err: unknown): string {
+  return (err as LoosePayload)?.message || String(err);
+}
 
 const { isMobile } = useViewport();
 const { width: listPaneW, startResize } = useListPaneWidth();
 const message = useMessage();
-const catalog = ref({ apiGroups: [] });
+const catalog = ref<Catalog>({ apiGroups: [] });
 const activeId = ref(localStorage.getItem('lastApiId') || '');
 const filter = ref('');
 const loading = ref(false);
@@ -33,15 +98,11 @@ const statusLine = ref('');
 const responseText = ref('// 尚未请求');
 const previewText = ref('{}');
 const listOpen = ref(false);
-/** @type {import('vue').Ref<File[]>} */
-const selectedFiles = ref([]);
+const selectedFiles = ref<File[]>([]);
 
-/** @type {import('vue').Ref<Record<string, string>>} */
-const pathVals = ref({});
-/** @type {import('vue').Ref<Record<string, string>>} */
-const queryVals = ref({});
-/** @type {import('vue').Ref<Record<string, string>>} */
-const bodyVals = ref({});
+const pathVals = ref<Record<string, string>>({});
+const queryVals = ref<Record<string, string>>({});
+const bodyVals = ref<Record<string, string>>({});
 
 const custom = reactive({
   method: localStorage.getItem('customApiMethod') || 'GET',
@@ -54,10 +115,10 @@ const methodOptions = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].map((m) => ({
   value: m,
 }));
 
-const groups = computed(() => catalog.value.apiGroups || []);
+const groups = computed<ApiGroup[]>(() => catalog.value.apiGroups || []);
 
-const flatApis = computed(() => {
-  const out = [];
+const flatApis = computed<FlatApi[]>(() => {
+  const out: FlatApi[] = [];
   for (const g of groups.value) {
     for (const a of g.apis || []) {
       out.push({ ...a, groupId: g.id, groupTitle: g.title || g.name || g.id });
@@ -66,39 +127,41 @@ const flatApis = computed(() => {
   return out;
 });
 
-const filteredGroups = computed(() => {
+const filteredGroups = computed<ApiGroup[]>(() => {
   const q = filter.value.trim().toLowerCase();
   if (!q) return groups.value;
   return groups.value
     .map((g) => ({
       ...g,
-      apis: (g.apis || []).filter((a) =>
+      apis: (g.apis || []).filter((a: ApiDef) =>
         `${g.title} ${a.title} ${a.method} ${a.path} ${a.id}`.toLowerCase().includes(q),
       ),
     }))
-    .filter((g) => g.apis.length);
+    .filter((g: ApiGroup) => (g.apis || []).length);
 });
 
-const active = computed(() => {
-  if (activeId.value === 'custom') return { id: 'custom', title: '自定义请求', method: custom.method, path: custom.url };
+const active = computed<ApiDef | null>(() => {
+  if (activeId.value === 'custom') {
+    return { id: 'custom', title: '自定义请求', method: custom.method, path: custom.url };
+  }
   return flatApis.value.find((a) => a.id === activeId.value) || null;
 });
 
-const pathParamNames = computed(() => {
+const pathParamNames = computed<string[]>(() => {
   if (!active.value?.path || activeId.value === 'custom') return [];
   return (active.value.path.match(/:(\w+)/g) || []).map((p) => p.slice(1));
 });
 
-const queryParams = computed(() =>
+const queryParams = computed<ApiParam[]>(() =>
   activeId.value === 'custom' ? [] : active.value?.queryParams || [],
 );
-const bodyParams = computed(() =>
+const bodyParams = computed<ApiParam[]>(() =>
   activeId.value === 'custom' || (active.value?.method || 'GET').toUpperCase() === 'GET'
     ? []
     : active.value?.bodyParams || [],
 );
 
-const isMultipart = computed(() => {
+const isMultipart = computed<boolean>(() => {
   const a = active.value;
   if (!a || activeId.value === 'custom') return false;
   const rt = String(a.requestType || a.contentType || '').toLowerCase();
@@ -106,10 +169,10 @@ const isMultipart = computed(() => {
   return activeId.value === 'file-upload';
 });
 
-const fileField = computed(() => active.value?.fileField || 'file');
-const fileMultiple = computed(() => active.value?.multiple !== false);
+const fileField = computed<string>(() => active.value?.fileField || 'file');
+const fileMultiple = computed<boolean>(() => active.value?.multiple !== false);
 
-function methodTagType(method) {
+function methodTagType(method: unknown): 'success' | 'error' | 'warning' | 'info' {
   const m = String(method || 'GET').toUpperCase();
   if (m === 'GET') return 'success';
   if (m === 'DELETE') return 'error';
@@ -117,7 +180,7 @@ function methodTagType(method) {
   return 'info';
 }
 
-function persistActive(id) {
+function persistActive(id: string): void {
   try {
     localStorage.setItem('lastApiId', id);
   } catch {
@@ -125,13 +188,13 @@ function persistActive(id) {
   }
 }
 
-function formatParamValue(v) {
+function formatParamValue(v: unknown): string {
   if (v == null) return '';
   if (typeof v === 'string') return v;
   return JSON.stringify(v, null, 2);
 }
 
-function encodePathValue(name, val) {
+function encodePathValue(name: string, val: unknown): string {
   const meta = active.value?.pathParams?.[name];
   const raw = String(val ?? '');
   if (meta?.encode === false) return raw.replace(/^\/+/, '');
@@ -139,10 +202,10 @@ function encodePathValue(name, val) {
   return raw.split('/').map((seg) => encodeURIComponent(seg)).join('/');
 }
 
-function initParamState(api) {
-  const pv = {};
-  const qv = {};
-  const bv = {};
+function initParamState(api: ApiDef | null): void {
+  const pv: Record<string, string> = {};
+  const qv: Record<string, string> = {};
+  const bv: Record<string, string> = {};
   if (!api || api.id === 'custom') {
     pathVals.value = pv;
     queryVals.value = qv;
@@ -150,7 +213,7 @@ function initParamState(api) {
     return;
   }
   const ex = catalog.value.examples?.[api.id] || {};
-  for (const name of (api.path.match(/:(\w+)/g) || []).map((p) => p.slice(1))) {
+  for (const name of ((api.path || '').match(/:(\w+)/g) || []).map((p: string) => p.slice(1))) {
     const meta = api.pathParams?.[name];
     const fromEx = ex[`path_${name}`];
     pv[name] =
@@ -185,7 +248,7 @@ function initParamState(api) {
   bodyVals.value = bv;
 }
 
-function selectApi(id) {
+function selectApi(id: string): void {
   activeId.value = id;
   persistActive(id);
   selectedFiles.value = [];
@@ -193,16 +256,16 @@ function selectApi(id) {
   if (id === 'custom') {
     initParamState(null);
   } else {
-    const api = flatApis.value.find((a) => a.id === id);
+    const api = flatApis.value.find((a: FlatApi) => a.id === id);
     initParamState(api || null);
   }
   refreshPreview();
 }
 
-function buildRequestData() {
+function buildRequestData(): RequestData {
   if (activeId.value === 'custom') {
     const method = String(custom.method || 'GET').toUpperCase();
-    const data = { method, url: custom.url || '' };
+    const data: RequestData = { method, url: custom.url || '' };
     if (method !== 'GET' && custom.body.trim()) {
       try {
         data.body = JSON.parse(custom.body);
@@ -213,11 +276,11 @@ function buildRequestData() {
     return data;
   }
 
-  const api = flatApis.value.find((a) => a.id === activeId.value);
+  const api = flatApis.value.find((a: FlatApi) => a.id === activeId.value);
   if (!api) return { method: 'GET', url: '/' };
-  let url = api.path || '';
+  const url = api.path || '';
   const method = (api.method || 'GET').toUpperCase();
-  const data = { method, url };
+  const data: RequestData = { method, url };
 
   for (const name of pathParamNames.value) {
     const val = pathVals.value[name];
@@ -225,7 +288,7 @@ function buildRequestData() {
     data.url = data.url.replace(`:${name}`, encodePathValue(name, val));
   }
 
-  const query = {};
+  const query: Record<string, string> = {};
   for (const p of queryParams.value) {
     const val = queryVals.value[p.name];
     if (val == null || val === '') continue;
@@ -234,11 +297,11 @@ function buildRequestData() {
   if (Object.keys(query).length) data.query = query;
 
   if (method !== 'GET' && method !== 'HEAD') {
-    const body = {};
+    const body: LoosePayload = {};
     for (const p of bodyParams.value) {
       const raw = bodyVals.value[p.name];
       if (raw == null || raw === '') continue;
-      let val = raw;
+      let val: unknown = raw;
       if (p.type === 'json') {
         try {
           val = JSON.parse(raw);
@@ -249,7 +312,7 @@ function buildRequestData() {
         const n = Number(raw);
         if (Number.isFinite(n)) val = n;
       } else if (p.type === 'boolean' || p.type === 'checkbox') {
-        val = raw === 'true' || raw === '1' || raw === true;
+        val = raw === 'true' || raw === '1' || (raw as unknown) === true;
       }
       body[p.name] = val;
     }
@@ -263,16 +326,16 @@ function buildRequestData() {
   return data;
 }
 
-function refreshPreview() {
+function refreshPreview(): void {
   previewText.value = JSON.stringify(buildRequestData(), null, 2);
 }
 
-function fillExample() {
+function fillExample(): void {
   if (activeId.value === 'custom') {
     message.info('自定义请求请手动填写');
     return;
   }
-  const api = flatApis.value.find((a) => a.id === activeId.value);
+  const api = flatApis.value.find((a: FlatApi) => a.id === activeId.value);
   if (!api) return;
   const ex = catalog.value.examples?.[api.id] || {};
   for (const name of pathParamNames.value) {
@@ -293,7 +356,7 @@ function fillExample() {
   message.success('已填充示例/默认值');
 }
 
-function resolveUrl(rawUrl, query) {
+function resolveUrl(rawUrl: string, query?: Record<string, string>): string {
   let url = '';
   if (!rawUrl) url = getServerUrl();
   else if (/^https?:\/\//i.test(rawUrl) || rawUrl.startsWith('//')) url = rawUrl;
@@ -307,7 +370,7 @@ function resolveUrl(rawUrl, query) {
   return url;
 }
 
-async function execute() {
+async function execute(): Promise<void> {
   const data = buildRequestData();
   if (!data.url && activeId.value !== 'custom') {
     message.warning('请先选择 API');
@@ -328,8 +391,7 @@ async function execute() {
   const method = (data.method || 'GET').toUpperCase();
   const url = resolveUrl(data.url, data.query);
   try {
-    /** @type {RequestInit} */
-    const init = { method, headers: authHeaders() };
+    const init: RequestInit = { method, headers: authHeaders() };
     if (isMultipart.value) {
       const fd = new FormData();
       for (const f of selectedFiles.value) fd.append(fileField.value, f);
@@ -363,20 +425,20 @@ async function execute() {
   } catch (err) {
     elapsedMs.value = Date.now() - start;
     statusLine.value = `0 ERR · ${elapsedMs.value}ms`;
-    responseText.value = JSON.stringify({ error: err?.message || String(err) }, null, 2);
-    message.error(err?.message || String(err));
+    responseText.value = JSON.stringify({ error: errText(err) }, null, 2);
+    message.error(errText(err));
   } finally {
     loading.value = false;
   }
 }
 
-async function copyPreview() {
+async function copyPreview(): Promise<void> {
   const ok = await copyText(previewText.value);
   if (ok) message.success('已复制预览');
   else message.error('复制失败：浏览器限制或权限不足');
 }
 
-async function copyResponse() {
+async function copyResponse(): Promise<void> {
   const ok = await copyText(responseText.value);
   if (ok) message.success('已复制响应');
   else message.error('复制失败：浏览器限制或权限不足');
@@ -401,25 +463,25 @@ watch(
   },
 );
 
-async function loadCatalog() {
+async function loadCatalog(): Promise<void> {
   try {
     const base = import.meta.env.BASE_URL || '/xrk/';
     const res = await fetch(`${base}api-config.json`);
-    catalog.value = await res.json();
+    catalog.value = (await res.json()) as Catalog;
     if (!activeId.value) activeId.value = 'custom';
-    else if (activeId.value !== 'custom' && !flatApis.value.some((a) => a.id === activeId.value)) {
+    else if (activeId.value !== 'custom' && !flatApis.value.some((a: FlatApi) => a.id === activeId.value)) {
       activeId.value = flatApis.value[0]?.id || 'custom';
     }
     selectApi(activeId.value);
   } catch (err) {
-    message.error(`加载 api-config：${err?.message || err}`);
+    message.error(`加载 api-config：${errText(err)}`);
   }
 }
 
 onMounted(loadCatalog);
 useAuthReload(loadCatalog);
 
-function paramControl(p) {
+function paramControl(p: ApiParam): string {
   const t = String(p.type || 'text').toLowerCase();
   if (t === 'select') return 'select';
   if (t === 'textarea' || t === 'json') return 'textarea';

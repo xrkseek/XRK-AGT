@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * 统一配置字段控件（顶层表单 / 数组项 / 嵌套子表共用）
  */
@@ -23,10 +23,11 @@ const ctrl = computed(() => props.control || resolveFieldControl(props.schema));
 
 const selectOptions = computed(() =>
   normalizeOptions(props.schema?.options || props.schema?.enum || props.schema?.choices)
-    .filter((o) => o.value !== '' && o.value != null),
+    .filter((o) => o.value !== '' && o.value != null)
+    .map((o) => ({ label: String(o.label), value: o.value as string | number })),
 );
 
-function set(v) {
+function set(v: unknown) {
   emit('update:modelValue', v);
 }
 

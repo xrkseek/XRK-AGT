@@ -1,10 +1,10 @@
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute, useRouter, RouterView } from 'vue-router';
 import { NButton, NInput, NSpace, NTag, NTooltip } from 'naive-ui';
 import XrkIcon from '@/components/XrkIcon.vue';
-import { SHELL_NAV, SHELL_KEEPALIVE } from '@/layouts/shell-nav.js';
-import { useShellAuth } from '@/composables/useShellAuth.js';
+import { SHELL_NAV, SHELL_KEEPALIVE } from '@/layouts/shell-nav';
+import { useShellAuth } from '@/composables/useShellAuth';
 
 const route = useRoute();
 const router = useRouter();
@@ -12,7 +12,7 @@ const { auth, keyDraft, saveKey, onKeyEnter } = useShellAuth();
 const nav = SHELL_NAV;
 const pageTitle = computed(() => route.meta.title || 'XRK');
 
-function go(name) {
+function go(name: string) {
   router.push({ name });
 }
 </script>
