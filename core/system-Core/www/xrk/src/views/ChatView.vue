@@ -1,8 +1,8 @@
-<script>
+<script lang="ts">
 export default { name: 'ChatView' };
 </script>
 
-<script setup>
+<script setup lang="ts">
 import {
   computed,
   nextTick,
@@ -23,6 +23,11 @@ import {
   useMessage,
 } from 'naive-ui';
 import { apiFetch, authHeaders, getServerUrl } from '@/api/client';
+import type { ChatMode, HistoryItem, LoosePayload, NormalizedSegment } from '@/types';
+import type { AttachItem } from '@/chat/attach';
+import type { LlmEndpoint, LlmOptions, LlmVendor } from '@/chat/llm-settings';
+import type { WorkspacePreset } from '@/stores/chat';
+
 import { abortTimeout, copyText } from '@/utils/http';
 import { useChatStore } from '@/stores/chat';
 import { useAuthStore } from '@/stores/auth';
@@ -67,6 +72,36 @@ import { toolsMayTouchWorkspace } from '@/chat/tools';
 import { downloadImage } from '@/chat/markdown';
 import { useRouter } from 'vue-router';
 
+/** 事件引用（Event 模式的"引用"） */
+interface EventQuote {
+  id: string;
+  text: string;
+}
+
+/** 麦克风 ScriptProcessorNode 上挂的 flush 定时器 */
+interface MicProcessor extends ScriptProcessorNode {
+  _flushTimer?: ReturnType<typeof setInterval> | null;
+}
+
+/** AI 请求体（sendAi / sendVoice 共用） */
+interface AiRequestBody extends LoosePayload {
+  messages: Array<{ role: string; content: unknown }>;
+  stream: boolean;
+  apiKey?: string;
+  model?: string;
+  workflow?: { workflows: string[] };
+  workspace?: { id: string };
+}
+
+/** Webkit 前缀的 AudioContext（Safari） */
+interface WindowWithWebkitAudio extends Window {
+  webkitAudioContext?: typeof AudioContext;
+}
+
+function errText(err: unknown): string {
+  return (err as LoosePayload)?.message || String(err);
+}
+
 const message = useMessage();
 const chat = useChatStore();
 const auth = useAuthStore();
@@ -79,40 +114,39 @@ const streaming = ref(false);
 /** Event 已发出、等 WS 回包（不锁输入） */
 const awaitingReply = ref(false);
 const settingsOpen = ref(true);
-const listEl = ref(null);
-const fileInputEl = ref(null);
+const listEl = ref<HTMLElement | null>(null);
+const fileInputEl = ref<HTMLInputElement | null>(null);
 const loadingOpts = ref(false);
-const wsPanel = ref(null);
+const wsPanel = ref<InstanceType<typeof AiWorkspacePanel> | null>(null);
 const voiceStatus = ref('点麦克风开始');
 const voiceEmotion = ref('happy');
 const headerEmotion = ref('happy');
 const micActive = ref(false);
 const previewUrl = ref('');
-const attachments = ref([]);
+const attachments = ref<AttachItem[]>([]);
 const dragOver = ref(false);
 /** 手机端侧栏开关 */
 const sideOpen = ref(false);
 /** 贴底跟随：上翻读历史时关掉，回到底部附近再开 */
 const stickBottom = ref(true);
 /** Event 引用：{ id, text } */
-const eventQuote = ref(null);
-let abortCtrl = null;
-let asrSessionId = null;
-let audioCtxMic = null;
-let micStream = null;
-let micProcessor = null;
-let micSource = null;
-/** @type {ReturnType<typeof createVoiceTts> | null} */
-let voiceTts = null;
-const processedIds = new Set();
-let eventPendingTimer = null;
+const eventQuote = ref<EventQuote | null>(null);
+let abortCtrl: AbortController | null = null;
+let asrSessionId: string | null = null;
+let audioCtxMic: AudioContext | null = null;
+let micStream: MediaStream | null = null;
+let micProcessor: MicProcessor | null = null;
+let micSource: MediaStreamAudioSourceNode | null = null;
+let voiceTts: ReturnType<typeof createVoiceTts> | null = null;
+const processedIds = new Set<string>();
+let eventPendingTimer: ReturnType<typeof setTimeout> | null = null;
 const modeOptions = [
   { value: 'event', label: 'Event' },
   { value: 'voice', label: 'Voice' },
   { value: 'ai', label: 'AI' },
 ];
 
-const emotionGlyph = {
+const emotionGlyph: Record<string, string> = {
   happy: '●',
   think: '◐',
   message: '◆',
@@ -140,21 +174,21 @@ const headerTitle = computed(() => {
   return 'Voice';
 });
 
-function setVoiceEmotion(key) {
+function setVoiceEmotion(key: string): void {
   voiceEmotion.value = key in emotionGlyph ? key : 'happy';
   if (chat.mode !== 'voice') headerEmotion.value = voiceEmotion.value;
 }
 
-function setHeaderEmotion(key) {
+function setHeaderEmotion(key: string): void {
   headerEmotion.value = key in emotionGlyph ? key : 'happy';
 }
 
-function extractWsText(data) {
+function extractWsText(data: LoosePayload): string {
   const segs = extractSegments(data);
   return segmentsToPlainText(segs);
 }
 
-function rememberMsgId(data) {
+function rememberMsgId(data: LoosePayload): boolean {
   const id =
     data?.message_id ||
     data?.event_id ||
@@ -163,13 +197,17 @@ function rememberMsgId(data) {
   processedIds.add(id);
   if (processedIds.size > 800) {
     const first = processedIds.values().next().value;
-    processedIds.delete(first);
+    if (first != null) processedIds.delete(first);
   }
   return false;
 }
 
-function pushSegments(role, segments, extra = {}) {
-  const segs = (segments || []).filter(Boolean);
+function pushSegments(
+  role: string,
+  segments: unknown,
+  extra: LoosePayload = {},
+): HistoryItem | null {
+  const segs = ((segments || []) as LoosePayload[]).filter(Boolean) as NormalizedSegment[];
   if (!segs.length) return null;
   const msg = makeHistoryMessage(role, { segments: segs, extra });
   messages.value = [...messages.value, msg];
@@ -178,12 +216,12 @@ function pushSegments(role, segments, extra = {}) {
   return msg;
 }
 
-function push(role, content) {
+function push(role: string, content: unknown): HistoryItem | null {
   const text = String(content ?? '');
   return pushSegments(role, text ? [{ type: 'text', text }] : []);
 }
 
-function replaceLastAssistant(patch) {
+function replaceLastAssistant(patch: LoosePayload): void {
   const list = [...messages.value];
   const last = list[list.length - 1];
   if (!last || last.role !== 'assistant') return;
@@ -204,11 +242,11 @@ function replaceLastAssistant(patch) {
   messages.value = list;
 }
 
-function clearEventQuote() {
+function clearEventQuote(): void {
   eventQuote.value = null;
 }
 
-function quoteMsg(m) {
+function quoteMsg(m: HistoryItem): void {
   eventQuote.value = {
     id: m.id,
     text: (m.text || m.content || segmentsToPlainText(m.segments) || '').slice(
@@ -218,7 +256,7 @@ function quoteMsg(m) {
   };
 }
 
-function openRemoteMcpConfig() {
+function openRemoteMcpConfig(): void {
   try {
     localStorage.setItem('lastConfigName', 'system');
     localStorage.setItem('lastConfigChild', 'ai-workflow');
@@ -228,7 +266,7 @@ function openRemoteMcpConfig() {
   router.push({ name: 'config' });
 }
 
-function handleDevicePayload(data) {
+function handleDevicePayload(data: LoosePayload): void {
   if (!data || typeof data !== 'object') return;
   if (rememberMsgId(data)) return;
   const t = data.type;
@@ -331,11 +369,12 @@ function handleDevicePayload(data) {
     if (data.title || data.description) {
       if (chat.mode === 'ai') return;
       const lines = extractForwardLines(data);
-      const textLines =
-        lines.length ||
-        extractSegments(data)
-          .filter((s) => s.type === 'text')
-          .map((s) => s.text);
+      const textLines: string[] =
+        lines.length > 0
+          ? lines
+          : extractSegments(data)
+              .filter((seg): seg is NormalizedSegment & { type: 'text' } => seg.type === 'text')
+              .map((seg) => seg.text);
       const media = extractSegments(data).filter((s) =>
         ['image', 'video', 'record', 'file'].includes(s.type)
       );
@@ -452,22 +491,24 @@ const messages = computed({
   },
 });
 
-const vendors = computed(() => getLlmVendors(chat.llmOptions || {}));
-const factoryOptions = computed(() =>
-  vendors.value.map((v) => ({
+const vendors = computed<LlmVendor[]>(() => getLlmVendors(chat.llmOptions || {}));
+const factoryOptions = computed<Array<{ label: string; value: string }>>(() =>
+  vendors.value.map((v: LlmVendor) => ({
     label: `${v.label || v.id}${v.endpoints?.length ? '' : '（未配置端点）'}`,
-    value: v.id,
+    value: String(v.id ?? ''),
   }))
 );
-const endpointOptions = computed(() => {
-  const eps = getVendorEndpoints(vendors.value, chat.settings.llmFactory);
-  const opts = [{ label: '继承 ai-workflow 默认', value: '' }];
+const endpointOptions = computed<Array<{ label: string; value: string }>>(() => {
+  const eps: LlmEndpoint[] = getVendorEndpoints(vendors.value, chat.settings.llmFactory);
+  const opts: Array<{ label: string; value: string }> = [
+    { label: '继承 ai-workflow 默认', value: '' },
+  ];
   for (const ep of eps) {
     opts.push({
       label: ep.model
         ? `${ep.label || ep.key} · ${ep.model}`
-        : ep.label || ep.key,
-      value: ep.key,
+        : String(ep.label || ep.key || ''),
+      value: String(ep.key ?? ''),
     });
   }
   return opts;
@@ -479,27 +520,27 @@ const endpointDisabled = computed(
 );
 const endpointHint = computed(() =>
   endpointMetaText(
-    chat.llmOptions || {},
+    (chat.llmOptions || {}) as LlmOptions,
     chat.settings.llmFactory,
     chat.settings.provider
   )
 );
-const workspaceOptions = computed(() =>
-  (chat.workspacePresets || []).map((w) => ({
+const workspaceOptions = computed<Array<{ label: string; value: string }>>(() =>
+  (chat.workspacePresets || []).map((w: WorkspacePreset) => ({
     label: w.label || w.id,
     value: w.id,
   }))
 );
-const workflowOptions = computed(() =>
-  (chat.llmOptions?.workflows || [])
+const workflowOptions = computed<Array<{ value: string; label: string }>>(() =>
+  (((chat.llmOptions as LoosePayload)?.workflows || []) as LoosePayload[])
     .map((w) => ({
-      value: w.key || w.name || '',
-      label: w.label || w.description || w.key || w.name || '',
+      value: String(w.key || w.name || ''),
+      label: String(w.label || w.description || w.key || w.name || ''),
     }))
     .filter((w) => w.value)
 );
 
-async function scrollBottom(force = false) {
+async function scrollBottom(force = false): Promise<void> {
   await nextTick();
   const box = listEl.value;
   if (!box) return;
@@ -508,32 +549,33 @@ async function scrollBottom(force = false) {
   scrollChatToBottom(box);
 }
 
-function onMsgsScroll() {
+function onMsgsScroll(): void {
   const box = listEl.value;
   if (!box) return;
   stickBottom.value = isNearBottom(box);
 }
 
 /** 图片等异步撑高后，若仍贴底则再跟一次 */
-function onMsgsMediaLoad(e) {
+function onMsgsMediaLoad(e?: Event): void {
   const t = e?.target;
-  if (!t || (t.tagName !== 'IMG' && t.tagName !== 'VIDEO')) return;
+  if (!(t instanceof Element)) return;
+  if (t.tagName !== 'IMG' && t.tagName !== 'VIDEO') return;
   if (stickBottom.value) scrollChatToBottom(listEl.value);
 }
 
-function enterChatBottom() {
+function enterChatBottom(): void {
   stickBottom.value = true;
   clearStoredChatScroll();
   void scrollBottom(true);
 }
 
-function msgPlainText(m) {
+function msgPlainText(m: HistoryItem): string {
   if (Array.isArray(m.segments) && m.segments.length)
     return segmentsToPlainText(m.segments);
   return m.text || m.content || '';
 }
 
-function openPreview(url) {
+function openPreview(url: unknown): void {
   previewUrl.value = resolveMediaUrl(url);
 }
 
@@ -543,7 +585,7 @@ async function savePreview() {
     await downloadImage(previewUrl.value);
     message.success('图片已保存');
   } catch (err) {
-    message.error(`保存失败：${err?.message || err}`);
+    message.error(`保存失败：${errText(err)}`);
   }
 }
 
@@ -556,8 +598,8 @@ function clearAttachments() {
   attachments.value = [];
 }
 
-function addFiles(fileList) {
-  const files = Array.from(fileList || []).filter(Boolean);
+function addFiles(fileList: FileList | File[] | null | undefined): void {
+  const files = Array.from(fileList || []).filter(Boolean) as File[];
   if (!files.length) return;
   const isAi = chat.mode === 'ai';
   const maxSize = isAi ? 10 * 1024 * 1024 : 100 * 1024 * 1024;
@@ -576,22 +618,25 @@ function addFiles(fileList) {
   attachments.value = next;
 }
 
-function removeAttach(id) {
+function removeAttach(id: string): void {
   const item = attachments.value.find((a) => a.id === id);
   if (item) revokeAttachItem(item);
   attachments.value = attachments.value.filter((a) => a.id !== id);
 }
 
-function onFileInputChange(e) {
-  addFiles(e.target?.files);
-  if (e.target) e.target.value = '';
+function onFileInputChange(e: Event): void {
+  const el = e.target;
+  if (el instanceof HTMLInputElement) {
+    addFiles(el.files);
+    el.value = '';
+  }
 }
 
-function onPaste(e) {
+function onPaste(e: ClipboardEvent): void {
   if (chat.mode === 'voice') return;
   const items = e.clipboardData?.items;
   if (!items) return;
-  const files = [];
+  const files: File[] = [];
   for (const item of items) {
     if (item.kind === 'file') {
       const f = item.getAsFile();
@@ -604,7 +649,7 @@ function onPaste(e) {
   }
 }
 
-function onDrop(e) {
+function onDrop(e: DragEvent): void {
   e.preventDefault();
   dragOver.value = false;
   if (chat.mode === 'voice') return;
@@ -618,7 +663,7 @@ function sendPoke() {
   device.sendDeviceNotice('notify', 'poke', { user_id: qq });
 }
 
-async function copyMsg(m) {
+async function copyMsg(m: HistoryItem): Promise<void> {
   const text = msgPlainText(m);
   if (!text) {
     message.warning('无可复制内容');
@@ -629,14 +674,14 @@ async function copyMsg(m) {
   else message.error('复制失败：浏览器限制或权限不足');
 }
 
-function deleteMsg(m) {
+function deleteMsg(m: HistoryItem): void {
   const id = m.id;
   messages.value = messages.value.filter((x) => x.id !== id);
   chat.persistHistory();
   message.success(m.role === 'user' ? '消息已撤回' : '消息已删除');
 }
 
-async function regenerateMsg(m) {
+async function regenerateMsg(m: HistoryItem): Promise<void> {
   if (m.role !== 'assistant' || chat.mode !== 'ai' || streaming.value) return;
   const list = messages.value;
   const idx = list.findIndex((x) => x.id === m.id);
@@ -655,7 +700,7 @@ async function regenerateMsg(m) {
     try {
       await sendAi(userText, { skipUserPush: true });
     } catch (err) {
-      message.error(err?.message || String(err));
+      message.error(errText(err));
     }
   }
 }
@@ -674,8 +719,8 @@ async function loadLlmOptions(force = false) {
       workflows: data?.workflows || [],
     };
     if (chat.settings.workflowsUnset) {
-      const keys = (chat.llmOptions.workflows || [])
-        .map((w) => w.key || w.name || '')
+      const keys = (((chat.llmOptions as LoosePayload)?.workflows || []) as LoosePayload[])
+        .map((w) => String(w.key || w.name || ''))
         .filter(Boolean);
       const preferred = ['tools', 'web'].filter((k) => keys.includes(k));
       chat.settings.workflows = preferred.length ? preferred : keys.slice(0, 2);
@@ -695,7 +740,7 @@ async function loadLlmOptions(force = false) {
       chat.persistPersona();
     }
   } catch (err) {
-    message.warning(err?.message || '加载 LLM 选项失败');
+    message.warning(errText(err) || '加载 LLM 选项失败');
   } finally {
     loadingOpts.value = false;
   }
@@ -725,24 +770,27 @@ async function loadWorkspaces() {
   }
 }
 
-function onFactoryChange(factoryId) {
+function onFactoryChange(factoryId: string): void {
   const endpoints = getVendorEndpoints(vendors.value, factoryId);
-  const nextProvider = endpoints.length === 1 ? endpoints[0].key : '';
+  const nextProvider = endpoints.length === 1 ? String(endpoints[0].key ?? '') : '';
   chat.setLlmSelection({ factoryId, endpointKey: nextProvider });
 }
 
-function onProviderChange(endpointKey) {
+function onProviderChange(endpointKey: string): void {
   chat.setLlmSelection({ factoryId: chat.settings.llmFactory, endpointKey });
 }
 
-async function sendAi(text, { skipUserPush = false } = {}) {
+async function sendAi(
+  text: string,
+  { skipUserPush = false }: { skipUserPush?: boolean } = {},
+): Promise<void> {
   streaming.value = true;
   const atts = [...attachments.value];
   clearAttachments();
 
-  const userSegs = [];
+  const userSegs: NormalizedSegment[] = [];
   if (text) userSegs.push({ type: 'text', text });
-  const imageParts = [];
+  const imageParts: LoosePayload[] = [];
   for (const a of atts) {
     if (!a.isImage) continue;
     try {
@@ -763,7 +811,7 @@ async function sendAi(text, { skipUserPush = false } = {}) {
   messages.value = [...messages.value, assistant];
 
   const provider = validateChatProviderForFactory(
-    chat.llmOptions,
+    (chat.llmOptions || {}) as LlmOptions,
     chat.settings
   );
   if (provider !== (chat.settings.provider || '')) {
@@ -776,12 +824,12 @@ async function sendAi(text, { skipUserPush = false } = {}) {
   }
 
   const persona = (chat.settings.persona || '').trim();
-  const historyMsgs = messages.value
+  const historyMsgs: Array<{ role: string; content: unknown }> = messages.value
     .filter((m) => m.role === 'user' || m.role === 'assistant')
     .slice(0, -1)
     .map((m) => ({ role: m.role, content: m.text || m.content || '' }));
 
-  let userContent = text || '';
+  let userContent: unknown = text || '';
   if (imageParts.length) {
     userContent = [{ type: 'text', text: text || '' }, ...imageParts];
   }
@@ -790,7 +838,7 @@ async function sendAi(text, { skipUserPush = false } = {}) {
     ? [{ role: 'system', content: persona }, ...historyMsgs]
     : historyMsgs;
 
-  const requestBody = {
+  const requestBody: AiRequestBody = {
     messages: finalMessages,
     stream: true,
     apiKey: auth.apiKey || undefined,
@@ -862,11 +910,11 @@ async function sendAi(text, { skipUserPush = false } = {}) {
   }
 }
 
-async function sendEvent(text) {
+async function sendEvent(text: string): Promise<void> {
   const atts = [...attachments.value];
   clearAttachments();
 
-  const userSegs = [];
+  const userSegs: NormalizedSegment[] = [];
   if (eventQuote.value) {
     userSegs.push({
       type: 'reply',
@@ -901,7 +949,7 @@ async function sendEvent(text) {
   armEventPending();
   try {
     device.ensure();
-    const meta = { source: 'manual' };
+    const meta: LoosePayload = { source: 'manual' };
     if (userSegs.length) meta.message = userSegs;
     let sent = device.sendChatMessage(text || ' ', meta);
     if (!sent) {
@@ -956,7 +1004,7 @@ async function sendEvent(text) {
   }
 }
 
-async function sendVoice(text) {
+async function sendVoice(text: string): Promise<void> {
   if (streaming.value) return;
   voiceTts?.stop();
   voiceStatus.value = 'AI 思考中…';
@@ -968,20 +1016,20 @@ async function sendVoice(text) {
   messages.value = [...messages.value, assistant];
 
   const provider = validateChatProviderForFactory(
-    chat.llmOptions,
+    (chat.llmOptions || {}) as LlmOptions,
     chat.settings
   );
   if (provider !== (chat.settings.provider || '')) {
     chat.settings.provider = provider;
   }
 
-  const historyMsgs = messages.value
+  const historyMsgs: Array<{ role: string; content: unknown }> = messages.value
     .filter((m) => m.role === 'user' || m.role === 'assistant')
     .slice(0, -1)
     .map((m) => ({ role: m.role, content: m.text || m.content || '' }));
   historyMsgs.push({ role: 'user', content: text });
 
-  const requestBody = {
+  const requestBody: AiRequestBody = {
     messages: historyMsgs,
     stream: true,
     apiKey: auth.apiKey || undefined,
@@ -1062,7 +1110,7 @@ async function sendVoice(text) {
   }
 }
 
-function floatTo16BitPCM(float32Array) {
+function floatTo16BitPCM(float32Array: Float32Array): Int16Array {
   const out = new Int16Array(float32Array.length);
   for (let i = 0; i < float32Array.length; i++) {
     const s = Math.max(-1, Math.min(1, float32Array[i]));
@@ -1071,7 +1119,7 @@ function floatTo16BitPCM(float32Array) {
   return out;
 }
 
-function pcmToHex(int16) {
+function pcmToHex(int16: Int16Array): string {
   const bytes = new Uint8Array(
     int16.buffer,
     int16.byteOffset,
@@ -1147,7 +1195,9 @@ async function toggleMic() {
         noiseSuppression: true,
       },
     });
-    const AC = window.AudioContext || window.webkitAudioContext;
+    const AC =
+      window.AudioContext || (window as WindowWithWebkitAudio).webkitAudioContext;
+    if (!AC) throw new Error('浏览器不支持 Web Audio');
     audioCtxMic = new AC({ sampleRate: 16000 });
     micSource = audioCtxMic.createMediaStreamSource(micStream);
     const bufferSize = 4096;
@@ -1162,7 +1212,7 @@ async function toggleMic() {
       channels: 1,
     });
     let chunkIndex = 0;
-    const pending = [];
+    const pending: Int16Array[] = [];
     micProcessor.onaudioprocess = (e) => {
       if (!micActive.value || !asrSessionId) return;
       pending.push(floatTo16BitPCM(e.inputBuffer.getChannelData(0)));
@@ -1174,6 +1224,7 @@ async function toggleMic() {
       let off = 0;
       while (pending.length) {
         const part = pending.shift();
+        if (!part) break;
         combined.set(part, off);
         off += part.length;
       }
@@ -1194,7 +1245,7 @@ async function toggleMic() {
     voiceStatus.value = '正在听…再点结束';
     setVoiceEmotion('listen');
   } catch (err) {
-    message.error(`麦克风失败：${err?.message || err}`);
+    message.error(`麦克风失败：${errText(err)}`);
     await stopMic();
   }
 }
@@ -1222,12 +1273,12 @@ async function send() {
     } else if (chat.mode === 'event') await sendEvent(text);
     else await sendVoice(text);
   } catch (err) {
-    if (err?.name === 'AbortError') {
+    if ((err as LoosePayload)?.name === 'AbortError') {
       push('assistant', '（已停止）');
       return;
     }
-    message.error(err?.message || String(err));
-    push('assistant', `错误：${err?.message || err}`);
+    message.error(errText(err));
+    push('assistant', `错误：${errText(err)}`);
   }
 }
 
@@ -1246,7 +1297,7 @@ function clearChat() {
   ensureSystemTip();
 }
 
-function tipForMode(m) {
+function tipForMode(m: ChatMode): string {
   if (m === 'ai') return '选择工厂与工作区后发送。可粘贴图片。';
   if (m === 'event') return '走设备通道；可上传文件、引用、戳一戳。';
   return '语音：麦克风 ASR + AI 回复 + TTS 播报。';
@@ -1258,24 +1309,28 @@ function ensureSystemTip() {
   chat.histories[chat.mode] = [tip];
 }
 
-function switchMode(next) {
-  if (next === chat.mode) {
+function switchMode(next: ChatMode | string): void {
+  const mode = (next === 'event' || next === 'voice' || next === 'ai' ? next : chat.mode) as ChatMode;
+  if (mode === chat.mode) {
     sideOpen.value = false;
     return;
   }
   clearAttachments();
   clearEventQuote();
-  chat.setMode(next);
+  chat.setMode(mode);
   sideOpen.value = false;
 }
 
-function onWorkspaceChange(id) {
+function onWorkspaceChange(id: string): void {
   chat.settings.workspace = normalizeWorkspaceId(id);
   chat.persistWorkspace();
 }
 
-function onPresets(list) {
-  if (Array.isArray(list) && list.length) chat.workspacePresets = list;
+function onPresets(list: string[] | WorkspacePreset[]): void {
+  if (!Array.isArray(list) || !list.length) return;
+  chat.workspacePresets = list.map((p) =>
+    typeof p === 'string' ? { id: p, label: p } : p,
+  );
 }
 
 watch(

@@ -1,8 +1,8 @@
-﻿<script>
+﻿<script lang="ts">
 export default { name: 'ConfigView' };
 </script>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   NButton,
@@ -39,6 +39,44 @@ import ConfigKeyedMapForm from '@/components/ConfigKeyedMapForm.vue';
 import XrkIcon from '@/components/XrkIcon.vue';
 import { useListPaneWidth } from '@/composables/useListPaneWidth';
 import { useViewport } from '@/composables/useViewport';
+import type { LoosePayload } from '@/types';
+import type {
+  FieldGroup,
+  NormalizedField,
+  SchemaFieldMap,
+  SchemaNode,
+} from '@/config/flat';
+
+/** /api/config/list 里的配置条目 */
+interface ConfigEntry extends LoosePayload {
+  name: string;
+  displayName?: string;
+  description?: string;
+  configs?: Record<string, LoosePayload>;
+}
+
+/** batch-set 请求体 */
+interface BatchSetBody extends LoosePayload {
+  flat: LoosePayload;
+  backup: boolean;
+  validate: boolean;
+  path?: string;
+}
+
+function asPayload(v: unknown): LoosePayload {
+  return (v && typeof v === 'object' ? v : {}) as LoosePayload;
+}
+
+function errText(err: unknown): string {
+  return (err as LoosePayload)?.message || String(err);
+}
+
+/** 表单 example 属性的可接受类型（对齐 naive 组件 prop 声明） */
+type ExampleProp = string | number | boolean | unknown[] | Record<string, unknown> | null | undefined;
+
+function asExample(value: unknown): ExampleProp {
+  return value as ExampleProp;
+}
 
 const message = useMessage();
 const dialog = useDialog();
@@ -47,47 +85,49 @@ const { width: listPaneW, startResize } = useListPaneWidth();
 const loading = ref(false);
 const saving = ref(false);
 const listOpen = ref(false);
-const configs = ref([]);
+const configs = ref<ConfigEntry[]>([]);
 const filter = ref('');
 const selected = ref(localStorage.getItem('lastConfigName') || '');
 const selectedChild = ref(localStorage.getItem('lastConfigChild') || '');
 const mode = ref(localStorage.getItem('configEditorMode') || 'form');
 const dense = ref(localStorage.getItem('configEditorDense') === '1');
 
-const fields = ref([]);
-const arraySchemas = ref({});
-const values = reactive({});
-const original = reactive({});
+const fields = ref<NormalizedField[]>([]);
+const arraySchemas = ref<Record<string, SchemaFieldMap>>({});
+const values = reactive<LoosePayload>({});
+const original = reactive<LoosePayload>({});
 const jsonText = ref('{}');
 const jsonBaseline = ref('{}');
-const children = ref([]);
-const validateErrorPaths = ref([]);
+const children = ref<string[]>([]);
+const validateErrorPaths = ref<string[]>([]);
 /** 阻止 selectedChild 回滚时二次触发 */
 let suppressChildWatch = false;
 
-const filtered = computed(() => {
+const filtered = computed<ConfigEntry[]>(() => {
   const q = filter.value.trim().toLowerCase();
   if (!q) return configs.value;
-  return configs.value.filter((c) => {
+  return configs.value.filter((c: ConfigEntry) => {
     const hay = `${c.displayName || ''} ${c.name || ''} ${c.description || ''}`.toLowerCase();
     return hay.includes(q);
   });
 });
 
-const groups = computed(() => groupFields(fields.value));
+const groups = computed<FieldGroup[]>(() => groupFields(fields.value));
 const showGroupHeaders = computed(() => {
   if (groups.value.length !== 1) return true;
   const only = groups.value[0]?.label;
   return only !== '基础';
 });
-const selectedConfig = computed(() => configs.value.find((c) => c.name === selected.value) || null);
+const selectedConfig = computed<ConfigEntry | null>(
+  () => configs.value.find((c: ConfigEntry) => c.name === selected.value) || null,
+);
 /** system / llm_factories 等：structure 带 configs 子项 */
-const isMultiFile = computed(() => Boolean(
+const isMultiFile = computed<boolean>(() => Boolean(
   selectedConfig.value?.configs && typeof selectedConfig.value.configs === 'object',
 ));
-const editingMultiChild = computed(() => isMultiFile.value && Boolean(selectedChild.value));
+const editingMultiChild = computed<boolean>(() => isMultiFile.value && Boolean(selectedChild.value));
 
-const editorTitle = computed(() => {
+const editorTitle = computed<string>(() => {
   if (editingMultiChild.value) {
     const opt = childOptions.value.find((o) => o.value === selectedChild.value);
     return opt?.label || selectedChild.value;
@@ -95,14 +135,14 @@ const editorTitle = computed(() => {
   return selectedConfig.value?.displayName || selected.value || '未选择';
 });
 
-const editorDesc = computed(() => {
+const editorDesc = computed<string>(() => {
   if (editingMultiChild.value) return `${selected.value} / ${selectedChild.value}`;
   if (selectedConfig.value?.description) return selectedConfig.value.description;
   if (selected.value) return selected.value;
   return '';
 });
 
-const dirtyCount = computed(() => {
+const dirtyCount = computed<number>(() => {
   if (mode.value === 'json' && jsonText.value !== jsonBaseline.value) {
     try {
       const parsed = JSON.parse(jsonText.value);
@@ -119,9 +159,9 @@ const dirtyCount = computed(() => {
   return Object.keys(buildDirtyFlat(values, original, fields.value, arraySchemas.value)).length;
 });
 
-const dirtyPaths = computed(() => {
+const dirtyPaths = computed<string[]>(() => {
   try {
-    let flat;
+    let flat: LoosePayload;
     if (mode.value === 'json') {
       const parsed = JSON.parse(jsonText.value);
       const shadow = valuesFromFlat(parsed, fields.value);
@@ -135,7 +175,7 @@ const dirtyPaths = computed(() => {
   }
 });
 
-const dirtySummary = computed(() => {
+const dirtySummary = computed<string>(() => {
   if (!dirtyPaths.value.length) return '';
   const more = dirtyCount.value > dirtyPaths.value.length
     ? ` 等 ${dirtyCount.value} 项`
@@ -143,24 +183,21 @@ const dirtySummary = computed(() => {
   return dirtyPaths.value.join(', ') + more;
 });
 
-const childOptions = computed(() => {
+const childOptions = computed<Array<{ label: string; value: string }>>(() => {
   const cfg = selectedConfig.value;
   if (cfg?.configs && typeof cfg.configs === 'object') {
     return Object.entries(cfg.configs).map(([key, meta]) => ({
-      label: meta?.displayName || key,
+      label: String(meta?.displayName || key),
       value: key,
     }));
   }
-  return children.value.map((c) => ({
-    label: typeof c === 'string' ? c : c.label || c.name || c.path,
-    value: typeof c === 'string' ? c : c.name || c.path || c.id,
-  }));
+  return children.value.map((c: string) => ({ label: c, value: c }));
 });
 
-function confirmDiscard() {
+function confirmDiscard(): Promise<boolean> {
   const n = dirtyCount.value;
   if (!n) return Promise.resolve(true);
-  return new Promise((resolve) => {
+  return new Promise<boolean>((resolve) => {
     dialog.warning({
       title: '放弃修改',
       content: `有 ${n} 项未保存${dirtySummary.value ? `（${dirtySummary.value}）` : ''}，确定放弃？`,
@@ -173,8 +210,8 @@ function confirmDiscard() {
   });
 }
 
-function flatToNested(flat) {
-  const out = {};
+function flatToNested(flat: LoosePayload): LoosePayload {
+  const out: LoosePayload = {};
   for (const [p, v] of Object.entries(flat || {})) {
     const parts = String(p).split('.').filter(Boolean);
     if (!parts.length) continue;
@@ -182,36 +219,36 @@ function flatToNested(flat) {
     for (let i = 0; i < parts.length - 1; i++) {
       const k = parts[i];
       if (!cur[k] || typeof cur[k] !== 'object' || Array.isArray(cur[k])) cur[k] = {};
-      cur = cur[k];
+      cur = cur[k] as LoosePayload;
     }
     cur[parts[parts.length - 1]] = v;
   }
   return out;
 }
 
-function ensureNestedObj(path) {
+function ensureNestedObj(path: string): LoosePayload {
   if (!values[path] || typeof values[path] !== 'object' || Array.isArray(values[path])) {
     values[path] = {};
   }
   return values[path];
 }
 
-function nestedFieldEntries(f) {
+function nestedFieldEntries(f: NormalizedField): Array<[string, SchemaNode]> {
   return Object.entries(fieldNestedFields(f));
 }
 
-function ensureObjValue(path) {
+function ensureObjValue(path: string): LoosePayload {
   const cur = values[path];
-  if (cur && typeof cur === 'object' && !Array.isArray(cur)) return cur;
+  if (cur && typeof cur === 'object' && !Array.isArray(cur)) return cur as LoosePayload;
   return {};
 }
 
-function setNestedValue(parentPath, key, v) {
+function setNestedValue(parentPath: string, key: string, v: unknown): void {
   const obj = ensureNestedObj(parentPath);
   obj[key] = v;
 }
 
-function persistSelection() {
+function persistSelection(): void {
   try {
     if (selected.value) localStorage.setItem('lastConfigName', selected.value);
     localStorage.setItem('lastConfigChild', selectedChild.value || '');
@@ -220,7 +257,7 @@ function persistSelection() {
   }
 }
 
-function setMode(next) {
+function setMode(next: string): void {
   if (next === mode.value) return;
   if (mode.value === 'json' && next === 'form') {
     if (!applyJsonToValues()) return;
@@ -234,7 +271,7 @@ function setMode(next) {
   if (next === 'json') syncJsonFromValues();
 }
 
-function toggleDense() {
+function toggleDense(): void {
   dense.value = !dense.value;
   try {
     localStorage.setItem('configEditorDense', dense.value ? '1' : '0');
@@ -243,12 +280,16 @@ function toggleDense() {
   }
 }
 
-function clearValues() {
+function clearValues(): void {
   for (const k of Object.keys(values)) delete values[k];
   for (const k of Object.keys(original)) delete original[k];
 }
 
-function applyFlatData(flatSchema, flatData, structure = null) {
+function applyFlatData(
+  flatSchema: unknown,
+  flatData: unknown,
+  structure: SchemaNode | null = null,
+): void {
   const list = normalizeFlatFields(flatSchema);
   fields.value = list;
   clearValues();
@@ -257,7 +298,7 @@ function applyFlatData(flatSchema, flatData, structure = null) {
     extractActiveSchema(structure, selected.value, selectedChild.value) || { fields: {} },
   );
   const fromTemplates = arraySchemasFromFlatTemplates(flatSchema);
-  const merged = { ...fromTemplates, ...fromStructure };
+  const merged: Record<string, SchemaFieldMap> = { ...fromTemplates, ...fromStructure };
   for (const f of list) {
     if (f.type !== 'array<object>' && f.component !== 'arrayform') continue;
     if ((!merged[f.path] || !Object.keys(merged[f.path]).length) && f.itemFields) {
@@ -271,16 +312,16 @@ function applyFlatData(flatSchema, flatData, structure = null) {
   syncJsonFromValues();
 }
 
-function syncJsonFromValues() {
-  const obj = {};
+function syncJsonFromValues(): void {
+  const obj: LoosePayload = {};
   for (const f of fields.value) obj[f.path] = values[f.path];
   const text = JSON.stringify(obj, null, 2);
   jsonText.value = text;
   jsonBaseline.value = text;
 }
 
-function applyJsonToValues() {
-  let parsed;
+function applyJsonToValues(): boolean {
+  let parsed: unknown;
   try {
     parsed = JSON.parse(jsonText.value);
   } catch {
@@ -298,40 +339,37 @@ function applyJsonToValues() {
   return true;
 }
 
-async function loadList() {
+async function loadList(): Promise<void> {
   loading.value = true;
   try {
-    const data = await apiFetch('/api/config/list');
-    configs.value = Array.isArray(data?.configs) ? data.configs : Array.isArray(data) ? data : [];
+    const data = asPayload(await apiFetch('/api/config/list'));
+    const list = data?.configs ?? data;
+    configs.value = (Array.isArray(list) ? list : []) as ConfigEntry[];
     if (!selected.value && configs.value[0]) {
       selected.value = configs.value[0].name;
     }
     if (selected.value) await loadOne(selected.value, { force: true });
   } catch (err) {
-    message.error(err?.message || String(err));
+    message.error(errText(err));
   } finally {
     loading.value = false;
   }
 }
 
-function childQuery() {
+function childQuery(): string {
   if (isMultiFile.value && selectedChild.value) {
     return `?path=${encodeURIComponent(selectedChild.value)}`;
   }
   return '';
 }
 
-/**
- * @param {string} name
- * @param {{ force?: boolean }} [opts]
- */
-async function loadOne(name, opts = {}) {
+async function loadOne(name: string, opts: { force?: boolean } = {}): Promise<void> {
   if (!name) return;
   if (!opts.force && !(await confirmDiscard())) return;
-  const cfg = configs.value.find((c) => c.name === name);
+  const cfg = configs.value.find((c: ConfigEntry) => c.name === name);
   const multi = Boolean(cfg?.configs && typeof cfg.configs === 'object');
-  if (multi && !selectedChild.value) {
-    children.value = Object.keys(cfg.configs);
+  if (multi && !selectedChild.value && cfg) {
+    children.value = Object.keys(cfg.configs as Record<string, unknown>);
     fields.value = [];
     arraySchemas.value = {};
     clearValues();
@@ -342,7 +380,7 @@ async function loadOne(name, opts = {}) {
   await loadFlat(name);
 }
 
-async function loadFlat(name) {
+async function loadFlat(name: string): Promise<void> {
   loading.value = true;
   try {
     const q = childQuery();
@@ -352,13 +390,13 @@ async function loadFlat(name) {
       apiFetch(`/api/config/${encodeURIComponent(name)}/structure`).catch(() => null),
     ];
     const [schemaRes, dataRes, structureRes] = await Promise.all(tasks);
-    const flatSchema = schemaRes?.flat ?? schemaRes;
-    const flatData = dataRes?.flat ?? dataRes;
-    const structure = structureRes?.structure ?? structureRes;
+    const flatSchema = asPayload(schemaRes).flat ?? schemaRes;
+    const flatData = asPayload(dataRes).flat ?? dataRes;
+    const structure = (asPayload(structureRes).structure ?? structureRes) as SchemaNode | null;
     applyFlatData(flatSchema, flatData, structure);
     persistSelection();
   } catch (err) {
-    message.error(err?.message || String(err));
+    message.error(errText(err));
     fields.value = [];
     arraySchemas.value = {};
     clearValues();
@@ -367,11 +405,11 @@ async function loadFlat(name) {
   }
 }
 
-function itemFieldsFor(f) {
+function itemFieldsFor(f: NormalizedField): SchemaFieldMap {
   return resolveArrayItemFields(f.path, arraySchemas.value, f);
 }
 
-async function save() {
+async function save(): Promise<void> {
   if (!selected.value) return;
   if (isMultiFile.value && !selectedChild.value) {
     message.warning('请先选择子配置');
@@ -389,7 +427,7 @@ async function save() {
   validateErrorPaths.value = [];
   try {
     if (!isMultiFile.value) {
-      const allFlat = {};
+      const allFlat: LoosePayload = {};
       for (const f of fields.value) allFlat[f.path] = values[f.path];
       const data = flatToNested(allFlat);
       try {
@@ -403,7 +441,7 @@ async function save() {
           const errs = Array.isArray(validation.errors) ? validation.errors : [String(validation)];
           message.error(`校验失败: ${errs.join('; ')}`);
           validateErrorPaths.value = errs
-            .map((e) => {
+            .map((e: unknown) => {
               const m = String(e).match(/字段\s+([\w.]+)/);
               return m?.[1];
             })
@@ -411,42 +449,44 @@ async function save() {
           return;
         }
       } catch (err) {
-        message.error(err?.message || String(err));
+        message.error(errText(err));
         return;
       }
     }
 
-    const body = { flat, backup: true, validate: true };
+    const body: BatchSetBody = { flat, backup: true, validate: true };
     if (isMultiFile.value && selectedChild.value) body.path = selectedChild.value;
     await apiJson(`/api/config/${encodeURIComponent(selected.value)}/batch-set`, body, 'POST');
     message.success(`已保存 ${Object.keys(flat).length} 项`);
     await loadFlat(selected.value);
   } catch (err) {
-    message.error(err?.message || String(err));
+    message.error(errText(err));
   } finally {
     saving.value = false;
   }
 }
 
-async function backup() {
+async function backup(): Promise<void> {
   if (!selected.value || isMultiFile.value) {
     message.warning('多文件配置请在子配置内保存（会自动备份）');
     return;
   }
   try {
-    const res = await apiJson(`/api/config/${encodeURIComponent(selected.value)}/backup`, {}, 'POST');
+    const res = asPayload(
+      await apiJson(`/api/config/${encodeURIComponent(selected.value)}/backup`, {}, 'POST'),
+    );
     message.success(res?.backupPath ? `已备份：${res.backupPath}` : '已备份');
   } catch (err) {
-    message.error(err?.message || String(err));
+    message.error(errText(err));
   }
 }
 
-async function resetCfg() {
+async function resetCfg(): Promise<void> {
   if (!selected.value || isMultiFile.value) {
     message.warning('多文件子配置请在服务端重置对应 yaml');
     return;
   }
-  const ok = await new Promise((resolve) => {
+  const ok = await new Promise<boolean>((resolve) => {
     dialog.warning({
       title: '重置配置',
       content: `确认将 ${selected.value} 重置为默认值？`,
@@ -463,11 +503,11 @@ async function resetCfg() {
     message.success('已重置');
     await loadFlat(selected.value);
   } catch (err) {
-    message.error(err?.message || String(err));
+    message.error(errText(err));
   }
 }
 
-async function selectConfig(name) {
+async function selectConfig(name: string): Promise<void> {
   if (selected.value === name) {
     listOpen.value = false;
     return;
@@ -485,7 +525,7 @@ async function selectConfig(name) {
   void loadOne(name, { force: true });
 }
 
-async function goBackChild() {
+async function goBackChild(): Promise<void> {
   if (!editingMultiChild.value) return;
   if (!(await confirmDiscard())) return;
   suppressChildWatch = true;
@@ -500,12 +540,12 @@ async function goBackChild() {
   });
 }
 
-function fieldControl(f) {
+function fieldControl(f: NormalizedField) {
   return resolveFieldControl(f);
 }
 
-function isDirty(path) {
-  const f = fields.value.find((x) => x.path === path);
+function isDirty(path: string): boolean {
+  const f = fields.value.find((x: NormalizedField) => x.path === path);
   if (!f) return false;
   if (f.type === 'array<object>' || f.component === 'arrayform') {
     const itemFields = arraySchemas.value[f.path] || f.itemFields || {};
@@ -520,7 +560,7 @@ function isDirty(path) {
   return !sameFieldValue(values[path], original[path], f.type, f.component);
 }
 
-function formatJsonEditor() {
+function formatJsonEditor(): void {
   try {
     const parsed = JSON.parse(jsonText.value);
     jsonText.value = JSON.stringify(parsed, null, 2);
@@ -778,7 +818,7 @@ useAuthReload(loadList);
                       :model-value="ensureObjValue(f.path)"
                       :label="f.itemLabel || f.label || '条目'"
                       :item-fields="fieldNestedFields(f)"
-                      :example="f.example"
+                      :example="asExample(f.example)"
                       :key-label="f.keyLabel || '键'"
                       :key-placeholder="f.keyPlaceholder || '输入键名，如 * 或 chat_id'"
                       :dense="dense"
