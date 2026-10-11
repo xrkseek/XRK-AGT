@@ -4,6 +4,12 @@
 
 export { normalizeWorkspaceId } from '@/chat/llm-settings';
 
+/** 目录面包屑 */
+export interface Crumb {
+  label: string;
+  dir: string;
+}
+
 const TOOL_LABELS = {
   read: '读取',
   write: '写入',
@@ -16,21 +22,21 @@ const TOOL_LABELS = {
   modify_file: '修改',
 };
 
-export function toolLabel(name) {
-  const short = String(name || '').split('.').pop();
-  return TOOL_LABELS[short] || short || '?';
+export function toolLabel(name: unknown): string {
+  const short = String(name || '').split('.').pop() ?? '';
+  return TOOL_LABELS[short as keyof typeof TOOL_LABELS] || short || '?';
 }
 
-export function formatBytes(n) {
+export function formatBytes(n: unknown): string {
   const v = Number(n) || 0;
   if (v < 1024) return `${v} B`;
   if (v < 1024 * 1024) return `${(v / 1024).toFixed(1)} KB`;
   return `${(v / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function breadcrumbParts(dir) {
+export function breadcrumbParts(dir: unknown): Crumb[] {
   const parts = String(dir || '').split('/').filter(Boolean);
-  const out = [{ label: '根目录', dir: '' }];
+  const out: Crumb[] = [{ label: '根目录', dir: '' }];
   let acc = '';
   for (const part of parts) {
     acc = acc ? `${acc}/${part}` : part;

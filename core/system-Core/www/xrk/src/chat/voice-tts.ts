@@ -2,8 +2,21 @@
  * Voice TTS：对齐原 app._sendTTSChunk / _handleBinaryTTS（PCM16 @ 16kHz）
  */
 import { getServerUrl } from '@/api/client';
+import type { LoosePayload } from '@/types';
 
-export function stripMarkdownForTTS(text = '') {
+/** createVoiceTts 的依赖注入 */
+export interface VoiceTtsDeps {
+  getDeviceId?: () => string;
+  getWs?: () => WebSocket | null;
+  onStatus?: (status: string) => void;
+}
+
+/** 全局 vendor 前缀的 AudioContext（Safari） */
+interface WindowWithWebkitAudio extends Window {
+  webkitAudioContext?: typeof AudioContext;
+}
+
+export function stripMarkdownForTTS(text: unknown = ''): string {
   return String(text)
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/`[^`]*`/g, ' ')
@@ -15,22 +28,22 @@ export function stripMarkdownForTTS(text = '') {
     .trim();
 }
 
-export function createVoiceTts({ getDeviceId, getWs, onStatus } = {}) {
-  let audioCtx = null;
+export function createVoiceTts({ getDeviceId, getWs, onStatus }: VoiceTtsDeps = {}) {
+  let audioCtx: AudioContext | null = null;
   let playing = false;
   let stoppedManually = false;
   let sessionActive = false;
-  let textQueue = [];
-  let audioQueue = [];
-  let activeSources = [];
+  let textQueue: string[] = [];
+  let audioQueue: AudioBuffer[] = [];
+  let activeSources: AudioBufferSourceNode[] = [];
   let nextPlayTime = 0;
-  let prebufferTimer = null;
+  let prebufferTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function setStatus(s) {
+  function setStatus(s: string): void {
     onStatus?.(s);
   }
 
-  function stop() {
+  function stop(): void {
     stoppedManually = true;
     textQueue = [];
     audioQueue = [];
@@ -53,8 +66,9 @@ export function createVoiceTts({ getDeviceId, getWs, onStatus } = {}) {
     setStatus('播报已停止');
   }
 
-  async function ensureCtx() {
-    const AC = window.AudioContext || window.webkitAudioContext;
+  async function ensureCtx(): Promise<AudioContext> {
+    const AC =
+      window.AudioContext || (window as WindowWithWebkitAudio).webkitAudioContext;
     if (!AC) throw new Error('浏览器不支持 Web Audio');
     if (!audioCtx) {
       audioCtx = new AC({ sampleRate: 16000 });
@@ -63,7 +77,7 @@ export function createVoiceTts({ getDeviceId, getWs, onStatus } = {}) {
     return audioCtx;
   }
 
-  async function requestTts(text) {
+  async function requestTts(text: string): Promise<void> {
     const deviceId = getDeviceId?.();
     if (!deviceId || !text?.trim()) return;
     stoppedManually = false;
@@ -71,12 +85,12 @@ export function createVoiceTts({ getDeviceId, getWs, onStatus } = {}) {
     if (!sessionActive) void processTextQueue();
   }
 
-  async function processTextQueue() {
+  async function processTextQueue(): Promise<void> {
     if (!textQueue.length || sessionActive) return;
-    const parts = [];
+    const parts: string[] = [];
     let len = 0;
     while (textQueue.length && parts.length < 5 && len < 150) {
-      const t = textQueue.shift();
+      const t = textQueue.shift() as string;
       parts.push(t);
       len += t.length;
       if (/[。！？.!?]$/.test(t) && len >= 30) break;
@@ -102,17 +116,17 @@ export function createVoiceTts({ getDeviceId, getWs, onStatus } = {}) {
     }
   }
 
-  function deviceIdSafe() {
+  function deviceIdSafe(): string {
     return getDeviceId?.() || '';
   }
 
-  function onSessionEnd() {
+  function onSessionEnd(): void {
     sessionActive = false;
     if (textQueue.length) void processTextQueue();
     else setStatus('点击麦克风开始对话');
   }
 
-  async function handleBinary(arrayBuffer) {
+  async function handleBinary(arrayBuffer: ArrayBuffer): Promise<void> {
     if (!arrayBuffer || !(arrayBuffer instanceof ArrayBuffer) || !arrayBuffer.byteLength) return;
     if (stoppedManually) return;
     try {
@@ -142,7 +156,7 @@ export function createVoiceTts({ getDeviceId, getWs, onStatus } = {}) {
     }
   }
 
-  function playNext() {
+  function playNext(): void {
     if (!audioQueue.length) {
       playing = false;
       nextPlayTime = 0;
@@ -151,7 +165,7 @@ export function createVoiceTts({ getDeviceId, getWs, onStatus } = {}) {
     }
     const ctx = audioCtx;
     if (!ctx) return;
-    const buf = audioQueue.shift();
+    const buf = audioQueue.shift() as AudioBuffer;
     const start = nextPlayTime === 0 ? ctx.currentTime : Math.max(ctx.currentTime, nextPlayTime);
     nextPlayTime = start + buf.duration;
     const source = ctx.createBufferSource();
@@ -181,7 +195,7 @@ export function createVoiceTts({ getDeviceId, getWs, onStatus } = {}) {
     }
   }
 
-  function reportQueue() {
+  function reportQueue(): void {
     const ws = getWs?.();
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     try {
@@ -200,7 +214,7 @@ export function createVoiceTts({ getDeviceId, getWs, onStatus } = {}) {
     }
   }
 
-  function handleWsMessage(data) {
+  function handleWsMessage(data: LoosePayload): void {
     if (!data || typeof data !== 'object') return;
     const t = data.type;
     if (t === 'tts_session_end' || t === 'tts_end' || t === 'tts_done') {

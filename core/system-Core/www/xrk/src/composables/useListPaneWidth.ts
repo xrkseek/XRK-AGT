@@ -8,11 +8,11 @@ const MAX_W = 520;
 /** 配置 / 对话 / API 左侧列表共用（模块级单例） */
 const width = ref(read());
 
-function clamp(n) {
+function clamp(n: number): number {
   return Math.min(MAX_W, Math.max(MIN_W, Math.round(n)));
 }
 
-function read() {
+function read(): number {
   try {
     const n = Number(localStorage.getItem(KEY));
     if (Number.isFinite(n) && n > 0) return clamp(n);
@@ -39,7 +39,7 @@ export function useListPaneWidth() {
   let startX = 0;
   let startW = 0;
 
-  function onMove(e) {
+  function onMove(e: PointerEvent): void {
     if (!dragging) return;
     width.value = clamp(startW + (e.clientX - startX));
   }
@@ -55,7 +55,7 @@ export function useListPaneWidth() {
     document.body.style.userSelect = '';
   }
 
-  function startResize(e) {
+  function startResize(e: PointerEvent): void {
     if (e.button != null && e.button !== 0) return;
     e.preventDefault();
     dragging = true;

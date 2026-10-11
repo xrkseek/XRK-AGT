@@ -3,13 +3,118 @@
  */
 
 import { deepClone } from '@/utils/http';
+import type { LoosePayload } from '@/types';
 
-export function getNestedValue(obj = {}, path = '') {
-  if (!path) return obj;
-  return path.split('.').reduce((cur, key) => (cur != null ? cur[key] : undefined), obj);
+/** 后端 schema 节点 / flat-structure 条目（宽松结构） */
+export interface SchemaNode extends LoosePayload {
+  type?: string;
+  component?: string;
+  label?: string;
+  title?: string;
+  description?: string;
+  desc?: string;
+  required?: boolean;
+  sensitive?: boolean;
+  default?: unknown;
+  example?: unknown;
+  min?: unknown;
+  max?: unknown;
+  step?: unknown;
+  layout?: unknown;
+  span?: unknown;
+  placeholder?: string;
+  group?: string;
+  section?: string;
+  groupDesc?: string;
+  itemLabel?: string;
+  itemType?: string;
+  keyLabel?: string;
+  keyPlaceholder?: string;
+  container?: boolean;
+  keyedSiblings?: boolean;
+  excludeKeys?: string[];
+  enum?: unknown;
+  options?: unknown;
+  choices?: unknown;
+  fields?: SchemaFieldMap | null;
+  itemFields?: SchemaFieldMap | null;
+  itemSchema?: SchemaNode | null;
+  meta?: LoosePayload;
+  path?: string;
+  key?: string;
+  name?: string;
 }
 
-export function castFieldValue(value, type, component) {
+/** schema 字段字典：key → 节点 */
+export type SchemaFieldMap = Record<string, SchemaNode>;
+
+/** normalizeOneField 输出：规范化可渲染字段 */
+export interface NormalizedField extends LoosePayload {
+  path: string;
+  type: string;
+  component: string;
+  container: boolean;
+  fields: SchemaFieldMap | null;
+  label: string;
+  description: string;
+  required: boolean;
+  options: NormalizedOption[];
+  group: string;
+  groupDesc: string;
+  default?: unknown;
+  min?: unknown;
+  max?: unknown;
+  step?: unknown;
+  placeholder: string;
+  sensitive: boolean;
+  layout?: unknown;
+  span?: unknown;
+  example?: unknown;
+  itemLabel: string;
+  itemFields: SchemaFieldMap | null;
+  keyLabel: string;
+  keyPlaceholder: string;
+  keyedSiblings: boolean;
+  excludeKeys: string[];
+};
+
+/** normalizeOptions 输出的选项 */
+export interface NormalizedOption {
+  label: string;
+  value: unknown;
+}
+
+/** 统一字段控件类型（ConfigView / ConfigArrayForm / 嵌套子表共用） */
+export type FieldControl =
+  | 'switch'
+  | 'select'
+  | 'multiselect'
+  | 'tags'
+  | 'textarea'
+  | 'number'
+  | 'password'
+  | 'array'
+  | 'json'
+  | 'kv'
+  | 'nested'
+  | 'keyed'
+  | 'input';
+
+/** groupFields 输出的分组 */
+export interface FieldGroup {
+  label: string;
+  desc: string;
+  items: NormalizedField[];
+}
+
+export function getNestedValue(obj: LoosePayload = {}, path = ''): unknown {
+  if (!path) return obj;
+  return path
+    .split('.')
+    .reduce<unknown>((cur, key) => ((cur as LoosePayload) != null ? (cur as LoosePayload)[key] : undefined), obj);
+}
+
+export function castFieldValue(value: unknown, type?: string, component?: string): unknown {
   const t = String(type || '').toLowerCase();
   const c = String(component || '').toLowerCase();
   if (t === 'number' || c === 'inputnumber' || c === 'number' || c === 'slider' || c === 'range') {
@@ -19,7 +124,7 @@ export function castFieldValue(value, type, component) {
   }
   if (t === 'boolean' || c === 'switch') {
     if (typeof value === 'string') {
-      const s = value.toLowerCase();
+      const s = (value as string).toLowerCase();
       if (['true', '1', 'yes', 'on'].includes(s)) return true;
       if (['false', '0', 'no', 'off'].includes(s)) return false;
     }
@@ -31,7 +136,7 @@ export function castFieldValue(value, type, component) {
   if (t === 'array' || c === 'tags' || c === 'multiselect') {
     if (Array.isArray(value)) return value;
     if (typeof value === 'string') {
-      return value
+      return (value as string)
         .split(',')
         .map((v) => v.trim())
         .filter(Boolean);
@@ -53,22 +158,27 @@ export function castFieldValue(value, type, component) {
 }
 
 /** 规范化后端 flat-structure 为可渲染字段列表 */
-export function normalizeFlatFields(flat) {
+export function normalizeFlatFields(flat: unknown): NormalizedField[] {
   if (!flat) return [];
-  let list = [];
-  if (Array.isArray(flat)) list = flat.map(normalizeOneField).filter(Boolean);
-  else if (typeof flat === 'object') {
-    if (Array.isArray(flat.fields)) list = flat.fields.map(normalizeOneField).filter(Boolean);
-    else {
-      list = Object.entries(flat)
-        .map(([path, schema]) => normalizeOneField({ ...(schema || {}), path: schema?.path || path }))
-        .filter(Boolean);
+  let list: NormalizedField[] = [];
+  const root = flat as SchemaNode;
+  if (Array.isArray(flat)) {
+    list = (flat as SchemaNode[]).map(normalizeOneField).filter(isField);
+  } else if (typeof flat === 'object') {
+    const rootFields = root.fields;
+    if (rootFields && Array.isArray(rootFields)) {
+      list = (rootFields as unknown as SchemaNode[]).map(normalizeOneField).filter(isField);
+    } else {
+      list = Object.entries(flat as Record<string, SchemaNode>)
+        .map(([path, schema]) =>
+          normalizeOneField({ ...((schema || {}) as SchemaNode), path: schema?.path || path }),
+        )
+        .filter(isField);
     }
   }
 
   const paths = list.map((f) => f.path);
-  /** @type {Map<string, { label: string, description: string }>} */
-  const containers = new Map();
+  const containers = new Map<string, { label: string; description: string }>();
 
   for (const f of list) {
     const isObjLike =
@@ -106,75 +216,91 @@ export function normalizeFlatFields(flat) {
   return list.filter((f) => !f.container);
 }
 
-function normalizeOneField(raw) {
+function isField(f: NormalizedField | null): f is NormalizedField {
+  return f !== null;
+}
+
+function normalizeOneField(raw: unknown): NormalizedField | null {
   if (!raw || typeof raw !== 'object') return null;
-  const meta = raw.meta && typeof raw.meta === 'object' ? raw.meta : {};
-  const path = raw.path || raw.key || raw.name || meta.path;
+  const src = raw as SchemaNode;
+  const meta = (src.meta && typeof src.meta === 'object' ? src.meta : {}) as LoosePayload;
+  const path = src.path || src.key || src.name || meta.path;
   if (!path) return null;
   // 模板路径（providers[].model）仅服务 ArrayForm，首轮表单跳过
   if (String(path).includes('[]')) return null;
-  const type = raw.type || meta.type || 'string';
+  const type = src.type || meta.type || 'string';
   const component = String(
-    raw.component || meta.component || mapTypeToComponent(type) || 'input',
+    src.component || meta.component || mapTypeToComponent(type) || 'input',
   ).toLowerCase();
-  const itemSchema = meta.itemSchema || raw.itemSchema || null;
-  const fieldsRaw = itemSchema?.fields || meta.fields || raw.fields || null;
+  const itemSchema = (meta.itemSchema || src.itemSchema || null) as SchemaNode | null;
+  const fieldsRaw = (itemSchema?.fields || meta.fields || src.fields || null) as unknown;
   const fields =
-    fieldsRaw && typeof fieldsRaw === 'object' && !Array.isArray(fieldsRaw) ? fieldsRaw : null;
-  const container = Boolean(raw.container ?? meta.container);
+    fieldsRaw && typeof fieldsRaw === 'object' && !Array.isArray(fieldsRaw)
+      ? (fieldsRaw as SchemaFieldMap)
+      : null;
+  const container = Boolean(src.container ?? meta.container);
   return {
     path,
     type,
     component,
     container,
     fields,
-    label: meta.label || meta.title || raw.label || raw.title || path.split('.').pop(),
-    description: meta.description || meta.desc || raw.description || raw.desc || '',
-    required: Boolean(meta.required ?? raw.required),
-    options: normalizeOptions(meta.options || meta.enum || meta.choices || raw.options || raw.enum),
-    group: meta.group || meta.section || raw.group || '基础',
-    groupDesc: meta.groupDesc || raw.groupDesc || '',
+    label: String(meta.label || meta.title || src.label || src.title || String(path).split('.').pop() || ''),
+    description: String(meta.description || meta.desc || src.description || src.desc || ''),
+    required: Boolean(meta.required ?? src.required),
+    options: normalizeOptions(meta.options || meta.enum || meta.choices || src.options || src.enum),
+    group: String(meta.group || meta.section || src.group || '基础'),
+    groupDesc: String(meta.groupDesc || src.groupDesc || ''),
     default: Object.prototype.hasOwnProperty.call(meta, 'default')
       ? meta.default
-      : raw.default,
-    min: meta.min ?? raw.min,
-    max: meta.max ?? raw.max,
-    step: meta.step ?? raw.step,
-    placeholder: meta.placeholder || raw.placeholder || '',
+      : src.default,
+    min: meta.min ?? src.min,
+    max: meta.max ?? src.max,
+    step: meta.step ?? src.step,
+    placeholder: String(meta.placeholder || src.placeholder || ''),
     sensitive: Boolean(meta.sensitive || component === 'inputpassword'),
-    layout: meta.layout || raw.layout,
-    span: meta.span || raw.span,
+    layout: meta.layout || src.layout,
+    span: meta.span || src.span,
     example: Object.prototype.hasOwnProperty.call(meta, 'example')
       ? meta.example
-      : raw.example,
-    itemLabel: meta.itemLabel || raw.itemLabel || '条目',
+      : src.example,
+    itemLabel: String(meta.itemLabel || src.itemLabel || '条目'),
     // 与 fields 同源；数组项 schema 仍读 itemFields
     itemFields: fields,
-    keyLabel: meta.keyLabel || raw.keyLabel || '',
-    keyPlaceholder: meta.keyPlaceholder || raw.keyPlaceholder || '',
+    keyLabel: String(meta.keyLabel || src.keyLabel || ''),
+    keyPlaceholder: String(meta.keyPlaceholder || src.keyPlaceholder || ''),
     // 虚拟 path（如 groupOverrides）：读写根级动态键，不写进 YAML 该 path 本身
-    keyedSiblings: Boolean(meta.keyedSiblings ?? raw.keyedSiblings),
+    keyedSiblings: Boolean(meta.keyedSiblings ?? src.keyedSiblings),
     excludeKeys: Array.isArray(meta.excludeKeys)
-      ? meta.excludeKeys
-      : Array.isArray(raw.excludeKeys)
-        ? raw.excludeKeys
+      ? (meta.excludeKeys as string[])
+      : Array.isArray(src.excludeKeys)
+        ? (src.excludeKeys as string[])
         : [],
   };
 }
 
 /** 从 /structure 取当前配置的 schema 根（system / llm_factories 等多文件走 configs[child]） */
-export function extractActiveSchema(structure, name, child) {
+export function extractActiveSchema(
+  structure: SchemaNode | null | undefined,
+  name?: string,
+  child?: string,
+): SchemaNode | null {
   if (!structure) return null;
-  if (structure.configs && typeof structure.configs === 'object') {
+  const configs = structure.configs as Record<string, SchemaNode> | undefined;
+  if (configs && typeof configs === 'object') {
     if (!child) return null;
-    const target = structure.configs[child];
-    return target?.schema ?? { fields: target?.fields ?? {} };
+    const target = configs[child];
+    return (target?.schema as SchemaNode) ?? { fields: target?.fields ?? {} };
   }
-  return structure.schema ?? { fields: structure.fields ?? {} };
+  return (structure.schema as SchemaNode) ?? { fields: structure.fields ?? {} };
 }
 
 /** 扫描 schema，得到 path → 数组项 fields（对齐原 buildArraySchemaIndex） */
-export function buildArraySchemaIndex(schema, prefix = '', map = {}) {
+export function buildArraySchemaIndex(
+  schema: SchemaNode | null | undefined,
+  prefix = '',
+  map: Record<string, SchemaFieldMap> = {},
+): Record<string, SchemaFieldMap> {
   if (!schema || !schema.fields) return map;
   for (const [key, fieldSchema] of Object.entries(schema.fields)) {
     const path = prefix ? `${prefix}.${key}` : key;
@@ -189,9 +315,13 @@ export function buildArraySchemaIndex(schema, prefix = '', map = {}) {
 }
 
 /** 从 flat-structure 的 providers[].x 模板路径补全 arraySchemas */
-export function arraySchemasFromFlatTemplates(flat) {
-  const map = {};
-  const list = Array.isArray(flat) ? flat : Array.isArray(flat?.fields) ? flat.fields : [];
+export function arraySchemasFromFlatTemplates(flat: unknown): Record<string, SchemaFieldMap> {
+  const map: Record<string, SchemaFieldMap> = {};
+  const list: SchemaNode[] = Array.isArray(flat)
+    ? (flat as SchemaNode[])
+    : Array.isArray((flat as SchemaNode)?.fields)
+      ? ((flat as SchemaNode).fields as unknown as SchemaNode[])
+      : [];
   for (const raw of list) {
     const path = raw?.path || raw?.meta?.path;
     if (!path || !String(path).includes('[]')) continue;
@@ -201,8 +331,8 @@ export function arraySchemasFromFlatTemplates(flat) {
     const rel = m[2];
     if (!map[parent]) map[parent] = {};
     if (!rel) continue;
-    const meta = raw.meta && typeof raw.meta === 'object' ? raw.meta : {};
-    const node = {
+    const meta = (raw.meta && typeof raw.meta === 'object' ? raw.meta : {}) as LoosePayload;
+    const node: SchemaNode = {
       type: raw.type || meta.type || 'string',
       label: meta.label || raw.label || rel.split('.').pop(),
       description: meta.description || raw.description || '',
@@ -223,9 +353,13 @@ export function arraySchemasFromFlatTemplates(flat) {
   return map;
 }
 
-function setNestedSchemaField(root, relPath, node) {
+function setNestedSchemaField(
+  root: SchemaFieldMap,
+  relPath: string,
+  node: SchemaNode,
+): void {
   const parts = String(relPath).split('.');
-  let cur = root;
+  let cur: SchemaFieldMap = root;
   for (let i = 0; i < parts.length; i++) {
     const key = parts[i];
     if (i === parts.length - 1) {
@@ -236,13 +370,13 @@ function setNestedSchemaField(root, relPath, node) {
       cur[key] = { type: 'object', fields: {} };
     }
     if (!cur[key].fields) cur[key].fields = {};
-    cur = cur[key].fields;
+    cur = cur[key].fields as SchemaFieldMap;
   }
 }
 
-export function setNestedValue(source = {}, path = '', value) {
-  if (!path) return deepClone(value);
-  const clone = Array.isArray(source) ? [...source] : { ...source };
+export function setNestedValue(source: LoosePayload = {}, path = '', value?: unknown): LoosePayload {
+  if (!path) return deepClone(value) as LoosePayload;
+  const clone: LoosePayload = Array.isArray(source) ? [...source] : { ...source };
   const keys = path.split('.');
   let cursor = clone;
   for (let i = 0; i < keys.length; i++) {
@@ -254,15 +388,15 @@ export function setNestedValue(source = {}, path = '', value) {
       const blank = /^\d+$/.test(keys[i + 1]) ? [] : {};
       cursor[key] =
         next && typeof next === 'object' ? (Array.isArray(next) ? [...next] : { ...next }) : blank;
-      cursor = cursor[key];
+      cursor = cursor[key] as LoosePayload;
     }
   }
   return clone;
 }
 
 /** 按 itemSchema 生成新增条目默认值（缺省按类型补全） */
-export function buildDefaultsFromFields(fields = {}) {
-  const result = {};
+export function buildDefaultsFromFields(fields: SchemaFieldMap = {}): LoosePayload {
+  const result: LoosePayload = {};
   for (const [key, schema] of Object.entries(fields || {})) {
     if (!schema || typeof schema !== 'object') continue;
     if (schema.type === 'object' && schema.fields) {
@@ -284,7 +418,11 @@ export function buildDefaultsFromFields(fields = {}) {
   return result;
 }
 
-export function resolveArrayItemFields(path, arraySchemas = {}, field = null) {
+export function resolveArrayItemFields(
+  path: string,
+  arraySchemas: Record<string, SchemaFieldMap> = {},
+  field: NormalizedField | null = null,
+): SchemaFieldMap {
   if (arraySchemas?.[path] && Object.keys(arraySchemas[path]).length) {
     return arraySchemas[path];
   }
@@ -292,7 +430,7 @@ export function resolveArrayItemFields(path, arraySchemas = {}, field = null) {
   return {};
 }
 
-function mapTypeToComponent(type) {
+function mapTypeToComponent(type?: unknown): string {
   const t = String(type || '').toLowerCase();
   if (t === 'boolean') return 'switch';
   if (t === 'number') return 'number';
@@ -309,13 +447,14 @@ function mapTypeToComponent(type) {
  * @param {unknown} sample
  * @returns {Record<string, object>|null}
  */
-export function inferFieldsFromExample(sample) {
+export function inferFieldsFromExample(sample: unknown): SchemaFieldMap | null {
   if (!sample || typeof sample !== 'object' || Array.isArray(sample)) return null;
   const values = Object.values(sample);
-  const firstObj = values.find((v) => v && typeof v === 'object' && !Array.isArray(v));
+  const firstObj = values.find((v) => v && typeof v === 'object' && !Array.isArray(v)) as
+    | LoosePayload
+    | undefined;
   if (!firstObj) return null;
-  /** @type {Record<string, object>} */
-  const fields = {};
+  const fields: SchemaFieldMap = {};
   for (const [k, v] of Object.entries(firstObj)) {
     if (typeof v === 'boolean') {
       fields[k] = { type: 'boolean', label: k, component: 'Switch', default: v };
@@ -343,15 +482,14 @@ export function inferFieldsFromExample(sample) {
  * @param {Record<string, any>} flat
  * @param {string} path
  */
-export function collectObjectFromFlat(flat, path) {
-  const src = flat && typeof flat === 'object' ? flat : {};
+export function collectObjectFromFlat(flat: unknown, path: string): LoosePayload {
+  const src = (flat && typeof flat === 'object' ? flat : {}) as LoosePayload;
   if (Object.prototype.hasOwnProperty.call(src, path)) {
     const v = src[path];
     if (v && typeof v === 'object') return deepClone(v);
   }
   const prefix = `${path}.`;
-  /** @type {Record<string, any>} */
-  const acc = {};
+  const acc: LoosePayload = {};
   let hit = false;
   for (const [p, v] of Object.entries(src)) {
     if (!p.startsWith(prefix)) continue;
@@ -359,14 +497,14 @@ export function collectObjectFromFlat(flat, path) {
     const rel = p.slice(prefix.length);
     if (!rel) continue;
     const parts = rel.split('.');
-    let cur = acc;
+    let cur: LoosePayload = acc;
     for (let i = 0; i < parts.length; i++) {
       const key = parts[i];
       if (i === parts.length - 1) {
         cur[key] = deepClone(v);
       } else {
         if (!cur[key] || typeof cur[key] !== 'object' || Array.isArray(cur[key])) cur[key] = {};
-        cur = cur[key];
+        cur = cur[key] as LoosePayload;
       }
     }
   }
@@ -379,17 +517,16 @@ export function collectObjectFromFlat(flat, path) {
  * @param {Record<string, any>} flat
  * @param {string[]} excludeKeys
  */
-export function collectKeyedSiblingsFromFlat(flat, excludeKeys = []) {
-  const src = flat && typeof flat === 'object' ? flat : {};
+export function collectKeyedSiblingsFromFlat(flat: unknown, excludeKeys: string[] = []): LoosePayload {
+  const src = (flat && typeof flat === 'object' ? flat : {}) as LoosePayload;
   const exclude = new Set((excludeKeys || []).map(String));
-  const tops = new Set();
+  const tops = new Set<string>();
   for (const p of Object.keys(src)) {
     const top = String(p).split('.')[0];
     if (!top || exclude.has(top)) continue;
     tops.add(top);
   }
-  /** @type {Record<string, any>} */
-  const out = {};
+  const out: LoosePayload = {};
   for (const k of tops) {
     out[k] = collectObjectFromFlat(src, k);
   }
@@ -413,7 +550,7 @@ const FULL_KEY_PATTERN =
  * 统一字段控件类型（ConfigView / ConfigArrayForm / 嵌套子表共用）
  * @returns {'switch'|'select'|'multiselect'|'tags'|'textarea'|'number'|'password'|'array'|'json'|'kv'|'nested'|'keyed'|'input'}
  */
-export function resolveFieldControl(field = {}) {
+export function resolveFieldControl(field: SchemaNode = {}): FieldControl {
   const c = String(field?.component || '').toLowerCase();
   const t = String(field?.type || '').toLowerCase();
   if (c === 'switch' || t === 'boolean') return 'switch';
@@ -452,14 +589,13 @@ export function resolveFieldControl(field = {}) {
   return 'input';
 }
 
-/** @param {object} field */
-export function fieldNestedFields(field = {}) {
+export function fieldNestedFields(field: SchemaNode = {}): SchemaFieldMap {
   const raw = field.fields || field.itemFields;
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-  return raw;
+  return raw as SchemaFieldMap;
 }
 
-function hasChoiceOptions(field) {
+function hasChoiceOptions(field: SchemaNode) {
   const opts = field?.enum || field?.options || field?.choices;
   if (!opts) return false;
   if (Array.isArray(opts)) return opts.length > 0;
@@ -471,7 +607,7 @@ function hasChoiceOptions(field) {
  * 半宽进网格；全宽占满一行。
  * 字符串 Tags 与 Input/Select 同级，不强制整行。
  */
-export function isFieldFullSpan(field) {
+export function isFieldFullSpan(field: SchemaNode | null | undefined): boolean {
   if (!field) return true;
   const meta = field;
   if (meta.layout === 'full' || meta.span === 'full') return true;
@@ -504,7 +640,7 @@ export function isFieldFullSpan(field) {
 }
 
 /** ArrayForm / KeyedMapForm：条目内子字段是否全宽 */
-export function isConfigEntryFieldFull(key, schema) {
+export function isConfigEntryFieldFull(key: string, schema: SchemaNode | null | undefined): boolean {
   return isFieldFullSpan({
     path: key,
     type: schema?.type || 'string',
@@ -515,28 +651,35 @@ export function isConfigEntryFieldFull(key, schema) {
   });
 }
 
-export function normalizeOptions(opts) {
+export function normalizeOptions(opts: unknown): NormalizedOption[] {
   if (!opts) return [];
   if (Array.isArray(opts)) {
-    return opts.map((o) => {
+    return opts.map((o): NormalizedOption => {
       if (o && typeof o === 'object') {
-        return { label: o.label ?? o.name ?? String(o.value), value: o.value ?? o.key ?? o.name };
+        const item = o as LoosePayload;
+        return {
+          label: String(item.label ?? item.name ?? item.value ?? ''),
+          value: item.value ?? item.key ?? item.name,
+        };
       }
       return { label: String(o), value: o };
     });
   }
   if (typeof opts === 'object') {
-    return Object.entries(opts).map(([value, label]) => ({ value, label: String(label) }));
+    return Object.entries(opts as LoosePayload).map(([value, label]) => ({
+      value,
+      label: String(label),
+    }));
   }
   return [];
 }
 
 /** Tags 控件：数组 ↔ 逗号分隔文本 */
-export function formatTagsText(value) {
+export function formatTagsText(value: unknown): string {
   return Array.isArray(value) ? value.join(', ') : String(value ?? '');
 }
 
-export function parseTagsText(text) {
+export function parseTagsText(text: unknown): string[] {
   return String(text || '')
     .split(',')
     .map((s) => s.trim())
@@ -546,9 +689,12 @@ export function parseTagsText(text) {
 /**
  * 按 schema 规范化 object（含嵌套）；未知键保留，避免丢自定义字段。
  */
-export function canonicalizeObjectByFields(obj, fields = {}) {
-  const src = obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
-  const out = {};
+export function canonicalizeObjectByFields(
+  obj: unknown,
+  fields: SchemaFieldMap = {},
+): LoosePayload {
+  const src = (obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {}) as LoosePayload;
+  const out: LoosePayload = {};
   for (const [key, schema] of Object.entries(fields || {})) {
     if (!schema || typeof schema !== 'object') continue;
     if ((schema.type === 'object' || schema.component === 'subform') && schema.fields) {
@@ -563,7 +709,10 @@ export function canonicalizeObjectByFields(obj, fields = {}) {
   return out;
 }
 
-export function canonicalizeArrayObjectValue(value, itemFields = {}) {
+export function canonicalizeArrayObjectValue(
+  value: unknown,
+  itemFields: SchemaFieldMap = {},
+): LoosePayload[] {
   const arr = Array.isArray(value) ? value : [];
   if (!itemFields || !Object.keys(itemFields).length) {
     return arr.map((item) =>
@@ -573,26 +722,26 @@ export function canonicalizeArrayObjectValue(value, itemFields = {}) {
   return arr.map((item) => canonicalizeObjectByFields(item, itemFields));
 }
 
-export function groupFields(fields) {
-  const map = new Map();
+export function groupFields(fields: NormalizedField[]): FieldGroup[] {
+  const map = new Map<string, FieldGroup>();
   for (const f of fields) {
     const g = f.group || '基础';
     if (!map.has(g)) {
       map.set(g, { label: g, desc: f.groupDesc || '', items: [] });
     }
-    const entry = map.get(g);
+    const entry = map.get(g) as FieldGroup;
     if (!entry.desc && f.groupDesc) entry.desc = f.groupDesc;
     entry.items.push(f);
   }
   return [...map.values()];
 }
 
-export function formatGroupLabel(label) {
+export function formatGroupLabel(label: unknown): string {
   if (!label || label === '基础') return '基础设置';
   return String(label).replace(/_/g, ' ');
 }
 
-export function formatExample(example) {
+export function formatExample(example: unknown): string {
   if (example == null) return '';
   if (typeof example === 'string') return example;
   try {
@@ -603,30 +752,32 @@ export function formatExample(example) {
 }
 
 /** 深度相等（对齐原 utils.isSameValue） */
-export function isSameValue(a, b) {
+export function isSameValue(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a == null || b == null) return a === b;
   if (typeof a !== typeof b) return false;
   if (typeof a !== 'object') return a === b;
   if (Array.isArray(a) !== Array.isArray(b)) return false;
   if (Array.isArray(a)) {
-    if (a.length !== b.length) return false;
-    return a.every((item, i) => isSameValue(item, b[i]));
+    const arrA = a as unknown[];
+    const arrB = b as unknown[];
+    if (arrA.length !== arrB.length) return false;
+    return arrA.every((item, i) => isSameValue(item, arrB[i]));
   }
-  const keysA = Object.keys(a);
-  const keysB = Object.keys(b);
+  const keysA = Object.keys(a as LoosePayload);
+  const keysB = Object.keys(b as LoosePayload);
   if (keysA.length !== keysB.length) return false;
-  return keysA.every((key) => isSameValue(a[key], b[key]));
+  return keysA.every((key) => isSameValue((a as LoosePayload)[key], (b as LoosePayload)[key]));
 }
 
 /**
  * 表单控件会改写类型（string↔number、null↔''）。
  * 比较 / 落盘前统一成 schema 类型，避免「未改也显示待保存」。
  */
-export function canonicalizeFieldValue(value, type, component) {
+export function canonicalizeFieldValue(value: unknown, type?: string, component?: string): unknown {
   const c = String(component || '').toLowerCase();
   const t = String(type || '').toLowerCase();
-  const v = castFieldValue(value, type, component);
+  let v = castFieldValue(value, type, component);
   if (t === 'number' || c === 'inputnumber' || c === 'number' || c === 'slider' || c === 'range') {
     if (v === '' || v === undefined) return null;
     return v;
@@ -648,7 +799,7 @@ export function canonicalizeFieldValue(value, type, component) {
   return v;
 }
 
-export function sameFieldValue(a, b, type, component) {
+export function sameFieldValue(a: unknown, b: unknown, type?: string, component?: string): boolean {
   return isSameValue(
     canonicalizeFieldValue(a, type, component),
     canonicalizeFieldValue(b, type, component),
@@ -661,13 +812,20 @@ export function sameFieldValue(a, b, type, component) {
  * @param {any[]} fields
  * @param {Record<string, object>} [arraySchemas]
  */
-export function buildDirtyFlat(values, original, fields, arraySchemas = {}) {
-  const flat = {};
+export function buildDirtyFlat(
+  values: LoosePayload,
+  original: LoosePayload,
+  fields: NormalizedField[],
+  arraySchemas: Record<string, SchemaFieldMap> = {},
+): LoosePayload {
+  const flat: LoosePayload = {};
   for (const f of fields) {
     // 虚拟 path → 展开为 YAML 根级群号键；删除用 null（batch-set 删路径）
     if (f.keyedSiblings) {
-      const next = canonicalizeFieldValue(values[f.path], f.type, f.component) || {};
-      const prev = canonicalizeFieldValue(original[f.path], f.type, f.component) || {};
+      const next = (canonicalizeFieldValue(values[f.path], f.type, f.component) ||
+        {}) as LoosePayload;
+      const prev = (canonicalizeFieldValue(original[f.path], f.type, f.component) ||
+        {}) as LoosePayload;
       for (const [k, v] of Object.entries(next)) {
         if (!isSameValue(v, prev[k])) flat[k] = v;
       }
@@ -690,14 +848,14 @@ export function buildDirtyFlat(values, original, fields, arraySchemas = {}) {
 }
 
 /** 将 path→value 的 JSON 对象落到 values；缺省 path 回落到 schema 默认 */
-export function applyFlatJsonObject(parsed, fields) {
-  const src = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+export function applyFlatJsonObject(parsed: unknown, fields: NormalizedField[]): LoosePayload {
+  const src = (parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}) as LoosePayload;
   return valuesFromFlat(src, fields);
 }
 
-export function valuesFromFlat(flat, fields) {
-  const out = {};
-  const src = flat && typeof flat === 'object' ? flat : {};
+export function valuesFromFlat(flat: unknown, fields: NormalizedField[]): LoosePayload {
+  const out: LoosePayload = {};
+  const src = (flat && typeof flat === 'object' ? flat : {}) as LoosePayload;
   for (const f of fields) {
     const isObjMap =
       f.type === 'object' ||
@@ -707,7 +865,7 @@ export function valuesFromFlat(flat, fields) {
       f.component === 'keyedobject' ||
       f.component === 'keyed';
 
-    let raw;
+    let raw: unknown;
     if (f.keyedSiblings) {
       const exact = Object.prototype.hasOwnProperty.call(src, f.path) ? src[f.path] : undefined;
       if (exact && typeof exact === 'object' && !Array.isArray(exact) && Object.keys(exact).length) {

@@ -2,12 +2,19 @@
  * 聊天历史 localStorage（对齐原 app._loadChatHistory / _saveChatHistory）
  * 键名保持兼容：aiChatHistory / eventChatHistory / voiceChatHistory
  */
-import { randomId } from '@/utils/http.js';
-import { segmentsToPlainText } from '@/chat/segments.js';
+import { randomId } from '@/utils/http';
+import { segmentsToPlainText } from '@/chat/segments';
+import type {
+  ChatMode,
+  HistoryItem,
+  LoosePayload,
+  MakeHistoryOptions,
+  NormalizedSegment,
+} from '@/types';
 
 export const MAX_HISTORY = 200;
 
-export function historyStorageKey(mode) {
+export function historyStorageKey(mode?: ChatMode | string): string {
   const m = mode || 'event';
   if (m === 'ai') return 'aiChatHistory';
   if (m === 'voice') return 'voiceChatHistory';
@@ -15,12 +22,14 @@ export function historyStorageKey(mode) {
 }
 
 /** 规范化一条历史消息（兼容 text / content / segments） */
-export function normalizeHistoryItem(raw) {
+export function normalizeHistoryItem(raw: LoosePayload): HistoryItem | null {
   if (!raw || typeof raw !== 'object') return null;
   const role = raw.role || (raw.type === 'image' ? 'assistant' : '');
   if (!role) return null;
 
-  let segments = Array.isArray(raw.segments) ? raw.segments.filter(Boolean) : null;
+  let segments: NormalizedSegment[] | null = Array.isArray(raw.segments)
+    ? (raw.segments.filter(Boolean) as NormalizedSegment[])
+    : null;
   if ((!segments || !segments.length) && raw.type === 'image' && raw.url) {
     segments = [{ type: 'image', url: raw.url }];
   }
@@ -42,7 +51,7 @@ export function normalizeHistoryItem(raw) {
     content: text,
     segments: segments || (text ? [{ type: 'text', text }] : []),
     ts: Number(raw.ts) || Date.now(),
-  };
+  } as HistoryItem;
   if (raw.mcpTools) item.mcpTools = raw.mcpTools;
   if (raw.source) item.source = raw.source;
   if (raw.type === 'record' || raw.type === 'chat-record') {
@@ -54,15 +63,15 @@ export function normalizeHistoryItem(raw) {
   return item;
 }
 
-export function loadChatHistory(mode) {
+export function loadChatHistory(mode?: ChatMode | string): HistoryItem[] {
   try {
     const raw = localStorage.getItem(historyStorageKey(mode));
     if (!raw) return [];
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr)) return [];
     return arr
-      .map(normalizeHistoryItem)
-      .filter(Boolean)
+      .map((entry) => normalizeHistoryItem(entry as LoosePayload))
+      .filter((x): x is HistoryItem => Boolean(x))
       .sort((a, b) => (a.ts || 0) - (b.ts || 0));
   } catch (e) {
     console.warn('[聊天历史] 加载失败:', e);
@@ -70,7 +79,7 @@ export function loadChatHistory(mode) {
   }
 }
 
-export function saveChatHistory(mode, history) {
+export function saveChatHistory(mode: ChatMode | string, history: HistoryItem[]): void {
   try {
     const list = Array.isArray(history) ? history.slice(-MAX_HISTORY) : [];
     const toSave = list
@@ -80,7 +89,7 @@ export function saveChatHistory(mode, history) {
           id: m.id || randomId('msg'),
           role: m.role,
           ts: m.ts || Date.now(),
-        };
+        } as HistoryItem;
         if (Array.isArray(m.segments) && m.segments.length) {
           item.segments = m.segments;
           item.text = m.text || m.content || segmentsToPlainText(m.segments);
@@ -103,7 +112,7 @@ export function saveChatHistory(mode, history) {
   }
 }
 
-export function clearChatHistoryStorage(mode) {
+export function clearChatHistoryStorage(mode?: ChatMode | string): void {
   try {
     localStorage.removeItem(historyStorageKey(mode));
   } catch {
@@ -111,8 +120,11 @@ export function clearChatHistoryStorage(mode) {
   }
 }
 
-export function makeHistoryMessage(role, { text = '', segments = null, extra = {} } = {}) {
-  const segs =
+export function makeHistoryMessage(
+  role: string,
+  { text = '', segments = null, extra = {} }: MakeHistoryOptions = {},
+): HistoryItem {
+  const segs: NormalizedSegment[] =
     Array.isArray(segments) && segments.length
       ? segments
       : text

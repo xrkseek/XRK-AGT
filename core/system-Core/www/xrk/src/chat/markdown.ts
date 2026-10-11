@@ -12,7 +12,7 @@ marked.setOptions({
 
 let mermaidInited = false;
 
-function ensureMermaid() {
+function ensureMermaid(): void {
   if (mermaidInited) return;
   mermaid.initialize({
     startOnLoad: false,
@@ -22,7 +22,7 @@ function ensureMermaid() {
   mermaidInited = true;
 }
 
-export function renderMarkdown(text) {
+export function renderMarkdown(text: unknown): string {
   try {
     return marked.parse(String(text || ''), { async: false });
   } catch {
@@ -30,7 +30,7 @@ export function renderMarkdown(text) {
   }
 }
 
-export function escapeHtml(s) {
+export function escapeHtml(s: unknown): string {
   return String(s || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -38,16 +38,21 @@ export function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-function serializeSvg(svgEl) {
+function serializeSvg(svgEl: SVGElement | null | undefined): string {
   if (!svgEl) return '';
-  const clone = svgEl.cloneNode(true);
+  const clone = svgEl.cloneNode(true) as SVGElement;
   if (!clone.getAttribute('xmlns')) {
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   }
   return new XMLSerializer().serializeToString(clone);
 }
 
-function flashBtn(btn, okText, failText, ok) {
+function flashBtn(
+  btn: HTMLButtonElement | null | undefined,
+  okText: string,
+  failText: string,
+  ok: boolean,
+): void {
   if (!btn) return;
   const prev = btn.textContent;
   btn.textContent = ok ? okText : failText;
@@ -64,8 +69,8 @@ function flashBtn(btn, okText, failText, ok) {
  * @param {number} [scale=2]
  * @returns {Promise<Blob>}
  */
-export function svgToPngBlob(svgEl, scale = 2) {
-  return new Promise((resolve, reject) => {
+export function svgToPngBlob(svgEl: SVGElement, scale = 2): Promise<Blob> {
+  return new Promise<Blob>((resolve, reject) => {
     if (!svgEl) {
       reject(new Error('无 SVG'));
       return;
@@ -110,7 +115,7 @@ export function svgToPngBlob(svgEl, scale = 2) {
   });
 }
 
-function wireMermaidToolbar(wrap, src) {
+function wireMermaidToolbar(wrap: HTMLElement, src: string): void {
   const bar = document.createElement('div');
   bar.className = 'chat-mermaid-bar';
   bar.innerHTML = [
@@ -127,10 +132,12 @@ function wireMermaidToolbar(wrap, src) {
   wrap.appendChild(canvas);
 
   bar.addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-act]');
-    if (!btn || !(btn instanceof HTMLElement)) return;
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+    const btn = target.closest('[data-act]');
+    if (!(btn instanceof HTMLButtonElement)) return;
     const act = btn.dataset.act;
-    const svgEl = canvas.querySelector('svg');
+    const svgEl = canvas.querySelector('svg') as SVGElement | null;
     const stamp = Date.now();
     try {
       if (act === 'copy-src') {
@@ -167,7 +174,7 @@ function wireMermaidToolbar(wrap, src) {
 }
 
 /** 在容器内渲染 ```mermaid 代码块 */
-export async function renderMermaidIn(root) {
+export async function renderMermaidIn(root: HTMLElement | null | undefined): Promise<void> {
   if (!root) return;
   const blocks = root.querySelectorAll('pre code.language-mermaid, code.language-mermaid');
   if (!blocks.length) return;
@@ -189,14 +196,14 @@ export async function renderMermaidIn(root) {
     } catch (err) {
       const errEl = document.createElement('div');
       errEl.className = 'chat-mermaid-error';
-      errEl.textContent = `Mermaid 渲染失败: ${err?.message || err}`;
+      errEl.textContent = `Mermaid 渲染失败: ${(err as Error)?.message || err}`;
       pre.after(errEl);
       pre.dataset.mermaidDone = '1';
     }
   }
 }
 
-export async function downloadImage(url) {
+export async function downloadImage(url: string): Promise<void> {
   if (!url) throw new Error('无图片地址');
   const name = `image-${Date.now()}.png`;
   if (url.startsWith('data:') || url.startsWith('blob:')) {

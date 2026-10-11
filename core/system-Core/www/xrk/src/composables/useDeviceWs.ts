@@ -1,4 +1,19 @@
 import { onUnmounted, ref, shallowRef } from 'vue';
+import type { LoosePayload } from '@/types';
+
+/** WebSocket 上挂的设备标识（对齐原 app 行为） */
+interface DeviceSocket extends WebSocket {
+  device_id?: string;
+}
+
+export type DeviceWsStatus = 'idle' | 'connecting' | 'open' | 'closed';
+
+export interface DeviceWsHandlers {
+  onOpen?: () => void;
+  onBinary?: (data: ArrayBuffer) => void;
+  onMessage?: (data: LoosePayload) => void;
+  onClose?: (event: CloseEvent) => void;
+}
 import { getServerUrl } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
 
@@ -6,16 +21,16 @@ import { useAuthStore } from '@/stores/auth';
  * 设备 WebSocket（Event / Voice 通道）
  * 对齐原 app.ensureDeviceWs：register + heartbeat + 文本消息
  */
-export function useDeviceWs(handlers = {}) {
-  const status = ref('idle'); // idle | connecting | open | closed
+export function useDeviceWs(handlers: DeviceWsHandlers = {}) {
+  const status = ref<DeviceWsStatus>('idle');
   const lastError = ref('');
-  const wsRef = shallowRef(null);
-  let heartbeatTimer = null;
-  let reconnectTimer = null;
+  const wsRef = shallowRef<DeviceSocket | null>(null);
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let intentionalClose = false;
   let webUserId = localStorage.getItem('webUserId') || '';
 
-  function getWebUserId() {
+  function getWebUserId(): string {
     if (!webUserId) {
       webUserId = `webclient_${Date.now()}`;
       try {
@@ -27,7 +42,7 @@ export function useDeviceWs(handlers = {}) {
     return webUserId;
   }
 
-  function clearTimers() {
+  function clearTimers(): void {
     if (heartbeatTimer) {
       clearInterval(heartbeatTimer);
       heartbeatTimer = null;
@@ -38,7 +53,7 @@ export function useDeviceWs(handlers = {}) {
     }
   }
 
-  function release() {
+  function release(): void {
     intentionalClose = true;
     clearTimers();
     const ws = wsRef.value;
@@ -56,7 +71,7 @@ export function useDeviceWs(handlers = {}) {
     }
   }
 
-  function ensure() {
+  function ensure(): void {
     const state = wsRef.value?.readyState;
     if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
     intentionalClose = false;
@@ -72,7 +87,7 @@ export function useDeviceWs(handlers = {}) {
     const deviceId = getWebUserId();
 
     try {
-      const ws = new WebSocket(wsUrl);
+      const ws: DeviceSocket = new WebSocket(wsUrl);
       ws.binaryType = 'arraybuffer';
       wsRef.value = ws;
 
@@ -104,11 +119,11 @@ export function useDeviceWs(handlers = {}) {
       ws.onmessage = (e) => {
         try {
           if (e.data instanceof ArrayBuffer) {
-            handlers.onBinary?.(e.data);
+            handlers.onBinary?.(e.data as ArrayBuffer);
             return;
           }
           const data = JSON.parse(e.data);
-          handlers.onMessage?.(data);
+          handlers.onMessage?.(data as LoosePayload);
         } catch (err) {
           console.warn('[device-ws] parse', err);
         }
@@ -130,11 +145,11 @@ export function useDeviceWs(handlers = {}) {
       };
     } catch (err) {
       status.value = 'closed';
-      lastError.value = err?.message || String(err);
+      lastError.value = (err as Error)?.message || String(err);
     }
   }
 
-  function sendJson(payload) {
+  function sendJson(payload: LoosePayload): boolean {
     const ws = wsRef.value;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       ensure();
@@ -144,7 +159,7 @@ export function useDeviceWs(handlers = {}) {
     return true;
   }
 
-  function devicePayloadBase() {
+  function devicePayloadBase(): LoosePayload {
     const deviceId = getWebUserId();
     return {
       device_id: deviceId,
@@ -155,7 +170,7 @@ export function useDeviceWs(handlers = {}) {
     };
   }
 
-  function sendChatMessage(text, meta = {}) {
+  function sendChatMessage(text: string, meta: LoosePayload = {}): boolean {
     return sendJson({
       type: 'message',
       ...devicePayloadBase(),
@@ -166,7 +181,11 @@ export function useDeviceWs(handlers = {}) {
   }
 
   /** 对齐原 sendDeviceNotice（戳一戳等） */
-  function sendDeviceNotice(notice_type, sub_type, payload = {}) {
+  function sendDeviceNotice(
+    notice_type: string,
+    sub_type: string,
+    payload: LoosePayload = {},
+  ): boolean {
     return sendJson({
       type: 'notice',
       ...devicePayloadBase(),

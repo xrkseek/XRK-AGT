@@ -11,8 +11,8 @@ export function useViewport() {
     typeof window !== 'undefined' ? window.matchMedia(MQ).matches : false,
   );
 
-  let mql;
-  function onChange(e) {
+  let mql: MediaQueryList | undefined;
+  function onChange(e: MediaQueryListEvent): void {
     isMobile.value = e.matches;
   }
 

@@ -1,9 +1,13 @@
 /**
  * 聊天 segments 规范化与媒体 URL（对齐原 appendSegments）
+ *
+ * 形态权威：Runtime 侧 `msgSegment`（`src/infrastructure/.../msg-segment`）。
+ * 归一化输出结构见 `@/types` 的 `NormalizedSegment`。
  */
 import { getServerUrl } from '@/api/client';
+import type { LoosePayload, NormalizedSegment } from '@/types';
 
-export function resolveMediaUrl(url) {
+export function resolveMediaUrl(url: unknown): string {
   if (!url || typeof url !== 'string') return '';
   const u = url.trim();
   if (!u) return '';
@@ -13,13 +17,13 @@ export function resolveMediaUrl(url) {
 }
 
 /** 从任意 WS/HTTP 载荷提取 segments */
-export function extractSegments(data) {
+export function extractSegments(data: LoosePayload): NormalizedSegment[] {
   if (!data || typeof data !== 'object') return [];
   if (Array.isArray(data.segments) && data.segments.length) {
-    return data.segments.map(normalizeSeg).filter(Boolean);
+    return data.segments.map(normalizeSeg).filter(Boolean) as NormalizedSegment[];
   }
   if (Array.isArray(data.message) && data.message.length) {
-    return data.message.map(normalizeSeg).filter(Boolean);
+    return data.message.map(normalizeSeg).filter(Boolean) as NormalizedSegment[];
   }
   if (data.type === 'image' && data.url) return [{ type: 'image', url: data.url }];
   if (typeof data.content === 'string' && data.content.trim()) {
@@ -34,65 +38,66 @@ export function extractSegments(data) {
   return [];
 }
 
-function mediaUrlFrom(seg) {
+function mediaUrlFrom(seg: LoosePayload): string {
   return seg.url || seg.file || seg.data?.url || seg.data?.file || seg.data?.path || '';
 }
 
-export function normalizeSeg(seg) {
+export function normalizeSeg(seg: unknown): NormalizedSegment | null {
   if (seg == null) return null;
   if (typeof seg === 'string') {
     const t = seg.trim();
     return t ? { type: 'text', text: seg } : null;
   }
   if (typeof seg !== 'object') return null;
-  const type = String(seg.type || 'text').toLowerCase();
+  const s = seg as LoosePayload;
+  const type = String(s.type || 'text').toLowerCase();
   if (type === 'text' || type === 'markdown' || type === 'raw') {
-    const text = seg.text ?? seg.content ?? seg.data?.text ?? '';
-    return String(text).length
-      ? { type: type === 'markdown' ? 'markdown' : type === 'raw' ? 'raw' : 'text', text: String(text) }
-      : null;
+    const text = s.text ?? s.content ?? s.data?.text ?? '';
+    if (!String(text).length) return null;
+    const out = type === 'markdown' ? 'markdown' : type === 'raw' ? 'raw' : 'text';
+    return { type: out, text: String(text) } as NormalizedSegment;
   }
   if (type === 'tools') {
-    const tools = Array.isArray(seg.tools) ? seg.tools : [];
+    const tools = Array.isArray(s.tools) ? s.tools : [];
     return tools.length ? { type: 'tools', tools } : null;
   }
   if (type === 'image' || type === 'mface') {
-    const url = mediaUrlFrom(seg);
-    return url ? { type: 'image', url: String(url), name: seg.name || seg.summary || '' } : null;
+    const url = mediaUrlFrom(s);
+    return url ? { type: 'image', url: String(url), name: s.name || s.summary || '' } : null;
   }
   if (type === 'video') {
-    const url = mediaUrlFrom(seg);
-    return url ? { type: 'video', url: String(url), name: seg.name || '' } : null;
+    const url = mediaUrlFrom(s);
+    return url ? { type: 'video', url: String(url), name: s.name || '' } : null;
   }
   if (type === 'record' || type === 'audio') {
-    const url = mediaUrlFrom(seg);
-    return url ? { type: 'record', url: String(url), name: seg.name || '' } : null;
+    const url = mediaUrlFrom(s);
+    return url ? { type: 'record', url: String(url), name: s.name || '' } : null;
   }
   if (type === 'file') {
-    const url = mediaUrlFrom(seg);
+    const url = mediaUrlFrom(s);
     return url
-      ? { type: 'file', url: String(url), name: seg.name || seg.file_name || '文件' }
-      : { type: 'file', url: '', name: seg.name || seg.file_name || '文件' };
+      ? { type: 'file', url: String(url), name: s.name || s.file_name || '文件' }
+      : { type: 'file', url: '', name: s.name || s.file_name || '文件' };
   }
   if (type === 'at') {
     return {
       type: 'at',
-      qq: String(seg.qq ?? seg.user_id ?? ''),
-      name: String(seg.name ?? ''),
+      qq: String(s.qq ?? s.user_id ?? ''),
+      name: String(s.name ?? ''),
     };
   }
   if (type === 'reply') {
     return {
       type: 'reply',
-      id: seg.id ?? seg.message_id ?? '',
-      text: String(seg.text || seg.content || ''),
+      id: s.id ?? s.message_id ?? '',
+      text: String(s.text || s.content || ''),
     };
   }
   if (type === 'forward' || type === 'node') {
-    const id = seg.id ?? seg.message_id ?? seg.data?.id ?? '';
-    const inner = seg.content || seg.message || seg.data?.content || seg.data?.message;
-    const lines = Array.isArray(inner)
-      ? inner.map((c) => normalizeSeg(c)).filter(Boolean)
+    const id = s.id ?? s.message_id ?? s.data?.id ?? '';
+    const inner = s.content || s.message || s.data?.content || s.data?.message;
+    const lines: NormalizedSegment[] = Array.isArray(inner)
+      ? (inner.map((c) => normalizeSeg(c)).filter(Boolean) as NormalizedSegment[])
       : [];
     return {
       type: 'forward',
@@ -105,17 +110,18 @@ export function normalizeSeg(seg) {
     return { type: 'text', text: '[表情]' };
   }
   if (type === 'poke') {
-    const qq = seg.qq ?? seg.user_id ?? '';
+    const qq = s.qq ?? s.user_id ?? '';
     return { type: 'poke', qq: String(qq), text: qq ? `戳了戳 ${qq}` : '戳一戳' };
   }
-  const fallback = seg.text || seg.content;
+  const fallback = s.text || s.content;
   return fallback ? { type: 'text', text: String(fallback) } : null;
 }
 
-export function segmentsToPlainText(segments) {
+export function segmentsToPlainText(segments: unknown): string {
   if (!Array.isArray(segments)) return '';
   return segments
-    .map((s) => {
+    .map((seg) => {
+      const s = seg as NormalizedSegment | null;
       if (!s) return '';
       if (s.type === 'text' || s.type === 'markdown' || s.type === 'raw') return s.text || '';
       if (s.type === 'reply') return s.text ? `「引用」${s.text}` : '';
@@ -133,15 +139,15 @@ export function segmentsToPlainText(segments) {
     .join('\n');
 }
 
-export function isAckOnlyText(text) {
+export function isAckOnlyText(text: unknown): boolean {
   const t = String(text || '').trim().toLowerCase();
   return !t || t === 'event triggered' || t === 'ok' || t === 'success' || t === 'true';
 }
 
-function snippetFromContentParts(parts) {
+function snippetFromContentParts(parts: unknown): string {
   if (!Array.isArray(parts)) return '';
-  const bits = [];
-  for (const c of parts) {
+  const bits: string[] = [];
+  for (const c of parts as LoosePayload[]) {
     if (!c) continue;
     const t = String(c.type || '').toLowerCase();
     if (t === 'text') bits.push(c.data?.text || c.text || '');
@@ -155,10 +161,10 @@ function snippetFromContentParts(parts) {
 }
 
 /** 从 forward/reply 载荷提取记录卡消息行（含媒体摘要） */
-export function extractForwardLines(data) {
+export function extractForwardLines(data: LoosePayload | null | undefined): string[] {
   const messages = data?.messages;
   if (!Array.isArray(messages) || !messages.length) return [];
-  return messages
+  return (messages as any[])
     .map((msg) => {
       if (typeof msg === 'string') return msg;
       if (msg?.type === 'node' && Array.isArray(msg.data?.content)) {

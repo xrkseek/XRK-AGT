@@ -1,12 +1,13 @@
 /**
  * Core www 浏览器兼容层（语义权威；随 /xrk 进 git）
  *
- * 路径：`core/system-Core/www/xrk/src/utils/http.js`
+ * 路径：`core/system-Core/www/xrk/src/utils/http.ts`
  * 控制台从此处 import；其它产品 Core：**只内联**同语义。
  */
 
-/** @param {string} [prefix='id'] @returns {string} */
-export function randomId(prefix = 'id') {
+import type { JsonValue, SuccessEnvelope } from '@/types';
+
+export function randomId(prefix = 'id'): string {
   try {
     const uuid = globalThis.crypto?.randomUUID;
     if (typeof uuid === 'function') return uuid.call(globalThis.crypto);
@@ -18,18 +19,16 @@ export function randomId(prefix = 'id') {
 
 /**
  * 解包 HttpResponse.success（对象拍平；数组/标量在 data）
- * @param {object} json
- * @returns {any}
+ * 权威定义见 `src/infrastructure/http/http-utils.js` 的 `HttpResponse.success`。
  */
-export function unwrapSuccess(json) {
+export function unwrapSuccess<T = any>(json: SuccessEnvelope<T>): any {
   if (!json?.success) throw new Error(json?.message || '请求失败');
   if (json.data !== undefined) return json.data;
   const { success: _ok, message: _msg, ...rest } = json;
   return rest;
 }
 
-/** @param {number} ms @returns {AbortSignal} */
-export function abortTimeout(ms) {
+export function abortTimeout(ms: number): AbortSignal {
   if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
     return AbortSignal.timeout(ms);
   }
@@ -39,8 +38,7 @@ export function abortTimeout(ms) {
   return controller.signal;
 }
 
-/** @param {any} value @returns {any} */
-export function deepClone(value) {
+export function deepClone<T>(value: T): T {
   if (value == null || typeof value !== 'object') return value;
   if (typeof structuredClone === 'function') {
     try {
@@ -52,13 +50,13 @@ export function deepClone(value) {
   try {
     return JSON.parse(JSON.stringify(value));
   } catch {
-    return Array.isArray(value) ? value.slice() : { ...value };
+    return (Array.isArray(value) ? value.slice() : { ...value }) as T;
   }
 }
 
 export const EMOTION_KEYS = new Set(['happy', 'message', 'think', 'sad', 'angry', 'cool']);
 
-export function normalizeEmotionKey(key) {
+export function normalizeEmotionKey(key: string): string {
   const k = String(key || '').toLowerCase();
   return EMOTION_KEYS.has(k) ? k : 'happy';
 }
@@ -66,10 +64,8 @@ export function normalizeEmotionKey(key) {
 /**
  * 复制文本到剪贴板。
  * 优先 Clipboard API；在非安全上下文（如 http://公网IP）失败时降级 textarea + execCommand。
- * @param {string} text
- * @returns {Promise<boolean>}
  */
-export async function copyText(text) {
+export async function copyText(text: string): Promise<boolean> {
   const value = String(text ?? '');
   if (!value) return false;
   try {
@@ -85,7 +81,7 @@ export async function copyText(text) {
     const ta = document.createElement('textarea');
     ta.value = value;
     ta.setAttribute('readonly', '');
-    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+    ta.style.cssText = 'position:fixed;left:-999px;top:0;opacity:0;';
     document.body.appendChild(ta);
     ta.focus();
     ta.select();
@@ -100,10 +96,8 @@ export async function copyText(text) {
 
 /**
  * 触发浏览器下载 Blob / data URL / blob URL。
- * @param {Blob|string} data
- * @param {string} [filename='download']
  */
-export function downloadBlob(data, filename = 'download') {
+export function downloadBlob(data: Blob | string, filename = 'download'): void {
   if (typeof document === 'undefined') return;
   let href = '';
   let revoke = false;
@@ -126,3 +120,5 @@ export function downloadBlob(data, filename = 'download') {
   if (revoke) setTimeout(() => URL.revokeObjectURL(href), 2000);
 }
 
+/** 供 config 字段等 JSON 值流转使用 */
+export type { JsonValue };

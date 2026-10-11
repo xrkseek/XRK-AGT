@@ -1,25 +1,28 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { abortTimeout, unwrapSuccess } from '@/utils/http';
+import type { AuthBadge, AuthMode, AuthModeResponse, ServerAuthState } from '@/types';
 
 const KEY = 'apiKey';
 const AUTH_MODE_PATH = '/api/system/auth-mode';
 
+export interface RefreshAuthModeOptions {
+  force?: boolean;
+}
+
 export const useAuthStore = defineStore('auth', () => {
-  const apiKey = ref(localStorage.getItem(KEY) || '');
-  const dark = ref(document.documentElement.classList.contains('dark'));
-  /** @type {import('vue').Ref<'unknown'|'ok'|'unauthorized'>} */
-  const serverAuth = ref('unknown');
-  /** @type {import('vue').Ref<'unknown'|'enforced'|'bypass'>} */
-  const authMode = ref('unknown');
+  const apiKey = ref<string>(localStorage.getItem(KEY) || '');
+  const dark = ref<boolean>(document.documentElement.classList.contains('dark'));
+  const serverAuth = ref<ServerAuthState>('unknown');
+  const authMode = ref<AuthMode>('unknown');
 
-  let modeInflight = null;
+  let modeInflight: Promise<AuthMode> | null = null;
   /** 每次 setApiKey 递增；页面 watch 后强制重拉 */
-  const keyEpoch = ref(0);
+  const keyEpoch = ref<number>(0);
 
-  const hasKey = computed(() => Boolean(apiKey.value?.trim()));
+  const hasKey = computed<boolean>(() => Boolean(apiKey.value?.trim()));
 
-  const authBadge = computed(() => {
+  const authBadge = computed<AuthBadge>(() => {
     if (authMode.value === 'bypass') {
       return {
         type: 'error',
@@ -65,7 +68,7 @@ export const useAuthStore = defineStore('auth', () => {
     };
   });
 
-  function setApiKey(value) {
+  function setApiKey(value: string): void {
     apiKey.value = String(value || '');
     serverAuth.value = 'unknown';
     authMode.value = 'unknown';
@@ -75,20 +78,19 @@ export const useAuthStore = defineStore('auth', () => {
     void refreshAuthMode({ force: true });
   }
 
-  function noteAuthorized() {
+  function noteAuthorized(): void {
     serverAuth.value = 'ok';
   }
 
-  function noteUnauthorized() {
+  function noteUnauthorized(): void {
     serverAuth.value = 'unauthorized';
     authMode.value = 'enforced';
   }
 
   /**
    * 读公开 GET /api/system/auth-mode（免 Key）。
-   * @param {{ force?: boolean }} [opts]
    */
-  async function refreshAuthMode(opts = {}) {
+  async function refreshAuthMode(opts: RefreshAuthModeOptions = {}): Promise<AuthMode> {
     if (!opts.force && authMode.value !== 'unknown') return authMode.value;
     if (!opts.force && modeInflight) return modeInflight;
 
@@ -102,7 +104,7 @@ export const useAuthStore = defineStore('auth', () => {
         if (!res.ok) return authMode.value;
         const json = await res.json().catch(() => null);
         if (!json) return authMode.value;
-        const body = json.success === true ? unwrapSuccess(json) : json;
+        const body = json.success === true ? unwrapSuccess<AuthModeResponse>(json) : json;
         authMode.value = body?.requiresKey === true ? 'enforced' : 'bypass';
       } catch {
         /* 网络失败不改状态 */
@@ -115,7 +117,7 @@ export const useAuthStore = defineStore('auth', () => {
     return modeInflight;
   }
 
-  function applyTheme(isDark) {
+  function applyTheme(isDark: boolean): void {
     dark.value = isDark;
     document.documentElement.classList.toggle('dark', isDark);
     localStorage.setItem('xrk-theme', isDark ? 'dark' : 'light');
@@ -123,11 +125,11 @@ export const useAuthStore = defineStore('auth', () => {
     if (meta) meta.setAttribute('content', isDark ? '#14110f' : '#ffd24a');
   }
 
-  function toggleDark() {
+  function toggleDark(): void {
     applyTheme(!dark.value);
   }
 
-  function initTheme() {
+  function initTheme(): void {
     applyTheme(localStorage.getItem('xrk-theme') === 'dark');
   }
 

@@ -1,21 +1,30 @@
 /**
  * 对齐原 app._parseV3Stream：SSE 文本增量 + mcp_tools 穿插 segments
  */
+import type { LoosePayload, NormalizedSegment } from '@/types';
+import type { ToolLike } from '@/chat/tools';
 
-/**
- * @param {Response} response
- * @param {{
- *   signal?: AbortSignal,
- *   onDelta?: (delta: string, state: StreamState) => void,
- *   onError?: (err: Error) => void,
- *   onTools?: (tools: object[]) => void,
- * }} [callbacks]
- * @returns {Promise<StreamState>}
- *
- * @typedef {{ fullText: string, currentText: string, segments: Array, mcpTools: Array, error: Error|null }} StreamState
- */
-export async function parseV3Stream(response, callbacks = {}) {
-  const state = {
+/** 流式解析的累积状态 */
+export interface StreamState {
+  fullText: string;
+  currentText: string;
+  segments: NormalizedSegment[];
+  mcpTools: ToolLike[];
+  error: Error | null;
+}
+
+export interface StreamCallbacks {
+  signal?: AbortSignal;
+  onDelta?: (delta: string, state: StreamState) => void;
+  onError?: (err: Error) => void;
+  onTools?: (tools: ToolLike[]) => void;
+}
+
+export async function parseV3Stream(
+  response: Response,
+  callbacks: StreamCallbacks = {},
+): Promise<StreamState> {
+  const state: StreamState = {
     fullText: '',
     currentText: '',
     segments: [],
@@ -68,7 +77,7 @@ export async function parseV3Stream(response, callbacks = {}) {
           }
           return state;
         }
-        let json;
+        let json: LoosePayload;
         try {
           json = JSON.parse(data);
         } catch {
@@ -80,7 +89,7 @@ export async function parseV3Stream(response, callbacks = {}) {
           return state;
         }
         if (Array.isArray(json.mcp_tools) && json.mcp_tools.length) {
-          const tools = json.mcp_tools.filter((tool) => {
+          const tools = (json.mcp_tools as ToolLike[]).filter((tool) => {
             if (!tool) return false;
             if (tool.name || tool.function?.name) return true;
             if (tool.result || tool.content) return true;
@@ -114,11 +123,11 @@ export async function parseV3Stream(response, callbacks = {}) {
       state.currentText = '';
     }
   } catch (err) {
-    if (err?.name !== 'AbortError') {
+    if ((err as Error)?.name !== 'AbortError') {
       state.error = err instanceof Error ? err : new Error(String(err));
       onError?.(state.error);
     } else {
-      state.error = err;
+      state.error = err as Error;
     }
   } finally {
     try {
@@ -131,8 +140,8 @@ export async function parseV3Stream(response, callbacks = {}) {
 }
 
 /** 流式过程中用于 UI 的完整 segments（已闭合 + 当前文本） */
-export function liveSegments(state) {
-  const segs = [...(state.segments || [])];
+export function liveSegments(state: Partial<StreamState>): NormalizedSegment[] {
+  const segs: NormalizedSegment[] = [...(state.segments || [])];
   const cur = state.currentText ?? '';
   if (cur) segs.push({ type: 'text', text: cur });
   return segs;

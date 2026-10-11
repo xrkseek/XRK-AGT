@@ -1,7 +1,24 @@
 /**
  * LLM provider 条目在配置页的展示分组（对齐原 modules/llm-provider-ui.js）
  */
-export const LLM_PROVIDER_FIELD_GROUPS = [
+import type { LoosePayload } from '@/types';
+
+/** provider 字段分组 */
+export interface ProviderFieldGroup {
+  id: string;
+  label: string;
+  collapsible?: boolean;
+  keys: string[];
+}
+
+/** 分组后的展示区块 */
+export interface ProviderSchemaSection extends Partial<ProviderFieldGroup> {
+  id: string;
+  label: string;
+  entries: Array<[string, unknown]>;
+}
+
+export const LLM_PROVIDER_FIELD_GROUPS: ProviderFieldGroup[] = [
   {
     id: 'identity',
     label: '标识',
@@ -57,13 +74,15 @@ export const LLM_PROVIDER_FIELD_GROUPS = [
 ];
 
 /** 按分组过滤排序 schema 字段；未命中的进「其他」 */
-export function groupProviderSchemaFields(fields = {}) {
-  const fieldMap = new Map(Object.entries(fields ?? {}));
-  const used = new Set();
-  const sections = [];
+export function groupProviderSchemaFields(fields: LoosePayload = {}): ProviderSchemaSection[] {
+  const fieldMap = new Map<string, unknown>(Object.entries(fields ?? {}));
+  const used = new Set<string>();
+  const sections: ProviderSchemaSection[] = [];
 
   for (const group of LLM_PROVIDER_FIELD_GROUPS) {
-    const entries = group.keys.filter((key) => fieldMap.has(key)).map((key) => [key, fieldMap.get(key)]);
+    const entries: Array<[string, unknown]> = group.keys
+      .filter((key) => fieldMap.has(key))
+      .map((key) => [key, fieldMap.get(key)]);
     if (!entries.length) continue;
     entries.forEach(([key]) => used.add(key));
     sections.push({ ...group, entries });
@@ -77,11 +96,11 @@ export function groupProviderSchemaFields(fields = {}) {
   return sections;
 }
 
-export function isLlmProvidersArray(path = '') {
+export function isLlmProvidersArray(path = ''): boolean {
   return /(?:^|\.)providers$/.test(String(path || ''));
 }
 
-export function getProviderEntrySummary(item = {}) {
+export function getProviderEntrySummary(item: LoosePayload = {}): string {
   const key = item.key || item.provider || '—';
   const label = item.label ? ` · ${item.label}` : '';
   const model = item.model || item.chatModel || '';

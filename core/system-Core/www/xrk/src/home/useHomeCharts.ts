@@ -12,6 +12,45 @@ import {
   PointElement,
   Tooltip,
 } from 'chart.js';
+import type { Chart as ChartInstance, ChartItem, Plugin, TooltipItem } from 'chart.js';
+import type { Ref } from 'vue';
+
+/** 三个图表的实例容器 */
+export interface HomeCharts {
+  cpu: ChartInstance<'doughnut', number[], string> | null;
+  mem: ChartInstance<'doughnut', number[], string> | null;
+  net: ChartInstance<'line', number[], string> | null;
+}
+
+export type DoughnutKey = 'cpu' | 'mem';
+
+export interface HomeChartsOptions {
+  cpuEl: Ref<HTMLCanvasElement | null>;
+  memEl: Ref<HTMLCanvasElement | null>;
+  netEl: Ref<HTMLCanvasElement | null>;
+  cpu: Ref<number>;
+  mem: Ref<number>;
+  history: { netRx: number[]; netTx: number[] };
+}
+
+function isDoughnutChart(
+  value: ChartInstance,
+): value is ChartInstance<'doughnut', number[], string> {
+  const type = (value.config as { type?: string }).type;
+  return type === 'doughnut';
+}
+
+/**
+ * 遗留：`filter` 在 chart.js v4 属于 tooltip 顶层选项（见 TooltipOptions），
+ * 写在 callbacks 里不会被调用。为不改变既有表现，这里保持原对象形状。
+ */
+function legacyTooltipFilter() {
+  return {
+    filter(item: TooltipItem<'line'>) {
+      return Number(item.parsed.y ?? 0) > 0.01;
+    },
+  };
+}
 
 let registered = false;
 
@@ -32,12 +71,12 @@ function ensureChart() {
   registered = true;
 }
 
-function cssVar(name, fallback) {
+function cssVar(name: string, fallback: string): string {
   const v = getComputedStyle(document.body).getPropertyValue(name).trim();
   return v || fallback;
 }
 
-function themeColors() {
+function themeColors(): Record<string, string> {
   return {
     primary: cssVar('--cyan', '#3ecfff'),
     success: cssVar('--green', '#5ad67d'),
@@ -49,11 +88,11 @@ function themeColors() {
   };
 }
 
-function centerLabelPlugin(canvasId) {
+function centerLabelPlugin(canvasId: string): Plugin<'doughnut'> {
   return {
     id: `label-${canvasId}`,
     afterDraw(chart) {
-      if (chart.config.type !== 'doughnut' || chart.canvas?.id !== canvasId) return;
+      if (!isDoughnutChart(chart) || chart.canvas?.id !== canvasId) return;
       const ctx = chart.ctx;
       const { left, right, top, bottom } = chart.chartArea;
       const value = chart.data.datasets[0].data[0];
@@ -72,11 +111,13 @@ function centerLabelPlugin(canvasId) {
 /**
  * @param {{ cpuEl: import('vue').Ref<HTMLCanvasElement|null>, memEl: import('vue').Ref<HTMLCanvasElement|null>, netEl: import('vue').Ref<HTMLCanvasElement|null>, cpu: import('vue').Ref<number>, mem: import('vue').Ref<number>, history: { netRx: number[], netTx: number[] } }} opts
  */
-export function useHomeCharts(opts) {
+export function useHomeCharts(
+  opts: HomeChartsOptions,
+): { paint: () => void; destroyAll: () => void } {
   const { cpuEl, memEl, netEl, cpu, mem, history } = opts;
-  const charts = shallowRef({ cpu: null, mem: null, net: null });
+  const charts = shallowRef<HomeCharts>({ cpu: null, mem: null, net: null });
 
-  function destroyOne(key) {
+  function destroyOne(key: keyof HomeCharts): void {
     const c = charts.value[key];
     if (!c) return;
     try {
@@ -87,13 +128,18 @@ export function useHomeCharts(opts) {
     charts.value = { ...charts.value, [key]: null };
   }
 
-  function destroyAll() {
+  function destroyAll(): void {
     destroyOne('cpu');
     destroyOne('mem');
     destroyOne('net');
   }
 
-  function ensureDoughnut(key, canvas, value, color) {
+  function ensureDoughnut(
+    key: DoughnutKey,
+    canvas: HTMLCanvasElement | null,
+    value: number,
+    color: string,
+  ): void {
     if (!canvas) return;
     ensureChart();
     const colors = themeColors();
@@ -104,7 +150,8 @@ export function useHomeCharts(opts) {
     }
     const live = charts.value[key];
     if (!live) {
-      const chart = new Chart(canvas.getContext('2d'), {
+      const ctx = canvas.getContext('2d') as ChartItem;
+      const chart = new Chart(ctx, {
         type: 'doughnut',
         data: {
           labels: ['使用', '空闲'],
@@ -131,16 +178,19 @@ export function useHomeCharts(opts) {
     }
   }
 
-  function ensureNet(canvas) {
+  function ensureNet(canvas: HTMLCanvasElement | null): void {
     if (!canvas) return;
     ensureChart();
     const colors = themeColors();
+    /** drawBorder 在 chart.js v4 已移除；保留字段以维持原对象形状 */
+    const yGrid = { color: `${colors.border}22`, drawBorder: false };
     const labels = history.netRx.map(() => '');
     const existing = charts.value.net;
     if (existing && existing.canvas !== canvas) destroyOne('net');
 
     if (!charts.value.net) {
-      const chart = new Chart(canvas.getContext('2d'), {
+      const ctx = canvas.getContext('2d') as ChartItem;
+      const chart = new Chart(ctx, {
         type: 'line',
         data: {
           labels,
@@ -190,14 +240,12 @@ export function useHomeCharts(opts) {
             tooltip: {
               enabled: true,
               callbacks: {
-                label(ctx) {
-                  const v = ctx.parsed.y;
+                label(ctx: TooltipItem<'line'>) {
+                  const v = Number(ctx.parsed.y ?? 0);
                   if (v === 0 || v < 0.01) return '';
                   return `${ctx.dataset.label}: ${v.toFixed(2)} KB/s`;
                 },
-                filter(item) {
-                  return item.parsed.y > 0.01;
-                },
+                ...legacyTooltipFilter(),
               },
             },
           },
@@ -206,7 +254,7 @@ export function useHomeCharts(opts) {
             y: {
               beginAtZero: true,
               suggestedMax: 10,
-              grid: { color: `${colors.border}22`, drawBorder: false },
+              grid: yGrid,
               ticks: { display: false, maxTicksLimit: 5 },
             },
           },
@@ -228,7 +276,7 @@ export function useHomeCharts(opts) {
     net.update('none');
   }
 
-  function paint() {
+  function paint(): void {
     const colors = themeColors();
     const c = Number(cpu.value) || 0;
     const m = Number(mem.value) || 0;
