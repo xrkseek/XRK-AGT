@@ -1,24 +1,24 @@
 import { useAuthStore } from '@/stores/auth';
 import { unwrapSuccess, abortTimeout } from '@/utils/http';
+import type { ApiFetchOptions } from '@/types';
 
-export function getServerUrl() {
+export function getServerUrl(): string {
   return window.location.origin;
 }
 
-export function authHeaders(extra = {}) {
+export function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const auth = useAuthStore();
-  const headers = { ...extra };
+  const headers: Record<string, string> = { ...extra };
   if (auth.apiKey) {
     headers['X-API-Key'] = auth.apiKey;
   }
   return headers;
 }
 
-/**
- * @param {string} path
- * @param {RequestInit & { timeoutMs?: number, raw?: boolean }} [opts]
- */
-export async function apiFetch(path, opts = {}) {
+export async function apiFetch<T = any>(
+  path: string,
+  opts: ApiFetchOptions = {},
+): Promise<T | Response | string> {
   const { timeoutMs = 30000, raw = false, headers, ...rest } = opts;
   const auth = useAuthStore();
   document.body.classList.add('is-busy');
@@ -45,7 +45,7 @@ export async function apiFetch(path, opts = {}) {
       throw new Error(json.message || (res.status === 401 ? '未授权' : `HTTP ${res.status}`));
     }
     if (json && typeof json === 'object' && 'success' in json) {
-      return unwrapSuccess(json);
+      return unwrapSuccess<T>(json);
     }
     if (!res.ok) throw new Error(json?.message || (res.status === 401 ? '未授权' : `HTTP ${res.status}`));
     return json;
@@ -54,8 +54,12 @@ export async function apiFetch(path, opts = {}) {
   }
 }
 
-export async function apiJson(path, body, method = 'POST') {
-  return apiFetch(path, {
+export async function apiJson<T = any>(
+  path: string,
+  body?: any,
+  method = 'POST',
+): Promise<T | Response | string> {
+  return apiFetch<T>(path, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: body == null ? undefined : JSON.stringify(body),
